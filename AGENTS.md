@@ -18,7 +18,7 @@ If any of those files is missing on a fresh machine, **stop and tell the human**
 1. **Use the installed design skills for all UI work.** Both `impeccable` and `ui-ux-pro-max` live in `.cursor/skills/`. Default workflow: `/impeccable craft <feature>` for new UI, `/impeccable critique` and `/impeccable polish` before merging, `ui-ux-pro-max` for fresh page-level systems.
 2. **Never invent design tokens.** All colors, fonts, spacing, radii come from `DESIGN.md` → `app/globals.css`. If you need a new token, add it to `DESIGN.md` first.
 3. **No AI-slop UI.** If the result could be tagged "AI made that" at a glance, throw it out. Re-run with the right register and a sharper scene sentence.
-4. **Row-Level Security on every Supabase table.** Same migration as the table. No exceptions.
+4. **Authorization is enforced at the server-action layer.** Every action calls `requireUser()` and checks ownership against the row being mutated. SQL `RLS` policies remain in the migration as defense-in-depth, but the app — not Postgres roles — is the primary gatekeeper.
 5. **Server Components by default.** Mark a component `"use client"` only when it needs state, browser APIs, or event handlers. Audit annually.
 6. **Validate inputs with Zod** at every server action and route handler. Never trust client payloads.
 7. **No success fees, no investment advice, no funding promises.** See `PRODUCT.md` and `docs/legal.md`. Disclaimer on every match score.
