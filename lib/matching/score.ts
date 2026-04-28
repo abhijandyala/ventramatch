@@ -5,10 +5,7 @@
  * It is informational and is never investment advice.
  */
 
-import type { Database } from "@/types/database";
-
-type Startup = Database["public"]["Tables"]["startups"]["Row"];
-type Investor = Database["public"]["Tables"]["investors"]["Row"];
+import type { Investor, Startup, StartupStage } from "@/types/database";
 
 const WEIGHTS = {
   sector: 0.3,
@@ -64,10 +61,7 @@ function sectorScore(startupIndustry: string, investorSectors: string[]): number
   return investorSectors.some((s) => norm(s) === target) ? 1 : 0;
 }
 
-function stageScore(
-  startupStage: Database["public"]["Enums"]["startup_stage"],
-  investorStages: Database["public"]["Enums"]["startup_stage"][],
-): number {
+function stageScore(startupStage: StartupStage, investorStages: StartupStage[]): number {
   if (investorStages.length === 0) return 0;
   return investorStages.includes(startupStage) ? 1 : 0;
 }
@@ -101,10 +95,7 @@ function tractionScore(traction: string | null): number {
   return 0;
 }
 
-function buildReason(
-  parts: MatchResult["breakdown"],
-  investor: Investor,
-): string {
+function buildReason(parts: MatchResult["breakdown"], investor: Investor): string {
   const reasons: string[] = [];
   if (parts.sector === 1 && investor.sectors[0]) reasons.push(`invests in ${investor.sectors[0]}`);
   if (parts.stage === 1 && investor.stages[0]) reasons.push(`backs ${stageLabel(investor.stages[0])}`);
@@ -116,7 +107,7 @@ function buildReason(
   return reasons.slice(0, 2).join(" and ").replace(/^\w/, (c) => c.toUpperCase()) + ".";
 }
 
-function stageLabel(stage: Database["public"]["Enums"]["startup_stage"]): string {
+function stageLabel(stage: StartupStage): string {
   switch (stage) {
     case "idea":
       return "idea-stage";

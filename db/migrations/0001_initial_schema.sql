@@ -1,5 +1,15 @@
 -- VentraMatch initial schema.
 -- Append-only: never edit a committed migration. Add a new file to fix.
+--
+-- Note: this schema is auth-library-agnostic. The `users` table is the
+-- primary identity record. When the auth library (Auth.js / Lucia / etc.)
+-- is wired in, a separate migration will add the `sessions` / `accounts`
+-- tables it requires.
+--
+-- Authorization is enforced in the application layer (server actions call
+-- requireUser() and verify ownership). Row-Level Security policies will be
+-- re-introduced in a follow-up migration once the connection-level user
+-- context is decided (e.g. SET LOCAL app.current_user_id = '<uuid>').
 
 -- ---------- Extensions ----------
 create extension if not exists "pgcrypto";   -- gen_random_uuid()
@@ -29,9 +39,9 @@ begin
 end;
 $$;
 
--- ---------- users (mirrors auth.users) ----------
+-- ---------- users ----------
 create table if not exists public.users (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key default gen_random_uuid(),
   email citext not null unique,
   role public.user_role not null,
   email_verified boolean not null default false,
@@ -42,21 +52,6 @@ create table if not exists public.users (
 create trigger users_set_updated_at
   before update on public.users
   for each row execute function public.set_updated_at();
-
-alter table public.users enable row level security;
-
-create policy "users select own"
-  on public.users for select
-  using (auth.uid() = id);
-
-create policy "users update own"
-  on public.users for update
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
-
-create policy "users insert own"
-  on public.users for insert
-  with check (auth.uid() = id);
 
 -- ---------- startups ----------
 create table if not exists public.startups (
@@ -82,26 +77,6 @@ create trigger startups_set_updated_at
 create index if not exists startups_industry_idx on public.startups (industry);
 create index if not exists startups_stage_idx on public.startups (stage);
 
-alter table public.startups enable row level security;
-
--- Founders own their startup. Investors can read all startups (the discovery feed).
-create policy "startups select all"
-  on public.startups for select
-  using (true);
-
-create policy "startups insert own"
-  on public.startups for insert
-  with check (auth.uid() = user_id);
-
-create policy "startups update own"
-  on public.startups for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-create policy "startups delete own"
-  on public.startups for delete
-  using (auth.uid() = user_id);
-
 -- ---------- investors ----------
 create table if not exists public.investors (
   id uuid primary key default gen_random_uuid(),
@@ -125,25 +100,6 @@ create trigger investors_set_updated_at
 
 create index if not exists investors_active_idx on public.investors (is_active);
 
-alter table public.investors enable row level security;
-
-create policy "investors select all"
-  on public.investors for select
-  using (true);
-
-create policy "investors insert own"
-  on public.investors for insert
-  with check (auth.uid() = user_id);
-
-create policy "investors update own"
-  on public.investors for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-create policy "investors delete own"
-  on public.investors for delete
-  using (auth.uid() = user_id);
-
 -- ---------- interactions ----------
 create table if not exists public.interactions (
   id uuid primary key default gen_random_uuid(),
@@ -156,20 +112,6 @@ create table if not exists public.interactions (
 
 create index if not exists interactions_target_idx on public.interactions (target_user_id);
 create index if not exists interactions_actor_idx on public.interactions (actor_user_id);
-
-alter table public.interactions enable row level security;
-
-create policy "interactions select own actor"
-  on public.interactions for select
-  using (auth.uid() = actor_user_id or auth.uid() = target_user_id);
-
-create policy "interactions insert as actor"
-  on public.interactions for insert
-  with check (auth.uid() = actor_user_id);
-
-create policy "interactions delete own actor"
-  on public.interactions for delete
-  using (auth.uid() = actor_user_id);
 
 -- ---------- matches ----------
 create table if not exists public.matches (
@@ -184,17 +126,9 @@ create table if not exists public.matches (
 create index if not exists matches_founder_idx on public.matches (founder_user_id);
 create index if not exists matches_investor_idx on public.matches (investor_user_id);
 
-alter table public.matches enable row level security;
-
-create policy "matches select participant"
-  on public.matches for select
-  using (auth.uid() = founder_user_id or auth.uid() = investor_user_id);
-
--- Matches are created by trigger on mutual interactions, not by clients.
--- No insert/update/delete policy — service-role only.
-
 -- ---------- Mutual-interest trigger ----------
 -- When both sides have a 'like' interaction, create a match row.
+-- Server-only: matches table never accepts client-shaped INSERTs.
 create or replace function public.create_match_on_mutual_like()
 returns trigger
 language plpgsql

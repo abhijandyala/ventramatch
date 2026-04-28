@@ -5,8 +5,7 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   images: {
     remotePatterns: [
-      // Supabase Storage
-      { protocol: "https", hostname: "*.supabase.co" },
+      // AWS S3 / CloudFront image hosts will be added when uploads land.
     ],
   },
 };
