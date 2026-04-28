@@ -12,7 +12,10 @@
     "db:reset": "supabase db reset",
     "db:diff": "supabase db diff",
     "db:types": "supabase gen types typescript --local > types/database.ts",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "setup:hooks": "bash scripts/setup-hooks.sh",
+    "ship": "bash scripts/ship.sh",
+    "prepare": "bash scripts/setup-hooks.sh || true"
   },
   "dependencies": {
     "next": "^16.2.4",

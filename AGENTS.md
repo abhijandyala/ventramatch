@@ -24,7 +24,7 @@ If any of those files is missing on a fresh machine, **stop and tell the human**
 7. **No success fees, no investment advice, no funding promises.** See `PRODUCT.md` and `docs/legal.md`. Disclaimer on every match score.
 8. **Avoid Tinder's patented match flow as described in `docs/legal.md`.** Especially: do not ship a full-bleed photo card with bottom-row two-circle action buttons.
 9. **Never commit secrets.** `.env.local` is git-ignored. Anything sensitive lives there or in Vercel env.
-10. **Never push to `main` directly.** Branch + PR. Even for solo work.
+10. **Never push to `main` directly.** Branch + PR. Even for solo work. The local pre-push hook (`.githooks/pre-push`) will redirect any push from `main` onto an `auto/<timestamp>-<sha>` branch and open a PR via `gh`. Branch protection on the remote will also reject direct pushes server-side.
 
 ## Workflow when making changes
 
@@ -33,7 +33,9 @@ If any of those files is missing on a fresh machine, **stop and tell the human**
 3. Make the smallest change that solves the problem.
 4. Run `npm run typecheck` and `npm run lint` after substantive edits.
 5. Run `kluster_code_review_auto` per the project rule in `.cursor/rules/kluster-code-verify.mdc`.
-6. Open a PR with a 2-line summary and a test plan.
+6. Open a PR with a 2-line summary and a test plan. Two ways:
+   - Just `git push` — if you're on `main`, the pre-push hook auto-creates a branch + PR. If you're on a feature branch, push as normal then `gh pr create --fill`.
+   - `npm run ship` — explicit shortcut, works from any branch, opens / reuses a PR.
 
 ## Workflow for new dependencies
 

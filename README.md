@@ -262,12 +262,14 @@ Full breakdown: [`docs/legal.md`](docs/legal.md).
 ```bash
 git clone https://github.com/abhijandyala/ventramatch.git
 cd ventramatch
-npm install
+npm install                       # also activates git hooks via 'prepare' script
 cp .env.example .env.local        # then fill in Supabase keys
 npx supabase start                # local Postgres + auth on Docker
 npx supabase db reset             # applies migrations + seed
 npm run dev                       # http://localhost:3000
 ```
+
+> The `npm install` step runs `scripts/setup-hooks.sh` which sets `core.hooksPath = .githooks`. This activates the pre-push hook so any `git push` from `main` is auto-converted into a feature branch + PR. Don't disable it.
 
 ### Common scripts
 
@@ -279,6 +281,27 @@ npm run dev                       # http://localhost:3000
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run db:types` | Regenerate `types/database.ts` from Supabase |
 | `npm run db:reset` | Reset local DB and re-apply migrations |
+| `npm run ship` | Push current branch + open / reuse a PR (explicit form) |
+| `npm run setup:hooks` | Re-activate git hooks (rarely needed; `npm install` handles it) |
+
+### Push & PR workflow (auto)
+
+`main` is branch-protected on GitHub — direct pushes are rejected. The local pre-push hook (`.githooks/pre-push`) handles this automatically:
+
+```text
+$ git commit -am "tweak hero copy"
+$ git push                              # you're on main
+  Push to 'main' intercepted — opening a PR instead.
+  → branch: auto/20260428-153012-a1b2c3d
+  ✓ branch 'auto/20260428-153012-a1b2c3d' pushed
+  ✓ PR opened: https://github.com/abhijandyala/ventramatch/pull/12
+  ✓ checked out 'auto/20260428-153012-a1b2c3d' locally
+  ✓ local 'main' reset to 'origin/main'
+```
+
+After review, merge the PR on GitHub. Then locally: `git checkout main && git pull`.
+
+If you'd rather be explicit, branch yourself first (`git checkout -b feat/<thing>`), commit, push, and either run `npm run ship` or `gh pr create --fill`.
 
 ---
 

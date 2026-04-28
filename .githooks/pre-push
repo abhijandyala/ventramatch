@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# VentraMatch pre-push hook.
+#
+# If you `git push` from `main`, this redirects your commits onto a fresh
+# branch named `auto/<utc-timestamp>-<sha7>` and opens a PR against main.
+# Pushes from any other branch pass through untouched.
+#
+# Requires `gh` (https://cli.github.com). If gh is missing, the hook exits
+# cleanly and the original push proceeds — branch protection on the remote
+# will then reject the direct push and tell you what to do.
+
+set -euo pipefail
+
+REMOTE="${1:-origin}"
+ZERO_SHA="0000000000000000000000000000000000000000"
+PROTECTED_BRANCH="main"
+
+# ---------- helpers ----------
+log()  { printf "  %s\n" "$*" >&2; }
+warn() { printf "  ! %s\n" "$*" >&2; }
+ok()   { printf "  ✓ %s\n" "$*" >&2; }
+
+abort_with_help() {
+  printf "\n" >&2
+  warn "Direct push to '$PROTECTED_BRANCH' was attempted but the auto-PR redirect failed."
+  warn "Reason: $1"
+  printf "\n" >&2
+  log "Manual fallback:"
+  log "  git checkout -b feat/<short-name>"
+  log "  git push -u origin HEAD"
+  log "  gh pr create --fill"
+  printf "\n" >&2
+  exit 1
+}
+
+# ---------- preflight ----------
+if ! command -v gh >/dev/null 2>&1; then
+  warn "'gh' CLI not installed. Letting push proceed; remote branch protection may reject it."
+  warn "Install with:  brew install gh && gh auth login"
+  exit 0
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  warn "'gh' is not authenticated. Letting push proceed."
+  warn "Authenticate with:  gh auth login"
+  exit 0
+fi
+
+# ---------- main loop over refs being pushed ----------
+intercepted=0
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  # Deletion of a remote ref — let it through.
+  if [ "$local_sha" = "$ZERO_SHA" ]; then
+    continue
+  fi
+
+  # Only intercept when target is the protected branch.
+  if [ "$remote_ref" != "refs/heads/$PROTECTED_BRANCH" ]; then
+    continue
+  fi
+
+  intercepted=1
+
+  # Same SHA on both sides — nothing to push.
+  if [ "$local_sha" = "$remote_sha" ]; then
+    continue
+  fi
+
+  short_sha="$(printf "%s" "$local_sha" | cut -c1-7)"
+  branch_name="auto/$(date -u +%Y%m%d-%H%M%S)-${short_sha}"
+
+  printf "\n" >&2
+  log "Push to '$PROTECTED_BRANCH' intercepted — opening a PR instead."
+  log "→ branch: $branch_name"
+  printf "\n" >&2
+
+  # Create the auto branch pointing at exactly what the user wanted to push.
+  if ! git branch "$branch_name" "$local_sha"; then
+    abort_with_help "could not create branch '$branch_name'"
+  fi
+
+  # Push the new branch. --no-verify so this hook does not recurse into itself.
+  if ! git push --no-verify -u "$REMOTE" "$branch_name" >&2; then
+    git branch -D "$branch_name" >/dev/null 2>&1 || true
+    abort_with_help "push of '$branch_name' to '$REMOTE' failed"
+  fi
+  ok "branch '$branch_name' pushed"
+
+  # Build PR title + body from the topmost commit being shipped.
+  title="$(git log -1 --format=%s "$local_sha")"
+  author="$(git log -1 --format='%an <%ae>' "$local_sha")"
+  commit_count="$(git rev-list --count "${remote_sha:-$ZERO_SHA}..$local_sha" 2>/dev/null || echo "?")"
+  if [ "$remote_sha" = "$ZERO_SHA" ] || [ -z "$remote_sha" ]; then
+    commit_count="$(git rev-list --count "$local_sha" 2>/dev/null || echo "?")"
+  fi
+
+  body="$(cat <<EOF
+Auto-opened by the pre-push hook (push to \`$PROTECTED_BRANCH\` was redirected).
+
+- Author: $author
+- Commits: $commit_count
+- Branch: \`$branch_name\`
+EOF
+)"
+
+  if ! pr_url="$(gh pr create --base "$PROTECTED_BRANCH" --head "$branch_name" --title "$title" --body "$body" 2>&1)"; then
+    warn "PR creation failed:"
+    printf "%s\n" "$pr_url" >&2
+    abort_with_help "gh pr create failed"
+  fi
+
+  ok "PR opened: $pr_url"
+
+  # Move the user off main onto the new branch so the working tree stays sane,
+  # then point local main at origin/main so future pushes start from a clean base.
+  current_branch="$(git symbolic-ref --quiet --short HEAD || echo "")"
+  if [ "$current_branch" = "$PROTECTED_BRANCH" ]; then
+    git checkout --quiet "$branch_name" 2>/dev/null || true
+    ok "checked out '$branch_name' locally"
+  fi
+
+  if git fetch --quiet "$REMOTE" "$PROTECTED_BRANCH"; then
+    git update-ref "refs/heads/$PROTECTED_BRANCH" "refs/remotes/$REMOTE/$PROTECTED_BRANCH"
+    ok "local '$PROTECTED_BRANCH' reset to '$REMOTE/$PROTECTED_BRANCH'"
+  fi
+
+  printf "\n" >&2
+  log "Next: review the PR, then merge from GitHub."
+  log "When merged:  git checkout $PROTECTED_BRANCH && git pull"
+  printf "\n" >&2
+done
+
+# We must abort the original push so git doesn't try to send 'main' itself.
+if [ "$intercepted" = "1" ]; then
+  exit 1
+fi
+
+exit 0
