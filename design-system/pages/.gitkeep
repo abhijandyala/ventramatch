@@ -1,0 +1,2 @@
+# Page-specific design overrides go here.
+# Convention: pages/<route-name>.md (e.g. pages/feed.md, pages/profile.md)
