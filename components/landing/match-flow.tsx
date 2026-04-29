@@ -1,62 +1,158 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 
 /**
- * MatchFlow — the hero visual.
+ * MatchFlow — hero visual.
  *
- * Two cards (startup left, investor right) cycling through five sample pairs.
- * Connected through a center "chip" by traces that make right-angle bends
- * like circuit-board paths. Animated dashes flow inward along the traces.
+ * Big square cards (startup left, investor right) with a center area that
+ * shows: a small fake conversation between them (bubbles fade in one at a
+ * time), an asymmetric processor "chip" that turns green from outer-to-inner,
+ * and the chip's "match" text resolving to "matched!" once the chip fills.
  *
- * Pairings are illustrative only; we never claim these matches actually
- * happened on the platform. Names and logos of public companies / well-known
- * firms are used as recognizable category exemplars.
+ * Then a new pair takes over.
  *
- * Logos: fetched from logo.clearbit.com/{domain}; if a logo fails to load
- * we fall back to a brand-tinted letter tile so the layout never breaks.
+ * Cycle stages (per pair):
+ *   1. messaging — bubbles spawn, alternating sides, with varied positions
+ *   2. matching  — chip body fills green over ~1s
+ *   3. matched   — center text swaps to "matched!", brief hold, then advance
  *
- * Respects prefers-reduced-motion: cycling pauses, dashes stop flowing,
- * the first pair stays as a static composition.
+ * Pairings are illustrative; we never claim these matches actually happened.
+ *
+ * Respects prefers-reduced-motion: conversation, dashes, and chip fill all
+ * pause; the matched state is shown as a static composition.
  */
 
 type Side = {
   name: string;
-  category: string;
   domain: string;
+  category: string;
+  /** small chips listed under name; keep ≤ 3, each ≤ ~14 chars */
+  chips: string[];
 };
 
-type Pair = { startup: Side; investor: Side };
+type Message = {
+  from: "startup" | "investor";
+  text: string;
+  /** position offset in pixels relative to the center area's center */
+  x: number;
+  y: number;
+};
+
+type Pair = { startup: Side; investor: Side; conversation: Message[] };
 
 const PAIRS: Pair[] = [
   {
-    startup: { name: "Cursor", category: "AI dev tools", domain: "cursor.com" },
-    investor: { name: "Sequoia", category: "Tech, multi-stage", domain: "sequoiacap.com" },
+    startup: {
+      name: "Cursor",
+      domain: "cursor.com",
+      category: "AI dev tools",
+      chips: ["Pre-seed", "$1M raise", "San Francisco"],
+    },
+    investor: {
+      name: "Sequoia",
+      domain: "sequoiacap.com",
+      category: "Tech, multi-stage",
+      chips: ["$250K – $5M", "AI · DevTools", "Menlo Park"],
+    },
+    // Positions: y must clear the chip vertically (chip is ±80 from center).
+    // Mix of high-left / low-right etc. for the "spawned but conversational" feel.
+    conversation: [
+      { from: "startup",  text: "Raising $1M for AI dev tools.",  x: -110, y: -130 },
+      { from: "investor", text: "Pre-seed AI fits our thesis.",   x: 90,   y: -110 },
+      { from: "startup",  text: "30 partners, 4 paying.",         x: -30,  y: 130  },
+    ],
   },
   {
-    startup: { name: "Linear", category: "Productivity", domain: "linear.app" },
-    investor: { name: "Accel", category: "Software, growth", domain: "accel.com" },
+    startup: {
+      name: "Linear",
+      domain: "linear.app",
+      category: "Productivity",
+      chips: ["Series A", "$15M raise", "San Francisco"],
+    },
+    investor: {
+      name: "Accel",
+      domain: "accel.com",
+      category: "Software, growth",
+      chips: ["$5M – $40M", "SaaS · Tools", "Palo Alto"],
+    },
+    conversation: [
+      { from: "startup",  text: "Series A, $15M for PLG growth.", x: -120, y: -120 },
+      { from: "investor", text: "Productivity SaaS — our lane.",  x: 80,   y: 130  },
+      { from: "startup",  text: "100K teams, 90% retention.",     x: -100, y: 120  },
+    ],
   },
   {
-    startup: { name: "Stripe", category: "Payments", domain: "stripe.com" },
-    investor: { name: "Y Combinator", category: "Accelerator", domain: "ycombinator.com" },
+    startup: {
+      name: "Stripe",
+      domain: "stripe.com",
+      category: "Payments infra",
+      chips: ["Seed", "$2M raise", "San Francisco"],
+    },
+    investor: {
+      name: "Y Combinator",
+      domain: "ycombinator.com",
+      category: "Accelerator",
+      chips: ["$500K", "All sectors", "Mountain View"],
+    },
+    conversation: [
+      { from: "startup",  text: "Payment APIs for the web.",       x: -90,  y: -130 },
+      { from: "investor", text: "Devtools fintech — apply W'09.",  x: 100,  y: -110 },
+      { from: "startup",  text: "5 partners signed already.",      x: 30,   y: 130  },
+    ],
   },
   {
-    startup: { name: "Anthropic", category: "AI research", domain: "anthropic.com" },
-    investor: { name: "a16z", category: "Tech, all stages", domain: "a16z.com" },
+    startup: {
+      name: "Anthropic",
+      domain: "anthropic.com",
+      category: "AI research",
+      chips: ["Series B", "$300M raise", "San Francisco"],
+    },
+    investor: {
+      name: "a16z",
+      domain: "a16z.com",
+      category: "Tech, all stages",
+      chips: ["$10M – $100M", "AI · Frontier", "Menlo Park"],
+    },
+    conversation: [
+      { from: "startup",  text: "Series B for Claude scaling.",    x: -110, y: -120 },
+      { from: "investor", text: "Backing the safety-first lab.",   x: 100,  y: 125  },
+      { from: "startup",  text: "Enterprise contracts ramping.",   x: -110, y: 130  },
+    ],
   },
   {
-    startup: { name: "Notion", category: "Workspace", domain: "notion.so" },
-    investor: { name: "Index", category: "Software, growth", domain: "indexventures.com" },
+    startup: {
+      name: "Notion",
+      domain: "notion.so",
+      category: "Workspace",
+      chips: ["Series C", "$275M ARR", "San Francisco"],
+    },
+    investor: {
+      name: "Index",
+      domain: "indexventures.com",
+      category: "Software, growth",
+      chips: ["$5M – $50M", "Workspace · SaaS", "London / SF"],
+    },
+    conversation: [
+      { from: "startup",  text: "Series C, going international.",  x: -120, y: -125 },
+      { from: "investor", text: "Workspace category leader.",      x: 30,   y: 130  },
+      { from: "startup",  text: "30M users globally.",             x: 100,  y: -110 },
+    ],
   },
 ];
 
-const CYCLE_MS = 3500;
+type Stage = "messaging" | "matching" | "matched";
+
+const MESSAGE_DELAY_MS = 700;
+const MESSAGE_GAP_MS = 900;
+const MATCH_HOLD_MS = 1800;
+const MATCHING_DURATION_MS = 1000;
 
 export function MatchFlow() {
   const [index, setIndex] = useState(0);
+  const [stage, setStage] = useState<Stage>("messaging");
+  const [visibleMessages, setVisibleMessages] = useState(0);
   const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
@@ -68,15 +164,51 @@ export function MatchFlow() {
   }, []);
 
   useEffect(() => {
-    if (reduced) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % PAIRS.length), CYCLE_MS);
-    return () => clearInterval(id);
-  }, [reduced]);
+    const pair = PAIRS[index];
+
+    if (reduced) {
+      // Static composition: full conversation visible, fully matched.
+      setStage("matched");
+      setVisibleMessages(pair.conversation.length);
+      return;
+    }
+
+    setStage("messaging");
+    setVisibleMessages(0);
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Spawn each conversation bubble at staggered intervals.
+    pair.conversation.forEach((_, i) => {
+      timers.push(
+        setTimeout(() => setVisibleMessages(i + 1), MESSAGE_DELAY_MS + i * MESSAGE_GAP_MS),
+      );
+    });
+
+    const conversationEnd = MESSAGE_DELAY_MS + pair.conversation.length * MESSAGE_GAP_MS;
+
+    // After messaging settles, start the chip's green-fill.
+    timers.push(setTimeout(() => setStage("matching"), conversationEnd + 600));
+    // After the fill duration, swap text to "matched!".
+    timers.push(
+      setTimeout(() => setStage("matched"), conversationEnd + 600 + MATCHING_DURATION_MS),
+    );
+    // Hold then advance to the next pair.
+    timers.push(
+      setTimeout(
+        () => setIndex((i) => (i + 1) % PAIRS.length),
+        conversationEnd + 600 + MATCHING_DURATION_MS + MATCH_HOLD_MS,
+      ),
+    );
+
+    return () => timers.forEach(clearTimeout);
+  }, [index, reduced]);
 
   const pair = PAIRS[index];
 
   return (
     <div className="relative mx-auto w-full max-w-[1280px]">
+      {/* Scoped trace-flow keyframes (slowed down per the spec) */}
       <style jsx>{`
         @keyframes vm-trace-right {
           to {
@@ -89,10 +221,10 @@ export function MatchFlow() {
           }
         }
         :global(.vm-trace-r .vm-trace-anim) {
-          animation: vm-trace-right 1.6s linear infinite;
+          animation: vm-trace-right 3.4s linear infinite;
         }
         :global(.vm-trace-l .vm-trace-anim) {
-          animation: vm-trace-left 1.6s linear infinite;
+          animation: vm-trace-left 3.4s linear infinite;
         }
         @media (prefers-reduced-motion: reduce) {
           :global(.vm-trace-anim) {
@@ -101,34 +233,39 @@ export function MatchFlow() {
         }
       `}</style>
 
-      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(380px,500px)_minmax(0,1fr)] items-center gap-5 sm:gap-8">
+      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(360px,440px)_minmax(0,1fr)] items-stretch gap-6 sm:gap-8">
         {/* LEFT — startup */}
         <div className="relative flex min-w-0 justify-end">
           <AnimatePresence mode="wait">
             <motion.div
               key={`s-${index}`}
-              initial={{ opacity: 0, x: -14 }}
+              initial={{ opacity: 0, x: -16 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -14 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full max-w-[420px]"
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-[380px]"
             >
               <SideCard side={pair.startup} role="startup" />
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* CENTER — traces + chip. Tall to give the spaced trace lines room. */}
-        <div className="relative flex h-[260px] items-center justify-center">
+        {/* CENTER — conversation overlay + chip + traces */}
+        <div className="relative flex min-h-[380px] items-center justify-center">
           <TraceField
             direction="right"
-            className="absolute left-0 top-1/2 h-[220px] w-[calc(50%-128px)] -translate-y-1/2"
+            className="absolute left-0 top-1/2 h-[260px] w-[calc(50%-140px)] -translate-y-1/2"
           />
           <TraceField
             direction="left"
-            className="absolute right-0 top-1/2 h-[220px] w-[calc(50%-128px)] -translate-y-1/2"
+            className="absolute right-0 top-1/2 h-[260px] w-[calc(50%-140px)] -translate-y-1/2"
           />
-          <MatchChip />
+          <ConversationOverlay
+            key={`conv-${index}`}
+            messages={pair.conversation}
+            visibleCount={visibleMessages}
+          />
+          <MatchChip stage={stage} />
         </div>
 
         {/* RIGHT — investor */}
@@ -136,11 +273,11 @@ export function MatchFlow() {
           <AnimatePresence mode="wait">
             <motion.div
               key={`i-${index}`}
-              initial={{ opacity: 0, x: 14 }}
+              initial={{ opacity: 0, x: 16 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 14 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full max-w-[420px]"
+              exit={{ opacity: 0, x: 16 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-[380px]"
             >
               <SideCard side={pair.investor} role="investor" />
             </motion.div>
@@ -151,21 +288,26 @@ export function MatchFlow() {
   );
 }
 
-/* ---------- Cards ---------- */
+/* =========================================================================
+   Cards
+   ========================================================================= */
 
 function SideCard({ side, role }: { side: Side; role: "startup" | "investor" }) {
   return (
     <div
-      className="relative flex w-full flex-col gap-6 rounded-[16px] border border-[color:var(--color-border)] bg-white p-7 shadow-[0_1px_0_rgba(15,23,42,0.04),0_24px_48px_-28px_rgba(15,23,42,0.18)]"
+      className="relative flex aspect-square w-full flex-col rounded-[18px] border border-[color:var(--color-border)] bg-white p-7 shadow-[0_1px_0_rgba(15,23,42,0.04),0_28px_56px_-32px_rgba(15,23,42,0.18)]"
       aria-label={`${role === "startup" ? "Startup" : "Investor"}: ${side.name}, ${side.category}`}
     >
-      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
+      {/* Top: role label */}
+      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
         {role === "startup" ? "Startup" : "Investor"}
       </span>
-      <div className="flex items-center gap-5">
+
+      {/* Middle: logo + name */}
+      <div className="mt-7 flex items-center gap-4">
         <CompanyLogo domain={side.domain} name={side.name} />
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="text-[22px] font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]">
+          <span className="text-[26px] font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]">
             {side.name}
           </span>
           <span className="mt-1.5 text-[14px] text-[color:var(--color-text-muted)]">
@@ -173,14 +315,26 @@ function SideCard({ side, role }: { side: Side; role: "startup" | "investor" }) 
           </span>
         </span>
       </div>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Bottom: chips */}
+      <div className="flex flex-wrap gap-2">
+        {side.chips.map((c) => (
+          <span
+            key={c}
+            className="rounded-[7px] border border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] px-2.5 py-1 text-[12px] font-medium text-[color:var(--color-text-strong)]"
+          >
+            {c}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
 
 function CompanyLogo({ domain, name }: { domain: string; name: string }) {
-  // Two-tier source. Clearbit's free Logo API was deprecated when HubSpot
-  // acquired them, so we lead with Google's favicon service (always returns
-  // a usable icon) and then fall back to a brand-tinted letter tile.
   const [errored, setErrored] = useState(false);
   const initial = name[0]?.toUpperCase() ?? "?";
 
@@ -209,26 +363,81 @@ function CompanyLogo({ domain, name }: { domain: string; name: string }) {
   );
 }
 
-/* ---------- Center chip ---------- */
+/* =========================================================================
+   Conversation overlay
+   ========================================================================= */
 
-function MatchChip() {
-  // Processor-chip aesthetic, intentionally asymmetric — like a real IC:
-  //   - Different pin counts per side (4 left, 6 right)
-  //   - Top pins clustered to the right; bottom pins clustered to the left
-  //   - Pin 1 indicator dot in the top-left
-  //   - Off-center "VMX/01" silkscreen label in the bottom-right
-  //   - Center core (V/ + match) positioned slightly left of geometric center
-  //   - Internal grid lines at uneven positions
-  //
-  // Light theme. Brand-green accents only (no cyan / no purple).
+function ConversationOverlay({
+  messages,
+  visibleCount,
+}: {
+  messages: Message[];
+  visibleCount: number;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+      <div className="relative h-full w-full">
+        <AnimatePresence>
+          {messages.slice(0, visibleCount).map((m, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, scale: 0.94, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute"
+              style={{
+                left: "50%",
+                top: "50%",
+                transform: `translate(calc(-50% + ${m.x}px), calc(-50% + ${m.y}px))`,
+              }}
+            >
+              <ChatBubble from={m.from} text={m.text} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
 
-  // Side pin positions match where the trace convergence dots land (y=40 in
-  // 0..80 viewBox = 50% of the chip height vertically); the rest of the side
-  // pins are decorative.
-  const leftPins = [22, 50, 72]; // 3 — fewer
-  const rightPins = [12, 28, 44, 60, 76, 92]; // 6 — denser
+function ChatBubble({ from, text }: { from: "startup" | "investor"; text: string }) {
+  const isStartup = from === "startup";
+  // Startup bubbles read like outgoing messages; investor bubbles read like
+  // incoming. Keep both side-neutral by NOT using a "you/me" label — just
+  // role chips so readers see the conversation symmetrically.
+  return (
+    <div
+      className={`relative max-w-[220px] rounded-[12px] border px-3.5 py-2 text-[13px] leading-[1.4] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.18)] ${
+        isStartup
+          ? "border-[color:var(--color-info)]/30 bg-[color:var(--color-bg)] text-[color:var(--color-text-strong)]"
+          : "border-[color:var(--color-brand)]/35 bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+      }`}
+    >
+      <span
+        className={`mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.14em] ${
+          isStartup
+            ? "text-[color:var(--color-info)]"
+            : "text-[color:var(--color-brand-strong)]"
+        }`}
+      >
+        {isStartup ? "Startup" : "Investor"}
+      </span>
+      {text}
+    </div>
+  );
+}
 
-  // Top pins cluster on the right side; bottom on the left. Picks asymmetry.
+/* =========================================================================
+   Center chip
+   ========================================================================= */
+
+function MatchChip({ stage }: { stage: Stage }) {
+  const isFilled = stage !== "messaging"; // matching or matched
+
+  // Asymmetric pin layout (left ≠ right; top clusters right; bottom clusters left)
+  const leftPins = [22, 50, 72];
+  const rightPins = [12, 28, 44, 60, 76, 92];
   const topPins = [54, 64, 74, 84, 94];
   const bottomPins = [8, 18, 28, 38, 48, 58];
 
@@ -253,8 +462,6 @@ function MatchChip() {
           <span className="absolute left-0 top-0 block h-full w-[3px] bg-[color:var(--color-brand)]" />
         </span>
       ))}
-
-      {/* Top + bottom pins (asymmetric clusters) */}
       {topPins.map((left, i) => (
         <span
           key={`t-${i}`}
@@ -274,21 +481,28 @@ function MatchChip() {
         </span>
       ))}
 
-      {/* Chip body — landscape rectangle, slightly wider than tall */}
-      <div className="relative h-[180px] w-[260px] overflow-hidden rounded-[8px] border border-[color:var(--color-border-strong)] bg-white shadow-[0_14px_44px_-14px_rgba(22,163,74,0.4)]">
-        {/* Corner notches — top-right is omitted intentionally so the chip
-            reads as having a defined orientation, not a centered emblem */}
+      {/* Chip body — animates background color from white to brand-green
+         over MATCHING_DURATION_MS, with an outer-to-inner radial fill. */}
+      <motion.div
+        animate={{
+          backgroundColor: isFilled ? "var(--color-brand)" : "var(--color-surface)",
+          borderColor: isFilled ? "var(--color-brand-strong)" : "var(--color-border-strong)",
+        }}
+        transition={{ duration: MATCHING_DURATION_MS / 1000, ease: [0.22, 1, 0.36, 1] }}
+        className="relative h-[160px] w-[220px] overflow-hidden rounded-[8px] border shadow-[0_14px_44px_-14px_rgba(22,163,74,0.4)]"
+      >
+        {/* Corner notches (3 — top-right omitted for orientation) */}
         <span className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 border-l-2 border-t-2 border-[color:var(--color-brand)]" />
         <span className="pointer-events-none absolute bottom-2 left-2 h-3.5 w-3.5 border-l-2 border-b-2 border-[color:var(--color-brand)]" />
         <span className="pointer-events-none absolute bottom-2 right-2 h-3.5 w-3.5 border-r-2 border-b-2 border-[color:var(--color-brand)]" />
 
-        {/* Pin 1 indicator (small filled circle, industry-standard chip marker) */}
+        {/* Pin 1 indicator */}
         <span
           className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[color:var(--color-brand)]"
           style={{ left: 14, top: 14 }}
         />
 
-        {/* Internal grid (uneven spacing) */}
+        {/* Internal grid (uneven) */}
         <div className="pointer-events-none absolute inset-0 opacity-25">
           <span className="absolute left-0 right-0 block h-px bg-[color:var(--color-brand)]" style={{ top: "32%" }} />
           <span className="absolute left-0 right-0 block h-px bg-[color:var(--color-brand)]" style={{ top: "72%" }} />
@@ -296,44 +510,42 @@ function MatchChip() {
           <span className="absolute top-0 bottom-0 block w-px bg-[color:var(--color-brand)]" style={{ left: "62%" }} />
         </div>
 
-        {/* Faint die outline behind the core (shifted off-center) */}
-        <span
-          className="pointer-events-none absolute rounded-[3px] border border-dashed border-[color:var(--color-brand)]/25"
-          style={{ left: "16%", top: "26%", width: "62%", height: "44%" }}
-        />
-
-        {/* Center core (V/ + match) — positioned slightly left of geometric center */}
+        {/* Inner core (white box). Stays white even when outer fills green —
+           per the spec, the inner box is "shielded" from the green wash. */}
         <div className="absolute inset-0 flex items-center" style={{ paddingLeft: "10%" }}>
-          <div className="relative flex items-center gap-2 rounded-[6px] border border-[color:var(--color-brand)]/45 bg-[color:var(--color-bg)] px-3.5 py-2">
+          <div className="relative flex items-center gap-1 rounded-[6px] border border-[color:var(--color-brand)]/45 bg-[color:var(--color-bg)] px-4 py-2">
             <span className="pointer-events-none absolute -left-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
             <span className="pointer-events-none absolute -right-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
             <span className="pointer-events-none absolute -left-[3px] -bottom-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
             <span className="pointer-events-none absolute -right-[3px] -bottom-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
 
-            <Image
-              src="/logo.png"
-              alt=""
-              width={20}
-              height={20}
-              className="object-contain"
-              style={{ height: 20, width: "auto" }}
-            />
-            <span className="text-[17px] font-semibold tracking-tight text-[color:var(--color-brand-strong)]">
-              match
-            </span>
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={stage === "matched" ? "matched" : "match"}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="text-[20px] font-semibold tracking-tight text-[color:var(--color-brand-strong)]"
+              >
+                {stage === "matched" ? "matched!" : "match"}
+              </motion.span>
+            </AnimatePresence>
           </div>
         </div>
 
-        {/* Silkscreen label — bottom-right, off-center, like real chip markings */}
+        {/* Silkscreen label */}
         <span className="pointer-events-none absolute bottom-3 right-3 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
           vmx · 01
         </span>
-      </div>
+      </motion.div>
     </div>
   );
 }
 
-/* ---------- Trace field (right-angle PCB-style paths) ---------- */
+/* =========================================================================
+   Trace field — right-angle PCB-style polylines with endpoint dots
+   ========================================================================= */
 
 function TraceField({
   direction,
@@ -342,16 +554,8 @@ function TraceField({
   direction: "right" | "left";
   className?: string;
 }) {
-  // viewBox is 100×60. Traces converge at the inner edge (the chip side):
-  //   - right direction (LEFT half of layout): converge at x=100, y=30
-  //   - left direction (RIGHT half of layout): converge at x=0,   y=30
-  //
-  // Each path bends with right angles only. 4 traces with different bend
-  // depths so the field reads as a busy circuit, not a uniform comb.
   const isRight = direction === "right";
 
-  // ViewBox is 100×80 (taller now to give the spaced lines room). All four
-  // traces converge on the chip-side edge near y=40.
   const traces = isRight
     ? [
         "0,8  20,8  20,40 100,40",
@@ -366,7 +570,6 @@ function TraceField({
         "100,72 30,72 30,40 0,40",
       ];
 
-  // Card-side endpoints (where dots go on the card side)
   const cardEndpoints = isRight
     ? [
         [0, 8],
@@ -391,7 +594,6 @@ function TraceField({
     >
       {traces.map((pts, i) => (
         <Fragment key={i}>
-          {/* base (always visible, very subtle) */}
           <polyline
             points={pts}
             stroke="var(--color-border)"
@@ -399,31 +601,43 @@ function TraceField({
             fill="none"
             vectorEffect="non-scaling-stroke"
           />
-          {/* animated brand-green dashes flowing inward */}
           <polyline
             className="vm-trace-anim"
             points={pts}
             stroke="var(--color-brand)"
             strokeWidth="1.5"
-            strokeDasharray="5 14"
+            strokeDasharray="6 18"
             fill="none"
             opacity={0.85}
-            style={{ animationDelay: `${i * 0.18}s` } as React.CSSProperties}
+            style={{ animationDelay: `${i * 0.32}s` } as React.CSSProperties}
             vectorEffect="non-scaling-stroke"
           />
         </Fragment>
       ))}
 
-      {/* PCB-via dots at the card-side endpoints */}
       {cardEndpoints.map(([x, y], i) => (
         <Fragment key={`endpoint-card-${i}`}>
-          <circle cx={x} cy={y} r="2.5" fill="white" stroke="var(--color-brand)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          <circle
+            cx={x}
+            cy={y}
+            r="2.5"
+            fill="white"
+            stroke="var(--color-brand)"
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+          />
           <circle cx={x} cy={y} r="1" fill="var(--color-brand)" />
         </Fragment>
       ))}
-
-      {/* Convergence dot at the chip-side endpoint (slightly larger) */}
-      <circle cx={chipEndpoint[0]} cy={chipEndpoint[1]} r="3.5" fill="white" stroke="var(--color-brand)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <circle
+        cx={chipEndpoint[0]}
+        cy={chipEndpoint[1]}
+        r="3.5"
+        fill="white"
+        stroke="var(--color-brand)"
+        strokeWidth="1.5"
+        vectorEffect="non-scaling-stroke"
+      />
       <circle cx={chipEndpoint[0]} cy={chipEndpoint[1]} r="1.5" fill="var(--color-brand)" />
     </svg>
   );
