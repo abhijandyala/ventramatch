@@ -23,7 +23,14 @@
 [Stripe]   subscriptions (post-MVP)
 ```
 
-**Auth** is not bundled with the database. Plan: Auth.js, Clerk, or similar — the app will create/update `public.users` with the same `id` UUID the provider issues, and run queries inside `withUserRls` from `lib/db.ts` so RLS sees the current user.
+**Auth** runs on **Auth.js v5 (NextAuth)** with a custom postgres-js adapter (`lib/auth/adapter.ts`):
+
+- `auth.ts` — `NextAuth(...)` with the adapter, Credentials, and shared OAuth providers. Exports `handlers`, `signIn`, `signOut`, `auth`. Used by server actions, RSC, and the `/api/auth/[...nextauth]` route handler.
+- `auth.config.ts` — edge-safe config (OAuth providers + the `authorized` callback that drives route protection). Imported by both `auth.ts` and `proxy.ts`.
+- `proxy.ts` — Next 16 proxy that re-exports `auth` as the middleware function.
+- Session strategy is **JWT** (forced by Credentials provider). The `accounts` and `users` tables are still persisted via the adapter for OAuth account linking; `sessions` exists but is unused.
+- `public.users.id` is the single identity column. New users (OAuth or Credentials) start with `role = null` and `onboarding_completed = false`.
+- Server-side handlers always run user-scoped DB writes through `withUserRls(userId, …)` in `lib/db.ts`.
 
 ## Boundaries
 
@@ -56,12 +63,15 @@ We use **Railway-managed PostgreSQL** only. Policies use `public.app_user_id()`,
 1. Atomicity — both interaction rows exist before a match is inserted.
 2. Clients cannot insert into `matches` directly (no insert policy for app roles; trigger runs as **security definer**).
 
-## Authentication flow (target — not all wired in code yet)
+## Authentication flow
 
-1. User signs in with the chosen auth provider.
-2. Server session stores user id (UUID).
-3. Server Actions and RSC that touch user-scoped data call `withUserRls(userId, …)` and use the returned `sql` for queries.
-4. Route gating uses the session, not the DB, for “is logged in”.
+1. User signs in via the auth card (`/sign-in` or `/sign-up`) — credentials, Google, LinkedIn, or Microsoft Entra ID.
+2. Auth.js issues a signed JWT cookie. The `jwt` callback copies `id`, `role`, and `onboardingCompleted` onto the token; `session` exposes them on `session.user`.
+3. `app/post-auth/page.tsx` reads the session and routes the user. Today everyone lands at `/dashboard`; once onboarding ships, users with `onboardingCompleted = false` are redirected to `/onboarding`.
+4. Route protection (proxy) runs `authConfig.callbacks.authorized` on every request:
+   - Unauth'd request to a protected path → redirect to `/sign-in?from=...`.
+   - Auth'd request to `/sign-in` or `/sign-up` → redirect to `/post-auth`.
+5. Server Actions and RSC that touch user-scoped data call `withUserRls(userId, …)` and use the returned `sql` for queries.
 
 ## Discovery feed flow (investor side)
 

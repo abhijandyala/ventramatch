@@ -6,6 +6,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type UserRole = "founder" | "investor";
 export type StartupStage = "idea" | "pre_seed" | "seed" | "series_a" | "series_b_plus";
 export type InteractionAction = "like" | "pass" | "save";
+export type LeadFollowPreference = "lead" | "follow" | "either";
 
 export interface Database {
   public: {
@@ -103,6 +104,49 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["matches"]["Insert"]>;
       };
+      founder_matching_preferences: {
+        Row: {
+          id: string;
+          user_id: string;
+          industry: string;
+          stage: StartupStage;
+          amount_raising: string;
+          location: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["founder_matching_preferences"]["Row"],
+          "id" | "created_at" | "updated_at"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["founder_matching_preferences"]["Insert"]>;
+      };
+      investor_matching_preferences: {
+        Row: {
+          id: string;
+          user_id: string;
+          check_size: string;
+          preferred_stage: StartupStage;
+          sectors: string[];
+          geography: string;
+          lead_follow_preference: LeadFollowPreference;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_matching_preferences"]["Row"],
+          "id" | "created_at" | "updated_at"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_matching_preferences"]["Insert"]>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -110,6 +154,7 @@ export interface Database {
       user_role: UserRole;
       startup_stage: StartupStage;
       interaction_action: InteractionAction;
+      lead_follow_preference: LeadFollowPreference;
     };
   };
 }
