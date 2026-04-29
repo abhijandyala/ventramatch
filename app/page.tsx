@@ -4,15 +4,15 @@ import { MediaSlot } from "@/components/landing/media-slot";
 /**
  * Landing page — Phase 0 (foundation).
  *
- * This is intentionally minimal. The real structural page lands in Phase 1
- * once the foundation primitives (MediaSlot + media registry + design tokens)
- * are in place and reviewed.
+ * Minimal by design. Phase 1 builds the structural page on top of these
+ * primitives once foundation is reviewed.
  *
- * What's here:
- *   - Sticky nav (logo + wordmark, no CTAs — waitlist removed)
- *   - One editorial hero block (no fake UI, no decorative chrome)
- *   - Hero media placeholder (Slot A — the real video lands later)
- *   - A minimal footer
+ * Hero is intentionally side-neutral: founders use this app to find
+ * investors, investors use it to find founders. The copy must serve both
+ * sides and never address one of them in the second person.
+ *
+ * Layout: centered text. Right-side visual removed. The hero media slot
+ * sits below the text as a wide block (lands in Phase 1+).
  */
 
 export default function HomePage() {
@@ -41,34 +41,36 @@ function Nav() {
 function Hero() {
   return (
     <section className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 grid-faint [mask-image:linear-gradient(to_bottom,white_20%,transparent_85%)]" />
+      {/* Subtle grid backdrop. Masked so it fades into the page. */}
+      <div className="pointer-events-none absolute inset-0 grid-faint [mask-image:linear-gradient(to_bottom,white_25%,transparent_85%)]" />
 
-      <div className="relative mx-auto grid max-w-[1200px] grid-cols-1 items-center gap-12 px-6 pt-20 pb-24 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16 lg:pt-28 lg:pb-32">
-        <div>
-          <h1
-            className="text-balance font-semibold text-[color:var(--color-text-strong)]"
-            style={{
-              fontSize: "var(--type-display)",
-              lineHeight: 1.02,
-              letterSpacing: "var(--tracking-display)",
-            }}
-          >
-            Stop emailing the wrong investors.
-          </h1>
-          <p
-            className="mt-7 max-w-[58ch] text-pretty text-[color:var(--color-text-muted)]"
-            style={{ fontSize: "var(--type-body-lg)", lineHeight: 1.55 }}
-          >
-            VentraMatch scores every investor against your raise on the five things they actually filter on. Mutual interest unlocks contact.
-          </p>
-          <p className="mt-6 max-w-[44ch] text-[13px] leading-relaxed text-[color:var(--color-text-faint)]">
-            Phase 1 builds the full landing page on top of these foundation primitives.
-          </p>
-        </div>
+      <div className="relative mx-auto flex max-w-[960px] flex-col items-center gap-8 px-6 pt-24 pb-12 text-center md:pt-32">
+        <h1
+          className="text-balance font-semibold text-[color:var(--color-text-strong)]"
+          style={{
+            fontSize: "var(--type-display)",
+            lineHeight: 1.02,
+            letterSpacing: "var(--tracking-display)",
+          }}
+        >
+          Fundraising matches, scored on fit.
+        </h1>
 
-        <div className="lg:justify-self-end w-full max-w-[680px]">
-          <MediaSlot slot="hero" />
-        </div>
+        <p
+          className="max-w-[62ch] text-pretty text-[color:var(--color-text-muted)]"
+          style={{ fontSize: "var(--type-body-lg)", lineHeight: 1.55 }}
+        >
+          VentraMatch scores every founder–investor pair on the five things both sides actually filter on — sector, stage, check size, geography, traction. Mutual interest unlocks contact. No cold-email lottery, no warm-intro gatekeeping.
+        </p>
+
+        <p className="text-[12px] font-mono uppercase tracking-[0.1em] text-[color:var(--color-text-faint)]">
+          Phase 1 builds the full landing page on top of these foundation primitives
+        </p>
+      </div>
+
+      {/* Hero media block — full-width within the max content width, sits below the centered text. */}
+      <div className="relative mx-auto max-w-[1200px] px-6 pb-24 md:pb-32">
+        <MediaSlot slot="hero" className="mx-auto max-w-[1100px]" />
       </div>
     </section>
   );
