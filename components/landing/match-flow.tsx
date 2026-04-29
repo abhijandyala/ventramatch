@@ -272,8 +272,11 @@ export function MatchFlow() {
           </AnimatePresence>
         </div>
 
-        {/* CENTER — conversation overlay + chip + traces */}
-        <div className="relative flex min-h-[380px] items-center justify-center">
+        {/* CENTER — conversation overlay + chip + traces.
+           The chip is absolutely centered (left-1/2 top-1/2 + translate)
+           so it doesn't get pushed around by the absolute trace fields
+           or the conversation overlay. */}
+        <div className="relative min-h-[380px]">
           <TraceField
             direction="right"
             className="absolute left-0 top-1/2 h-[260px] w-[calc(50%-140px)] -translate-y-1/2"
@@ -287,7 +290,9 @@ export function MatchFlow() {
             messages={pair.conversation}
             visibleCount={visibleMessages}
           />
-          <MatchChip stage={stage} />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <MatchChip stage={stage} />
+          </div>
         </div>
 
         {/* RIGHT — investor */}
@@ -640,75 +645,76 @@ function TraceField({
         "100,72 30,72 30,40 0,40",
       ];
 
-  const cardEndpoints = isRight
-    ? [
-        [0, 8],
-        [0, 28],
-        [0, 52],
-        [0, 72],
-      ]
-    : [
-        [100, 8],
-        [100, 28],
-        [100, 52],
-        [100, 72],
-      ];
-  const chipEndpoint = isRight ? [100, 40] : [0, 40];
+  // Card-side endpoints in vertical %; convert from viewBox (y=8/28/52/72 of 80).
+  const cardYsPct = ["10%", "35%", "65%", "90%"];
 
+  // Card endpoints sit on the card-facing edge of the field; chip endpoint
+  // sits on the chip-facing edge. Dots are rendered as DIVs (not SVG)
+  // because the SVG uses preserveAspectRatio="none" — that stretches any
+  // circle into an oval. Divs keep them perfectly round.
+  const cardSide = isRight ? "left" : "right";
+  const chipSide = isRight ? "right" : "left";
+
+  // Wrapper position comes from the consumer's className (which already
+  // sets `absolute …`). DO NOT add `relative` here — combining the two
+  // creates ambiguous CSS where `relative` wins on some Tailwind orderings,
+  // dropping the trace field into the normal document flow.
   return (
-    <svg
-      viewBox="0 0 100 80"
-      preserveAspectRatio="none"
-      className={`${isRight ? "vm-trace-r" : "vm-trace-l"} ${className ?? ""}`}
-      aria-hidden="true"
-    >
-      {traces.map((pts, i) => (
-        <Fragment key={i}>
-          <polyline
-            points={pts}
-            stroke="var(--color-border)"
-            strokeWidth="1"
-            fill="none"
-            vectorEffect="non-scaling-stroke"
-          />
-          <polyline
-            className="vm-trace-anim"
-            points={pts}
-            stroke="var(--color-brand)"
-            strokeWidth="1.5"
-            strokeDasharray="6 18"
-            fill="none"
-            opacity={0.85}
-            style={{ animationDelay: `${i * 0.32}s` } as React.CSSProperties}
-            vectorEffect="non-scaling-stroke"
-          />
-        </Fragment>
+    <div className={className ?? ""}>
+      <svg
+        viewBox="0 0 100 80"
+        preserveAspectRatio="none"
+        className={`${isRight ? "vm-trace-r" : "vm-trace-l"} absolute inset-0 h-full w-full`}
+        aria-hidden="true"
+      >
+        {traces.map((pts, i) => (
+          <Fragment key={i}>
+            <polyline
+              points={pts}
+              stroke="var(--color-border)"
+              strokeWidth="1"
+              fill="none"
+              vectorEffect="non-scaling-stroke"
+            />
+            <polyline
+              className="vm-trace-anim"
+              points={pts}
+              stroke="var(--color-brand)"
+              strokeWidth="1.5"
+              strokeDasharray="6 18"
+              fill="none"
+              opacity={0.85}
+              style={{ animationDelay: `${i * 0.32}s` } as React.CSSProperties}
+              vectorEffect="non-scaling-stroke"
+            />
+          </Fragment>
+        ))}
+      </svg>
+
+      {/* Card-side dots */}
+      {cardYsPct.map((top, i) => (
+        <span
+          key={`card-${i}`}
+          aria-hidden="true"
+          className="absolute block h-2 w-2 rounded-full bg-[color:var(--color-brand)]"
+          style={{
+            top,
+            [cardSide]: "0",
+            transform: `translate(${cardSide === "left" ? "-50%" : "50%"}, -50%)`,
+          }}
+        />
       ))}
 
-      {cardEndpoints.map(([x, y], i) => (
-        <Fragment key={`endpoint-card-${i}`}>
-          <circle
-            cx={x}
-            cy={y}
-            r="2.5"
-            fill="white"
-            stroke="var(--color-brand)"
-            strokeWidth="1.5"
-            vectorEffect="non-scaling-stroke"
-          />
-          <circle cx={x} cy={y} r="1" fill="var(--color-brand)" />
-        </Fragment>
-      ))}
-      <circle
-        cx={chipEndpoint[0]}
-        cy={chipEndpoint[1]}
-        r="3.5"
-        fill="white"
-        stroke="var(--color-brand)"
-        strokeWidth="1.5"
-        vectorEffect="non-scaling-stroke"
+      {/* Chip-side dot */}
+      <span
+        aria-hidden="true"
+        className="absolute block h-2.5 w-2.5 rounded-full bg-[color:var(--color-brand)]"
+        style={{
+          top: "50%",
+          [chipSide]: "0",
+          transform: `translate(${chipSide === "left" ? "-50%" : "50%"}, -50%)`,
+        }}
       />
-      <circle cx={chipEndpoint[0]} cy={chipEndpoint[1]} r="1.5" fill="var(--color-brand)" />
-    </svg>
+    </div>
   );
 }
