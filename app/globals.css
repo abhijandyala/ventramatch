@@ -1,47 +1,86 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg: oklch(99% 0.005 235);
-  --color-surface: oklch(97% 0.008 235);
-  --color-surface-2: oklch(94% 0.01 235);
-  --color-border: oklch(88% 0.012 235);
-  --color-text: oklch(22% 0.02 235);
-  --color-text-muted: oklch(48% 0.018 235);
-  --color-text-faint: oklch(65% 0.014 235);
-  --color-brand-ink: oklch(45% 0.16 235);
-  --color-brand-ink-hov: oklch(40% 0.17 235);
-  --color-brand-tint: oklch(94% 0.04 235);
-  --color-success: oklch(58% 0.13 155);
-  --color-warning: oklch(72% 0.14 75);
-  --color-danger: oklch(58% 0.18 25);
+/* =====================================================================
+   Design tokens — light theme only for v1.
+   Palette is the locked VentraMatch palette (green-led, blue secondary,
+   slate neutrals). Don't add new tokens here without updating DESIGN.md.
+   ===================================================================== */
 
+@theme {
+  /* Surfaces */
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f4f6;
+
+  /* Borders */
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+
+  /* Text */
+  --color-text: #0f172a;
+  --color-text-strong: #111827;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9ca3af;
+
+  /* Brand (green) */
+  --color-brand: #16a34a;
+  --color-brand-strong: #15803d;
+  --color-brand-soft: #22c55e;
+  --color-brand-tint: #ecfdf5;
+
+  /* Secondary + status */
+  --color-info: #3b82f6;
+  --color-warn: #f59e0b;
+  --color-danger: #ef4444;
+
+  /* Radius */
   --radius-sm: 6px;
   --radius: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
+  --radius-xl: 28px;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
+  /* Type scale (clamp(min, fluid, max)) — editorial register */
+  --type-display: clamp(56px, 8vw, 96px);
+  --type-h1: clamp(40px, 5.4vw, 64px);
+  --type-h2: clamp(28px, 3.4vw, 40px);
+  --type-h3: clamp(20px, 2.2vw, 26px);
+  --type-h4: 18px;
+  --type-body-lg: 18px;
+  --type-body: 15px;
+  --type-body-sm: 13px;
+  --type-caption: 12px;
+
+  /* Tracking */
+  --tracking-display: -0.025em;
+  --tracking-h1: -0.02em;
+  --tracking-h2: -0.014em;
+  --tracking-h3: -0.01em;
+  --tracking-caption: 0.08em;
+
+  /* Motion tokens (used by Framer Motion + CSS) */
+  --duration-quick: 160ms;
+  --duration-base: 320ms;
+  --duration-slow: 520ms;
+  --duration-cinematic: 800ms;
+
+  /* Easings */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-quiet: cubic-bezier(0.45, 0, 0.55, 1);
+
+  /* Fonts (Next/font sets the underlying CSS vars) */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", "Cascadia Mono", monospace;
 }
+
+/* =====================================================================
+   Base layer
+   ===================================================================== */
 
 @layer base {
   :root {
     color-scheme: light;
-  }
-
-  [data-theme="dark"] {
-    color-scheme: dark;
-    --color-bg: oklch(14% 0.012 235);
-    --color-surface: oklch(18% 0.014 235);
-    --color-surface-2: oklch(22% 0.016 235);
-    --color-border: oklch(28% 0.018 235);
-    --color-text: oklch(94% 0.012 235);
-    --color-text-muted: oklch(72% 0.016 235);
-    --color-text-faint: oklch(54% 0.014 235);
-    --color-brand-ink: oklch(72% 0.16 235);
-    --color-brand-ink-hov: oklch(78% 0.17 235);
-    --color-brand-tint: oklch(28% 0.06 235);
   }
 
   html {
@@ -49,22 +88,23 @@
     font-feature-settings: "cv11", "ss01", "ss03";
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     background-color: var(--color-bg);
     color: var(--color-text);
-    font-size: 15px;
-    line-height: 24px;
+    font-size: var(--type-body);
+    line-height: 1.6;
   }
 
   ::selection {
     background-color: var(--color-brand-tint);
-    color: var(--color-brand-ink);
+    color: var(--color-brand-strong);
   }
 
   *:focus-visible {
-    outline: 2px solid var(--color-brand-ink);
+    outline: 2px solid var(--color-brand);
     outline-offset: 2px;
     border-radius: 2px;
   }
@@ -79,4 +119,39 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/* =====================================================================
+   Shared utility patterns (used by landing primitives)
+   ===================================================================== */
+
+/* Subtle 1px grid backdrop. Apply to a container; mask it where needed. */
+.grid-faint {
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: -1px -1px;
+}
+
+/* MediaSlot placeholder — the labeled card shown when an asset hasn't shipped. */
+.slot-placeholder {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-2);
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      transparent 0,
+      transparent 14px,
+      rgba(15, 23, 42, 0.025) 14px,
+      rgba(15, 23, 42, 0.025) 15px
+    );
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
