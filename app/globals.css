@@ -8,8 +8,8 @@
 
 @theme {
   /* Surfaces */
-  --color-bg: #f9fafb;
-  --color-surface: #ffffff;
+  --color-bg: #ede8d0;        /* warm beige page background */
+  --color-surface: #ffffff;    /* cards / chip body — kept white for contrast */
   --color-surface-2: #f3f4f6;
 
   /* Borders */
