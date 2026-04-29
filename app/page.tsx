@@ -27,7 +27,10 @@ import { ComplianceStrip } from "@/components/landing/compliance-strip";
 
 export default function HomePage() {
   return (
-    <main className="bg-[color:var(--color-bg)] text-[color:var(--color-text)]">
+    <main
+      id="main-content"
+      className="bg-[color:var(--color-bg)] text-[color:var(--color-text)]"
+    >
       <Nav />
       <Hero />
       <SourceTicker />
