@@ -99,18 +99,15 @@ export function Numbers() {
               </h2>
             </Reveal>
             <Reveal delay={160}>
-              <p
-                className="mt-6 text-[color:var(--color-text-muted)]"
-                style={{ fontSize: "var(--type-body-lg)", lineHeight: 1.65 }}
-              >
+              <p className="mt-5 max-w-[46ch] text-[14.5px] leading-[1.65] text-[color:var(--color-text-muted)]">
                 Pre-seed founders contact <Stat>50–250</Stat> investors to close{" "}
-                <Stat>5–20</Stat> checks. With <Stat>300,000+</Stat> US angels and{" "}
-                <Stat>2,500+</Stat> VC funds, most aren&apos;t the right fit, so reply
-                rates sit at <Stat>1–10%</Stat>.
+                <Stat>5–20</Stat> checks. With <Stat>300,000+</Stat> US angels
+                and <Stat>2,500+</Stat> VC funds, most aren&apos;t the right
+                fit, so reply rates sit at <Stat>1–10%</Stat>.
               </p>
             </Reveal>
             <Reveal delay={220}>
-              <p className="mt-5 text-[14px] leading-relaxed text-[color:var(--color-text-faint)]">
+              <p className="mt-4 text-[12.5px] leading-relaxed text-[color:var(--color-text-faint)]">
                 Sources: Carta state-of-startups 2025, AngelList, OpenVC.
               </p>
             </Reveal>
