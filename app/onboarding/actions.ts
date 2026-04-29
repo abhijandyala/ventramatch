@@ -19,57 +19,36 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
 
   const parsed = onboardingSchema.safeParse(input);
   if (!parsed.success) {
+    console.log(`[saveOnboarding] validation failed: ${parsed.error.issues[0]?.message}`);
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const data = parsed.data;
 
   try {
     await withUserRls(userId, async (sql) => {
-      if (data.role === "founder") {
-        const { industry, stage, amountRaising, location } = data.info;
-        await sql`
-          insert into public.founder_matching_preferences
-            (user_id, industry, stage, amount_raising, location)
-          values
-            (${userId}, ${industry}, ${stage}, ${amountRaising}, ${location})
-          on conflict (user_id) do update set
-            industry = excluded.industry,
-            stage = excluded.stage,
-            amount_raising = excluded.amount_raising,
-            location = excluded.location
-        `;
-      } else {
-        const { checkSize, preferredStage, sectors, geography, leadFollow } = data.info;
-        await sql`
-          insert into public.investor_matching_preferences
-            (user_id, check_size, preferred_stage, sectors, geography, lead_follow_preference)
-          values
-            (
-              ${userId},
-              ${checkSize},
-              ${preferredStage},
-              ${sql.array(sectors)},
-              ${geography},
-              ${leadFollow}
-            )
-          on conflict (user_id) do update set
-            check_size = excluded.check_size,
-            preferred_stage = excluded.preferred_stage,
-            sectors = excluded.sectors,
-            geography = excluded.geography,
-            lead_follow_preference = excluded.lead_follow_preference
-        `;
-      }
+      const companyName =
+        data.profile.role === "founder"
+          ? data.profile.companyName
+          : data.profile.investorType === "firm"
+            ? (data.profile.firmName ?? null)
+            : null;
+
+      const investorType =
+        data.profile.role === "investor" ? data.profile.investorType : null;
 
       await sql`
         update public.users
         set role = ${data.role}::public.user_role,
+            company_name = ${companyName},
+            investor_type = ${investorType},
+            bio = ${data.profile.description},
+            goals = ${data.goals.goals},
             onboarding_completed = true
         where id = ${userId}
       `;
     });
   } catch (error) {
-    console.error("[saveOnboardingAction] save failed", error);
+    console.error("[saveOnboarding] save failed", error);
     return { ok: false, error: "Could not save your onboarding. Try again." };
   }
 
@@ -81,10 +60,7 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
       },
     });
   } catch (error) {
-    // Token refresh failure is non-fatal: the next request will pick up the
-    // fresh value from the DB on the JWT callback's natural refresh, and the
-    // middleware will route correctly. Log and continue.
-    console.error("[saveOnboardingAction] session refresh failed", error);
+    console.error("[saveOnboarding] session refresh failed", error);
   }
 
   revalidatePath("/dashboard");
