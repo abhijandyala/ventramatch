@@ -10,19 +10,23 @@ import type { MediaSlotId } from "@/lib/landing/media";
  * FiveInputs — the algorithm, made readable.
  *
  * Layout: centered head + a 5-tab strip + one large showcase card. The
- * active tab cycles every CYCLE_MS, looping. Designed after Serval's
- * "Get to know Serval" pattern so we get a single, focused visual instead
- * of five repetitive numbered rows.
+ * active tab's underline doubles as a progress bar that fills over the
+ * cycle window; when it completes, the next tab takes over. Modeled on
+ * Serval's "Get to know Serval" pattern.
  *
  * Behavior contracts:
- *   - Auto-advances only while the section is in view.
- *   - Pauses on hover / focus, and resumes on leave / blur.
- *   - prefers-reduced-motion: stays on the first tab; no auto-advance.
- *   - Tab strip is keyboard-operable (real <button>s, role="tab").
- *   - Underline indicator animates between tabs via shared layoutId.
+ *   - Auto-advances every CYCLE_MS while the section is in view.
+ *   - Underline progress bar is the canonical timer (CSS animation), and
+ *     `onAnimationEnd` advances the active tab so visual + state stay
+ *     locked together.
+ *   - Hover / focus pauses the animation in place via
+ *     animation-play-state; mouse leave / blur resumes from that point.
+ *   - prefers-reduced-motion: stays on the first tab, no auto-advance,
+ *     no crossfade between panels.
+ *   - Real <button role="tab"> elements with aria-selected / aria-controls.
  */
 
-const CYCLE_MS = 3000;
+const CYCLE_MS = 5500;
 
 type Input = {
   key: string;
@@ -54,7 +58,7 @@ const INPUTS: Input[] = [
     name: "Check size",
     weightPct: 20,
     body:
-      "Inside the investor's stated band scores 1.0. Outside the band falls off linearly toward 0. A $50K angel and a $5M lead are both wrong-fit for the wrong raise size, even when every other input lines up.",
+      "Inside the investor's stated band scores 1.0. Outside falls off linearly toward 0. A $50K angel and a $5M lead are both wrong-fit when the raise size is wrong, even if every other input lines up.",
     slot: "inputCheck",
   },
   {
@@ -103,17 +107,15 @@ export function FiveInputs() {
     return () => obs.disconnect();
   }, []);
 
-  // Auto-advance.
-  useEffect(() => {
-    if (paused || reduced || !inView) return;
-    const id = window.setTimeout(() => {
-      setActive((a) => (a + 1) % INPUTS.length);
-    }, CYCLE_MS);
-    return () => window.clearTimeout(id);
-  }, [active, paused, reduced, inView]);
-
   const current = INPUTS[active];
-  const cycling = !paused && !reduced && inView;
+  const animationActive = !reduced && inView;
+  // The underline pauses on hover but stays visible at its current width.
+  const playState = paused ? "paused" : "running";
+
+  const advance = () => {
+    if (paused) return; // safety: don't advance while user is hovering
+    setActive((a) => (a + 1) % INPUTS.length);
+  };
 
   return (
     <section
@@ -156,7 +158,7 @@ export function FiveInputs() {
           </Reveal>
         </div>
 
-        {/* ---------- Tab strip ---------- */}
+        {/* ---------- Tab strip (underline = progress bar) ---------- */}
         <Reveal delay={240}>
           <div
             role="tablist"
@@ -200,39 +202,31 @@ export function FiveInputs() {
                     </span>
                   </span>
 
-                  {isActive && (
-                    <motion.span
-                      layoutId="five-inputs-underline"
-                      className="absolute inset-x-2 -bottom-[1px] h-[2px] rounded-full bg-[color:var(--color-text-strong)] md:inset-x-3"
-                      transition={{
-                        type: "spring",
-                        stiffness: 380,
-                        damping: 32,
-                      }}
-                    />
-                  )}
+                  {isActive &&
+                    (animationActive ? (
+                      <span
+                        // key on `active` so the bar resets when tab changes;
+                        // pause/resume happens via animationPlayState (no remount).
+                        key={active}
+                        onAnimationEnd={advance}
+                        style={{
+                          transformOrigin: "left",
+                          animation: `vm-progress ${CYCLE_MS}ms linear forwards`,
+                          animationPlayState: playState,
+                        }}
+                        className="absolute -bottom-[1px] left-2 right-2 h-[2px] rounded-full bg-[color:var(--color-text-strong)] md:left-3 md:right-3"
+                      />
+                    ) : (
+                      // Reduced motion / out of view: solid underline, no animation.
+                      <span className="absolute -bottom-[1px] left-2 right-2 h-[2px] rounded-full bg-[color:var(--color-text-strong)] md:left-3 md:right-3" />
+                    ))}
                 </button>
               );
             })}
           </div>
         </Reveal>
 
-        {/* ---------- Cycle progress bar ---------- */}
-        <div className="mx-auto mt-3 h-[2px] w-[120px] overflow-hidden rounded-full bg-[color:var(--color-border)]">
-          <motion.div
-            key={`${active}-${cycling ? "go" : "stop"}`}
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: cycling ? 1 : 0 }}
-            transition={{
-              duration: cycling ? CYCLE_MS / 1000 : 0,
-              ease: "linear",
-            }}
-            style={{ transformOrigin: "left", width: "100%" }}
-            className="h-full bg-[color:var(--color-text-strong)]"
-          />
-        </div>
-
-        {/* ---------- Showcase card ---------- */}
+        {/* ---------- Showcase card · 4/8 split, image-led ---------- */}
         <div className="mt-10">
           <div
             className="relative overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]"
@@ -243,16 +237,16 @@ export function FiveInputs() {
               role="tabpanel"
               id={`five-inputs-panel-${current.key}`}
               aria-labelledby={`five-inputs-tab-${current.key}`}
-              className="grid grid-cols-1 md:min-h-[480px] md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+              className="grid grid-cols-1 md:min-h-[520px] md:grid-cols-[minmax(0,4fr)_minmax(0,8fr)]"
             >
-              {/* left: copy */}
-              <div className="relative flex items-center p-8 md:p-12 lg:p-14">
+              {/* left: copy (compact) */}
+              <div className="relative flex items-center p-7 md:p-9 lg:p-11">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={current.key}
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
+                    exit={{ opacity: 0, y: -6 }}
                     transition={{
                       duration: 0.35,
                       ease: [0.22, 1, 0.36, 1],
@@ -262,18 +256,18 @@ export function FiveInputs() {
                       {String(active + 1).padStart(2, "0")} / 05
                     </p>
                     <h3
-                      className="mt-3 font-semibold tracking-[-0.014em] text-[color:var(--color-text-strong)]"
+                      className="mt-3 font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]"
                       style={{
-                        fontSize: "clamp(28px, 3.4vw, 40px)",
-                        lineHeight: 1.05,
+                        fontSize: "clamp(22px, 2.4vw, 28px)",
+                        lineHeight: 1.1,
                       }}
                     >
                       {current.name}
                     </h3>
-                    <p className="mt-5 max-w-[44ch] text-[15px] leading-[1.65] text-[color:var(--color-text-muted)]">
+                    <p className="mt-4 max-w-[36ch] text-[13.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
                       {current.body}
                     </p>
-                    <div className="mt-7 inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-3 py-1">
+                    <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-3 py-1">
                       <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
                         Weight
                       </span>
@@ -285,8 +279,8 @@ export function FiveInputs() {
                 </AnimatePresence>
               </div>
 
-              {/* right: media */}
-              <div className="relative flex items-center justify-center border-t border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] p-6 md:border-l md:border-t-0 md:p-10 lg:p-12">
+              {/* right: media (dominant) */}
+              <div className="relative flex items-center justify-center border-t border-[color:var(--color-border)] bg-[color:var(--color-surface-2)] p-5 md:border-l md:border-t-0 md:p-7 lg:p-8">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.div
                     key={current.key}
@@ -297,7 +291,7 @@ export function FiveInputs() {
                       duration: 0.35,
                       ease: [0.22, 1, 0.36, 1],
                     }}
-                    className="w-full max-w-[420px]"
+                    className="w-full max-w-[560px]"
                   >
                     <MediaSlot slot={current.slot} className="rounded-[14px]" />
                   </motion.div>
@@ -307,7 +301,6 @@ export function FiveInputs() {
           </div>
         </div>
 
-        {/* ---------- Footnote ---------- */}
         <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
           Hover to pause · click any tab to jump
         </p>

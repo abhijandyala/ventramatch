@@ -156,6 +156,13 @@
   background-position: -1px -1px;
 }
 
+/* Tab underline that doubles as a cycle progress bar (used in FiveInputs).
+   Grows from left to right over the cycle; pause/resume via animation-play-state. */
+@keyframes vm-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 /* MediaSlot placeholder — the labeled card shown when an asset hasn't shipped. */
 .slot-placeholder {
   position: relative;
