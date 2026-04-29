@@ -156,6 +156,32 @@ export const mediaSlots = {
     ready: false,
     caption: "Animated visualization of mutual matching.",
   },
+
+  /* ---------- Product vision bento (Slots E, F) ---------- */
+  visionReadiness: {
+    id: "E",
+    section: "Vision · Readiness score",
+    kind: "lottie",
+    src: "/media/vision/readiness.json",
+    aspect: "16/9",
+    durationSec: 6,
+    brief:
+      "Radial dial slowly fills toward a labeled threshold while small chips (deck · traction · timing · fit) tick in around it. Cool restraint, no glow blobs.",
+    ready: false,
+    caption: "Animated readiness score dial.",
+  },
+  visionOutreach: {
+    id: "F",
+    section: "Vision · AI outreach",
+    kind: "lottie",
+    src: "/media/vision/outreach.json",
+    aspect: "4/3",
+    durationSec: 6,
+    brief:
+      "Fragments of investor thesis snap into a draft email outline. Words highlight then fade. No keyboard art, no envelope clichés.",
+    ready: false,
+    caption: "Animated investor outreach generator.",
+  },
 } satisfies Record<string, MediaSlotSpec>;
 
 export type MediaSlotId = keyof typeof mediaSlots;
