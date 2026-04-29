@@ -156,6 +156,65 @@ export const mediaSlots = {
     ready: false,
     caption: "Animated visualization of mutual matching.",
   },
+
+  /* ---------- Profile builder (Slots G, H) ---------- */
+  profileBuilderStartup: {
+    id: "G",
+    section: "How matching works · Step 01 · Startup builder",
+    kind: "video",
+    src: "/media/profile-builder-startup.mp4",
+    srcWebm: "/media/profile-builder-startup.webm",
+    poster: "/media/profile-builder-startup-poster.jpg",
+    // Source is 3024×1964; crop top 72px (Mac menu bar) → 1280×800 after scale.
+    aspect: "16/10",
+    durationSec: 36,
+    brief:
+      "Sped-up screen recording of a startup completing the 8-step profile builder at /build.",
+    ready: true,
+    caption: "Startup profile builder walkthrough.",
+  },
+  profileBuilderInvestor: {
+    id: "H",
+    section: "How matching works · Step 01 · Investor builder",
+    kind: "video",
+    src: "/media/profile-builder-investor.mp4",
+    srcWebm: "/media/profile-builder-investor.webm",
+    poster: "/media/profile-builder-investor-poster.jpg",
+    aspect: "16/10",
+    durationSec: 35,
+    brief:
+      "Sped-up screen recording of an investor completing the 8-step profile builder at /build/investor.",
+    ready: true,
+    caption: "Investor profile builder walkthrough.",
+  },
+
+  /* ---------- Product vision bento (Slots E, F) ---------- */
+  visionReadiness: {
+    id: "E",
+    section: "Vision · Readiness score",
+    kind: "video",
+    src: "/media/vision/readiness.mp4",
+    srcWebm: "/media/vision/readiness.webm",
+    poster: "/media/vision/readiness-poster.jpg",
+    aspect: "16/9",
+    durationSec: 4,
+    brief:
+      "Radial dial slowly fills toward a labeled threshold while small chips (deck · traction · timing · fit) tick in around it. Cool restraint, no glow blobs.",
+    ready: true,
+    caption: "Animated readiness score dial.",
+  },
+  visionOutreach: {
+    id: "F",
+    section: "Vision · AI outreach",
+    kind: "lottie",
+    src: "/media/vision/outreach.json",
+    aspect: "4/3",
+    durationSec: 6,
+    brief:
+      "Fragments of investor thesis snap into a draft email outline. Words highlight then fade. No keyboard art, no envelope clichés.",
+    ready: false,
+    caption: "Animated investor outreach generator.",
+  },
 } satisfies Record<string, MediaSlotSpec>;
 
 export type MediaSlotId = keyof typeof mediaSlots;

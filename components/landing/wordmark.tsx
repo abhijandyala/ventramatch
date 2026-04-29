@@ -32,8 +32,11 @@ export function Wordmark({
   const inner = (
     <span className={cn("inline-flex items-center", s.gap, className)}>
       {showMark && (
+        // SVG keeps the wordmark crisp at any size and ships ~1KB instead
+        // of the 600KB PNG. The /public/logo.png is still around as a
+        // fallback for OG images and other contexts that need raster.
         <Image
-          src="/logo.png"
+          src="/logo.svg"
           alt=""
           width={s.mark}
           height={s.mark}

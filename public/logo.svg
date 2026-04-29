@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+  <!-- V mark -->
+  <path
+    d="M 12 22 L 36 22 L 48 64 L 60 22 L 84 22 L 48 84 Z"
+    fill="#22c55e"
+  />
+  <!-- Detached slash -->
+  <path
+    d="M 90 34 L 78 34 L 64 78 L 76 78 Z"
+    fill="#22c55e"
+  />
+</svg>

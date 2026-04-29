@@ -4,10 +4,11 @@ import { SourceTicker } from "@/components/landing/source-ticker";
 import { FiveInputs } from "@/components/landing/five-inputs";
 import { Numbers } from "@/components/landing/numbers";
 import { HowMatchingWorks } from "@/components/landing/how-matching-works";
-import { ComplianceStrip } from "@/components/landing/compliance-strip";
+import { ProductVision } from "@/components/landing/product-vision";
+import { FAQ } from "@/components/landing/faq";
 
 /**
- * Landing page — Phase 1.
+ * Landing page — Phase 2.5.
  *
  * Side-neutral throughout: founders use this app to find investors,
  * investors use it to find founders. Copy must serve both sides.
@@ -19,22 +20,28 @@ import { ComplianceStrip } from "@/components/landing/compliance-strip";
  *   4. Five inputs (the algorithm, made readable, with B1–B5 slots)
  *   5. Numbers (real research + custom SVG bar chart)
  *   6. How matching works (3 steps + Slot D motion graphic)
- *   7. Compliance strip (4 short factual lines)
- *   8. Footer
+ *   7. Product vision (asymmetric bento — roadmap, not promises)
+ *   8. FAQ (editorial 2-col, audience-grouped)
+ *   9. Footer
  *
  * No waitlist (per locked decision). No fake product mockups.
+ * No SEC / compliance band (intentionally cut).
  */
 
 export default function HomePage() {
   return (
-    <main className="bg-[color:var(--color-bg)] text-[color:var(--color-text)]">
+    <main
+      id="main-content"
+      className="bg-[color:var(--color-bg)] text-[color:var(--color-text)]"
+    >
       <Nav />
       <Hero />
       <SourceTicker />
       <FiveInputs />
       <Numbers />
       <HowMatchingWorks />
-      <ComplianceStrip />
+      <ProductVision />
+      <FAQ />
       <Footer />
     </main>
   );
@@ -53,10 +60,16 @@ function Nav() {
             How matching works
           </a>
           <a
-            href="#compliance"
+            href="#vision"
             className="text-sm text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
           >
-            Compliance
+            Vision
+          </a>
+          <a
+            href="#faq"
+            className="text-sm text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+          >
+            FAQ
           </a>
           <a
             href="https://github.com/abhijandyala/ventramatch"
@@ -125,8 +138,11 @@ function Footer() {
             <a href="#how" className="hover:text-[color:var(--color-text-strong)]">
               How matching works
             </a>
-            <a href="#compliance" className="hover:text-[color:var(--color-text-strong)]">
-              Compliance
+            <a href="#vision" className="hover:text-[color:var(--color-text-strong)]">
+              Vision
+            </a>
+            <a href="#faq" className="hover:text-[color:var(--color-text-strong)]">
+              FAQ
             </a>
             <a
               href="https://github.com/abhijandyala/ventramatch"

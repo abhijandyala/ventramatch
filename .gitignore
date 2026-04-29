@@ -4,11 +4,11 @@ node_modules/
 .pnp.js
 .yarn/install-state.gz
 
-# Build / cache
+# Build / cache (root-anchored so app/build/ etc. aren't ignored)
 .next/
-out/
-build/
-dist/
+/out/
+/build/
+/dist/
 *.tsbuildinfo
 .turbo/
 
@@ -39,6 +39,15 @@ coverage/
 .DS_Store
 Thumbs.db
 *.pem
+
+# Media at repo root — assets must live under /public/media/, never the root.
+# Keeps large recordings from being tracked accidentally.
+/*.mov
+/*.MOV
+/*.mp4
+/*.MP4
+/*.webm
+/*.WEBM
 
 # Vercel
 .vercel
