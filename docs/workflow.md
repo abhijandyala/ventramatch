@@ -1,0 +1,33 @@
+# Team workflow — VentraMatch
+
+## Stack (current)
+
+| Layer | Choice |
+| --- | --- |
+| App | **Next.js** (web first; responsive in all browsers) |
+| Database | **PostgreSQL** on **Railway** (or local Postgres in dev) |
+| Connection | Server-only: **`DATABASE_URL`**, **`lib/db.ts`**, **`withUserRls`** for RLS |
+| Hosting | **Railway** for the Node app and Postgres (team standard) |
+| Not in use | **Supabase** (no hosted Supabase, no `supabase/` folder in the repo) |
+
+## Git
+
+1. **Do not commit directly to `main`.** Open a feature branch, push, open a **PR**, merge after review.
+2. Branch names: `feat/…`, `fix/…`, `chore/…`, `docs/…` (see `docs/team.md`).
+
+## Database changes
+
+- **Source of truth for new deploys:** `db/migrations/*.sql` (append-only; add `0002_…`, do not edit old files).
+- Apply to your DB, e.g. `psql "$DATABASE_URL" -f db/migrations/0001_initial_schema.sql`.
+- **Archives:** `db/legacy/` — old Supabase-oriented SQL for history only; do not apply on fresh Railway databases.
+
+## Local setup
+
+1. `npm install`
+2. Copy `.env.example` → `.env.local`, set `DATABASE_URL` and `NEXT_PUBLIC_SITE_URL`
+3. Apply `db/migrations/0001_initial_schema.sql` once
+4. `npm run dev`
+
+## Design / UI
+
+Use **`.cursor/skills/impeccable`** and **`ui-ux-pro-max`**; follow `PRODUCT.md` and `DESIGN.md`. See `AGENTS.md` for the full rule set.

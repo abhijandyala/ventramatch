@@ -43,11 +43,6 @@ Thumbs.db
 # Vercel
 .vercel
 
-# Supabase
-supabase/.branches/
-supabase/.temp/
-supabase/.env
-
 # Generated types (regenerate via npm run db:types if needed)
 # Keep types/database.ts checked in for diff visibility
 
