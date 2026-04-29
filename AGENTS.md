@@ -13,7 +13,9 @@ Instructions for any AI coding agent (Cursor, Claude Code, Codex, Windsurf, etc.
 
 Optional: `docs/initial-brief.md` — original kickoff, Google Doc / PDF note, and commands to reinstall `impeccable` and `ui-ux-pro-max` if `.cursor/skills` is incomplete.
 
-If any of the six files above is missing on a fresh machine, **stop and tell the human**. Do not improvise the contents.
+`docs/workflow.md` — **Railway** + Postgres, branch/PR process, and where migrations live (no `supabase/` in this repo).
+
+If any of the six required files in the list above is missing on a fresh machine, **stop and tell the human**. Do not improvise the contents.
 
 ## Hard rules
 

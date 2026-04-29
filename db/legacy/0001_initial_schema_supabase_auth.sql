@@ -1,4 +1,6 @@
--- VentraMatch initial schema.
+-- ARCHIVE ONLY — do not run on new Railway / plain Postgres deploys.
+-- This file assumed Supabase `auth.users` and `auth.uid()` in RLS. Current schema: `../migrations/0001_initial_schema.sql`.
+-- VentraMatch initial schema (historical).
 -- Append-only: never edit a committed migration. Add a new file to fix.
 
 -- ---------- Extensions ----------
