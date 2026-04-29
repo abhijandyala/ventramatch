@@ -7,7 +7,7 @@
 | **Abhi** | Coordination, infrastructure, this repo | `README.md`, `AGENTS.md`, `PRODUCT.md`, repo scaffolding, CI |
 | **Alleti** | Payments, verification, frontend / visuals | `app/(dashboard)`, `components/`, Stripe integration (post-MVP) |
 | **Anish (obj)** | Matching algorithm, validation, patent compliance, secure info sharing, Cursor↔Xcode bridge | `lib/matching/`, `lib/validation/`, future iOS app |
-| **Adhvik (addih)** | Database, auth, login/signup | `supabase/`, `lib/supabase/`, `app/(auth)`, `types/database.ts` |
+| **Adhvik (addih)** | Database, auth, login/signup | `db/`, `lib/db.ts`, `app/(auth)`, `types/database.ts` |
 | **Meruva** | Appeals, customer service, AI chatbot | `app/(dashboard)/support`, future support flows |
 | **Shlak** | Research, marketing | `docs/research/` (TBD), marketing landing copy, social content |
 
