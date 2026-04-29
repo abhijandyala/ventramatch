@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Wordmark } from "@/components/landing/wordmark";
@@ -19,12 +20,24 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default function AuthErrorPage() {
+  return (
+    <Suspense fallback={<ErrorShell errorCode="..." message="Loading..." />}>
+      <ErrorContent />
+    </Suspense>
+  );
+}
+
+function ErrorContent() {
   const params = useSearchParams();
   const errorCode = params.get("error") ?? "Default";
   const message = ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.Default;
 
   console.error(`[auth/error] code=${errorCode}`);
 
+  return <ErrorShell errorCode={errorCode} message={message} />;
+}
+
+function ErrorShell({ errorCode, message }: { errorCode: string; message: string }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-[var(--color-bg)] px-6">
       <div className="w-full max-w-[400px] text-center">
