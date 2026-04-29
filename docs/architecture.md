@@ -8,107 +8,94 @@
 [Browser / iOS]
       │
       ▼
-[Next.js 15 App Router on Vercel]
+[Next.js 16 App Router on Railway]
       │      ├─ React Server Components (default)
       │      ├─ Server Actions (writes, validated by Zod)
       │      └─ Route Handlers /app/api/*
       │
       ▼
-[Supabase]
-      ├─ Postgres 15 (DB, source of truth)
-      │     └─ Row-Level Security on every table
-      ├─ Auth (email magic link via Resend)
-      └─ Storage (decks, logos)
+[PostgreSQL on Railway]
+      └─ Row-Level Security on every table (see `db/migrations`)
+            policies use public.app_user_id() ← session GUC set by the app
 
-[Resend]   transactional email (magic links, match notifications)
+[Resend]   transactional email (magic links, match notifications) — TBD in app
 [OpenAI]   match explanation, deal memo (post-MVP)
 [Stripe]   subscriptions (post-MVP)
 ```
 
+**Auth** is not bundled with the database. Plan: Auth.js, Clerk, or similar — the app will create/update `public.users` with the same `id` UUID the provider issues, and run queries inside `withUserRls` from `lib/db.ts` so RLS sees the current user.
+
 ## Boundaries
 
-- **The browser never bypasses RLS.** Anon key only. The service-role key is server-only and used for the mutual-match trigger function and admin scripts.
-- **Server Actions are the default mutation path.** API routes only when we need a non-Next client (mobile, webhooks, third-party).
-- **All inputs are Zod-parsed at the action / route boundary.** No raw `formData.get()` into a database call.
-- **No business logic in components.** UI calls actions. Actions call `lib/`. `lib/` is pure where possible.
+- **The browser never holds database credentials.** Only the server uses `DATABASE_URL` (or Railway’s injected env). No anon key model — RLS is enforced in Postgres on every query that goes through a connection with `ventramatch.user_id` set for that transaction.
+- **Server Actions are the default mutation path.** API routes for webhooks, mobile, or third parties when needed.
+- **All inputs are Zod-parsed** at the action / route boundary.
+- **No business logic in components** for domain rules. UI calls actions; actions call `lib/`.
 
 ## Data model
 
-See [`supabase/migrations/0001_initial_schema.sql`](../supabase/migrations/0001_initial_schema.sql) for the canonical DDL. ASCII summary:
+See [`db/migrations/0001_initial_schema.sql`](../db/migrations/0001_initial_schema.sql) for the canonical DDL. Summary:
 
 ```
-auth.users (Supabase managed)
-   │ 1:1
-public.users (id, email, role, email_verified)
+public.users (id uuid PK = auth provider user id, email, role, …)
    │
    ├──┐
-   │  └─ 1:1 ─ public.startups       (founder side)
+   │  └─ 1:1 ─ public.startups (founder)
    │
-   └─── 1:1 ─ public.investors        (investor side)
+   └─── 1:1 ─ public.investors (investor)
 
-public.interactions (actor_user_id, target_user_id, action)
-   └─ trigger ─▶ public.matches (when reciprocal 'like' exists across roles)
+public.interactions → trigger → public.matches (mutual like, opposite roles)
 ```
 
-### Why `users` mirrors `auth.users`
-Supabase's `auth.users` is private and not joinable from `public`. We mirror the minimum we need (email, role, verification) into `public.users` so RLS policies and joins work.
+### Why RLS without Supabase
+
+Policies use `public.app_user_id()`, which reads `ventramatch.user_id` set via `set_config(..., true)` at the start of each transaction in `withUserRls` (`lib/db.ts`). Table owner / migration role bypasses RLS for triggers and admin tasks.
 
 ### Why mutual-match is a trigger
-Two reasons:
-1. Atomicity — both interactions land before the match row appears, no race window where one side has "interest" and the other side hasn't yet.
-2. Server-only — clients can't fabricate matches.
 
-## Authentication flow
+1. Atomicity — both interaction rows exist before a match is inserted.
+2. Clients cannot insert into `matches` directly (no insert policy for app roles; trigger runs as **security definer**).
 
-```
-1. User submits email → Server Action calls supabase.auth.signInWithOtp
-2. Resend delivers magic link → user clicks
-3. /auth/callback handler calls supabase.auth.exchangeCodeForSession
-4. middleware.ts refreshes the session cookie on every navigation
-5. RSC reads supabase.auth.getUser() and gates routes
-```
+## Authentication flow (target — not all wired in code yet)
 
-A user without a `public.users` row (first login) is redirected to `/onboarding/role` to pick founder vs. investor. After role selection, redirected to `/profile/edit` to fill in their startup or investor profile.
+1. User signs in with the chosen auth provider.
+2. Server session stores user id (UUID).
+3. Server Actions and RSC that touch user-scoped data call `withUserRls(userId, …)` and use the returned `sql` for queries.
+4. Route gating uses the session, not the DB, for “is logged in”.
 
 ## Discovery feed flow (investor side)
 
 ```
 GET /feed
-  └─ RSC: createClient() → fetch unseen startups for this investor
-       (filter: not in interactions where actor = me)
-       (rank by scoreMatch(startup, investor) desc, limit 50)
-  └─ Render <FeedClient initialCards={startups}/>
+  └─ RSC: withUserRls(investorId, sql => sql`select … from startups …`)
+       (filter unseen, rank by scoreMatch, limit 50)
+  └─ Render <FeedClient initialCards={…}/>
 
 User taps Interested
-  └─ Server Action: insertInteraction({actor, target, action:'like'})
-       └─ Trigger fires → match row if reciprocal
-  └─ Optimistic UI removes the card; revalidate /feed in the background
+  └─ Server Action: withUserRls(actorId, insert interaction …)
+       └─ Trigger may create match row
 ```
 
 ## Founder dashboard flow
 
 Three numbers + one chart, no more (per `DESIGN.md`):
-- Profile views (last 7d)
-- Investor saves
-- Mutual matches
 
-All sourced from `interactions` and `matches`. No vanity counts.
+- Profile views, saves, mutual matches — from `interactions` and `matches` (when those features exist).
 
 ## Environments
 
 | Env | URL | Notes |
-|---|---|---|
-| Local | http://localhost:3000 | Supabase Docker stack |
-| Preview | `*.vercel.app` per PR | Supabase project per branch (later) |
-| Production | https://ventramatch.com | Single Supabase project |
+| --- | --- | --- |
+| Local | http://localhost:3000 | `DATABASE_URL` to local Postgres or a Railway dev DB |
+| Staging / prod | Railway app URL | Same repo; env vars in Railway dashboard |
 
 ## Future surfaces
 
 | Phase | Adds |
-|---|---|
+| --- | --- |
 | v0.2 | OpenAI match explanations + AI deal memo skeleton |
 | v0.3 | Investor CRM (status pipeline per startup) |
-| v0.4 | Startup data room (scoped storage with audit log) |
+| v0.4 | Startup data room (scoped object storage + audit log) |
 | v0.5 | Stripe subscriptions for investors |
 | v1.0 | SOC 2 Type II, KYC pipeline, accredited verification |
-| v1.x | iOS native client (SwiftUI, shared Supabase backend) |
+| v1.x | iOS native client (SwiftUI, same Postgres + API) |

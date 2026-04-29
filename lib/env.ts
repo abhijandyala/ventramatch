@@ -1,18 +1,15 @@
 import { z } from "zod";
 
 const serverEnvSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  /** PostgreSQL connection string (Railway, local Docker, etc.). Omitted for `next build` without a DB. */
+  DATABASE_URL: z.string().min(1).optional(),
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   RESEND_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(1).optional(),
 });
 
-const clientEnvSchema = serverEnvSchema.pick({
-  NEXT_PUBLIC_SUPABASE_URL: true,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: true,
-  NEXT_PUBLIC_SITE_URL: true,
+const clientEnvSchema = z.object({
+  NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -21,7 +18,9 @@ export type ClientEnv = z.infer<typeof clientEnvSchema>;
 let cachedServerEnv: ServerEnv | null = null;
 
 export function getServerEnv(): ServerEnv {
-  if (cachedServerEnv) return cachedServerEnv;
+  if (cachedServerEnv) {
+    return cachedServerEnv;
+  }
   const parsed = serverEnvSchema.safeParse(process.env);
   if (!parsed.success) {
     throw new Error(
@@ -30,13 +29,11 @@ export function getServerEnv(): ServerEnv {
     );
   }
   cachedServerEnv = parsed.data;
-  return cachedServerEnv;
+  return parsed.data;
 }
 
 export function getClientEnv(): ClientEnv {
   const parsed = clientEnvSchema.safeParse({
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
   });
   if (!parsed.success) {

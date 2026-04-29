@@ -41,7 +41,7 @@ Privacy policy + cookie banner from day one. Cover at minimum:
 
 Practices:
 - Data minimization — collect only what matching needs.
-- Encryption at rest (Supabase default) and in transit (TLS).
+- Encryption at rest (managed Postgres / Railway default) and in transit (TLS).
 - DSR (data-subject request) endpoint by v1.0.
 - Target SOC 2 Type II for v1.0 launch.
 

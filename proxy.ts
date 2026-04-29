@@ -1,8 +1,9 @@
-import type { NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import { NextResponse, type NextRequest } from "next/server";
 
-export async function proxy(request: NextRequest) {
-  return updateSession(request);
+// Next.js 16+ proxy. Add session refresh / auth when an auth library is wired (Auth.js, Clerk, etc.).
+
+export function proxy(_request: NextRequest) {
+  return NextResponse.next();
 }
 
 export const config = {

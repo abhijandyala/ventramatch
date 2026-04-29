@@ -11,19 +11,21 @@ Instructions for any AI coding agent (Cursor, Claude Code, Codex, Windsurf, etc.
 5. `docs/legal.md` — patents to avoid, compliance constraints.
 6. This file (`AGENTS.md`) — execution rules.
 
-If any of those files is missing on a fresh machine, **stop and tell the human**. Do not improvise the contents.
+Optional: `docs/initial-brief.md` — original kickoff, Google Doc / PDF note, and commands to reinstall `impeccable` and `ui-ux-pro-max` if `.cursor/skills` is incomplete.
+
+If any of the six files above is missing on a fresh machine, **stop and tell the human**. Do not improvise the contents.
 
 ## Hard rules
 
 1. **Use the installed design skills for all UI work.** Both `impeccable` and `ui-ux-pro-max` live in `.cursor/skills/`. Default workflow: `/impeccable craft <feature>` for new UI, `/impeccable critique` and `/impeccable polish` before merging, `ui-ux-pro-max` for fresh page-level systems.
 2. **Never invent design tokens.** All colors, fonts, spacing, radii come from `DESIGN.md` → `app/globals.css`. If you need a new token, add it to `DESIGN.md` first.
 3. **No AI-slop UI.** If the result could be tagged "AI made that" at a glance, throw it out. Re-run with the right register and a sharper scene sentence.
-4. **Row-Level Security on every Supabase table.** Same migration as the table. No exceptions.
+4. **Row-Level Security on every Postgres table.** Same migration as the table. Policies use `app_user_id()`; the app sets `ventramatch.user_id` per transaction via `lib/db.ts` `withUserRls`. No exceptions.
 5. **Server Components by default.** Mark a component `"use client"` only when it needs state, browser APIs, or event handlers. Audit annually.
 6. **Validate inputs with Zod** at every server action and route handler. Never trust client payloads.
 7. **No success fees, no investment advice, no funding promises.** See `PRODUCT.md` and `docs/legal.md`. Disclaimer on every match score.
 8. **Avoid Tinder's patented match flow as described in `docs/legal.md`.** Especially: do not ship a full-bleed photo card with bottom-row two-circle action buttons.
-9. **Never commit secrets.** `.env.local` is git-ignored. Anything sensitive lives there or in Vercel env.
+9. **Never commit secrets.** `.env.local` is git-ignored. Anything sensitive lives there or in the host’s env (e.g. Railway).
 10. **Never push to `main` directly.** Branch + PR. Even for solo work.
 
 ## Workflow when making changes

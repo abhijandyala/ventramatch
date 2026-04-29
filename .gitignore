@@ -54,3 +54,7 @@ supabase/.env
 # Local skill caches
 .cursor/skills/**/__pycache__/
 .cursor/skills/**/*.pyc
+
+# npx skills add — duplicates .cursor/skills; do not commit
+.agents/
+skills-lock.json
