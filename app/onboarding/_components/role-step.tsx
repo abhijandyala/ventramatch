@@ -62,24 +62,6 @@ function RoleCard({
   onSelect: () => void;
 }) {
   const Icon = opt.icon;
-  // Single glow element — moved via direct DOM writes, no React state, no re-renders
-  const glowRef = React.useRef<HTMLSpanElement>(null);
-
-  function handlePointerMove(e: React.PointerEvent<HTMLButtonElement>) {
-    const glow = glowRef.current;
-    if (!glow) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    glow.style.left = `${e.clientX - rect.left}px`;
-    glow.style.top = `${e.clientY - rect.top}px`;
-  }
-
-  function handlePointerEnter() {
-    if (glowRef.current) glowRef.current.style.opacity = "1";
-  }
-
-  function handlePointerLeave() {
-    if (glowRef.current) glowRef.current.style.opacity = "0";
-  }
 
   return (
     <button
@@ -87,9 +69,6 @@ function RoleCard({
       role="radio"
       aria-checked={selected}
       onClick={onSelect}
-      onPointerMove={handlePointerMove}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
       style={{
         WebkitBackdropFilter: "blur(20px)",
         backdropFilter: "blur(20px)",
@@ -105,29 +84,6 @@ function RoleCard({
       }}
       className="relative isolate flex flex-col gap-5 overflow-hidden rounded-[var(--radius-lg)] p-6 text-left transition-[background,box-shadow,border-color] duration-200"
     >
-      {/* Smooth glow — single element, position written directly to DOM */}
-      <span
-        ref={glowRef}
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          width: 180,
-          height: 180,
-          borderRadius: "50%",
-          transform: "translate(-50%, -50%)",
-          opacity: 0,
-          transition: "opacity 400ms ease",
-          pointerEvents: "none",
-          zIndex: -1,
-          background: selected
-            ? "radial-gradient(circle, rgba(22,163,74,0.55) 0%, rgba(74,222,128,0.20) 60%, transparent 100%)"
-            : "radial-gradient(circle, rgba(99,179,237,0.55) 0%, rgba(147,197,253,0.20) 60%, transparent 100%)",
-          filter: "blur(16px)",
-          left: 0,
-          top: 0,
-        }}
-      />
-
       {/* Check badge */}
       <span
         aria-hidden="true"

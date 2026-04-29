@@ -54,6 +54,60 @@ export function Field({ id, label, value, onChange, placeholder, error, hint }: 
   );
 }
 
+/* ─── TextArea ───────────────────────────────────────────────────────────── */
+
+type TextAreaProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  error?: string;
+  maxLength?: number;
+};
+
+export function TextArea({ id, label, value, onChange, placeholder, error, maxLength }: TextAreaProps) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between">
+        <label htmlFor={id} className="text-[13px] font-medium text-[var(--color-text)]">
+          {label}
+        </label>
+        {maxLength ? (
+          <span className="text-[12px] text-[var(--color-text-faint)]">
+            {value.length} / {maxLength}
+          </span>
+        ) : null}
+      </div>
+      <textarea
+        id={id}
+        name={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        rows={3}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        className={cn(
+          "w-full resize-none rounded-[var(--radius)] border px-3.5 py-2.5 text-[15px] leading-relaxed text-[var(--color-text)]",
+          "bg-white placeholder:text-[var(--color-text-faint)]",
+          "transition-colors duration-150",
+          "focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-ink)]/20",
+          error
+            ? "border-[var(--color-danger)]"
+            : "border-[var(--color-border)] hover:border-[var(--color-text-faint)]",
+        )}
+      />
+      {error ? (
+        <p id={`${id}-error`} className="text-[13px] text-[var(--color-danger)]">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /* ─── Select ─────────────────────────────────────────────────────────────── */
 
 type SelectProps = {
