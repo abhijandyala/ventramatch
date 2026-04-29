@@ -37,7 +37,7 @@ Align with the team on whether the CLI’s `.agents/` copy and `skills-lock.json
 
 **Step 1** was: **infrastructure, shared design skills, and written product/architecture/legal truth** in Git before app feature sprints. Current state: see **Status** in **`README.md`**.
 
-**Stack note:** the app uses **PostgreSQL** (e.g. **Railway**) with **Row-Level Security** and server-only access in **`lib/db.ts`**, not Supabase. See **`docs/architecture.md`** and **`db/migrations/`**.
+**Stack note:** the app uses **PostgreSQL** (e.g. **Railway**) with **Row-Level Security** and server-only access in **`lib/db.ts`**. There is **no** `supabase/` directory in the repo. See **`docs/workflow.md`**, **`docs/architecture.md`**, and **`db/migrations/`** (legacy Supabase SQL lives under **`db/legacy/`** for history only).
 
 ## Application repository
 

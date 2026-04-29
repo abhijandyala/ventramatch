@@ -4,6 +4,10 @@
 
 **Repo:** https://github.com/abhijandyala/ventramatch
 
+**Keep this file current.** When you change the stack, env vars, folder layout, scripts, or major milestones, update `README.md` in the same PR (and adjust `docs/workflow.md` or `docs/architecture.md` when the workflow or system shape changes). The README is the first thing new people and tools read; stale docs cost more time than a five-minute edit.
+
+**CodeRabbit:** automatic AI reviews on every PR are **disabled** in [`.coderabbit.yaml`](.coderabbit.yaml). See the **CodeRabbit** section in [`docs/workflow.md`](docs/workflow.md).
+
 ---
 
 ## Read this first (every Cursor / dev machine)
@@ -16,6 +20,7 @@ If you just connected this repo on a new computer, you must read these in order 
 4. **`AGENTS.md`** — instructions for any AI agent working on this repo.
 5. **`docs/architecture.md`** — system architecture, data model, matching logic.
 6. **`docs/legal.md`** — legal & compliance constraints (SEC, KYC, Tinder patents to avoid).
+7. **`docs/workflow.md`** — how we work: **Railway** Postgres + hosting, git/PR, migrations.
 
 **Kickoff context (optional):** [`docs/initial-brief.md`](docs/initial-brief.md) — why the repo was created, the two UI skill source repos, and `npx skills add` lines if you need to reinstall skills on a new machine.
 
@@ -147,11 +152,10 @@ ventramatch/
 │   └── utils.ts
 │
 ├── db/
-│   ├── migrations/             <- SQL migrations (source of truth for new deploys)
-│   ├── seed.sql                <- optional dev seed
+│   ├── migrations/             <- SQL — apply to Railway / Postgres (source of truth)
+│   ├── legacy/                 <- archived Supabase-era SQL; do not use for new deploys
+│   ├── seed.sql
 │   └── migrations/README.md
-│
-├── supabase/                   <- legacy; see supabase/LEGACY.md
 │
 ├── types/
 │   └── database.ts             <- mirrors db/migrations (hand-maintained)
@@ -162,6 +166,7 @@ ventramatch/
 │
 ├── docs/
 │   ├── architecture.md
+│   ├── workflow.md              <- stack, PRs, how to run migrations
 │   ├── legal.md                <- SEC, KYC, Tinder patents to avoid
 │   ├── matching-algorithm.md
 │   └── team.md                 <- ownership map

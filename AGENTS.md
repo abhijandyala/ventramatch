@@ -13,7 +13,9 @@ Instructions for any AI coding agent (Cursor, Claude Code, Codex, Windsurf, etc.
 
 Optional: `docs/initial-brief.md` — original kickoff, Google Doc / PDF note, and commands to reinstall `impeccable` and `ui-ux-pro-max` if `.cursor/skills` is incomplete.
 
-If any of the six files above is missing on a fresh machine, **stop and tell the human**. Do not improvise the contents.
+`docs/workflow.md` — **Railway** + Postgres, branch/PR process, and where migrations live (no `supabase/` in this repo).
+
+If any of the six required files in the list above is missing on a fresh machine, **stop and tell the human**. Do not improvise the contents.
 
 ## Hard rules
 
@@ -33,9 +35,10 @@ If any of the six files above is missing on a fresh machine, **stop and tell the
 1. State what you're going to do in plain English before any tool calls if the change is non-trivial.
 2. Read the file before editing. Always.
 3. Make the smallest change that solves the problem.
-4. Run `npm run typecheck` and `npm run lint` after substantive edits.
-5. Run `kluster_code_review_auto` per the project rule in `.cursor/rules/kluster-code-verify.mdc`.
-6. Open a PR with a 2-line summary and a test plan.
+4. **If the change alters how the app is run, deployed, or structured** (new deps, env vars, major routes, stack), update `README.md` in the same PR, and `docs/workflow.md` or `docs/architecture.md` when appropriate.
+5. Run `npm run typecheck` and `npm run lint` after substantive edits.
+6. Run `kluster_code_review_auto` per the project rule in `.cursor/rules/kluster-code-verify.mdc`.
+7. Open a PR with a 2-line summary and a test plan.
 
 ## Workflow for new dependencies
 

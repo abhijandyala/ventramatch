@@ -47,9 +47,9 @@ public.users (id uuid PK = auth provider user id, email, role, …)
 public.interactions → trigger → public.matches (mutual like, opposite roles)
 ```
 
-### Why RLS without Supabase
+### Why RLS is implemented in plain Postgres (not Supabase)
 
-Policies use `public.app_user_id()`, which reads `ventramatch.user_id` set via `set_config(..., true)` at the start of each transaction in `withUserRls` (`lib/db.ts`). Table owner / migration role bypasses RLS for triggers and admin tasks.
+We use **Railway-managed PostgreSQL** only. Policies use `public.app_user_id()`, which reads `ventramatch.user_id` set via `set_config(..., true)` at the start of each transaction in `withUserRls` (`lib/db.ts`). The table owner / migration role bypasses RLS for triggers and admin tasks.
 
 ### Why mutual-match is a trigger
 

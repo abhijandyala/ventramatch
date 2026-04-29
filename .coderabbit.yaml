@@ -1,0 +1,5 @@
+# https://docs.coderabbit.ai/configuration/auto-review
+# Disable automatic reviews on every PR; trigger manually with @coderabbitai review if needed.
+reviews:
+  auto_review:
+    enabled: false
