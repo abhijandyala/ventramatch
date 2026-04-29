@@ -79,12 +79,17 @@ const INPUTS: Input[] = [
   },
 ];
 
+// Suppress hover-pause for this long after the page last scrolled, so the
+// cycle never freezes just because the cursor happened to pass over a tab.
+const SCROLL_HOVER_GUARD_MS = 250;
+
 export function FiveInputs() {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [inView, setInView] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
+  const lastScrollAtRef = useRef<number>(0);
 
   // prefers-reduced-motion
   useEffect(() => {
@@ -107,15 +112,41 @@ export function FiveInputs() {
     return () => obs.disconnect();
   }, []);
 
+  // Track when the user last scrolled (Lenis emits real wheel/scroll events).
+  // While scrolling, transient mouseenter on tabs must NOT pause the cycle —
+  // otherwise the bar appears to freeze whenever the cursor passes through
+  // during a scroll past this section.
+  useEffect(() => {
+    const onScroll = () => {
+      lastScrollAtRef.current = Date.now();
+      // If we paused due to a scroll-induced hover that already fired, recover.
+      if (paused) setPaused(false);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("wheel", onScroll, { passive: true });
+    window.addEventListener("touchmove", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("wheel", onScroll);
+      window.removeEventListener("touchmove", onScroll);
+    };
+  }, [paused]);
+
   const current = INPUTS[active];
   const animationActive = !reduced && inView;
-  // The underline pauses on hover but stays visible at its current width.
   const playState = paused ? "paused" : "running";
 
   const advance = () => {
-    if (paused) return; // safety: don't advance while user is hovering
+    if (paused) return;
     setActive((a) => (a + 1) % INPUTS.length);
   };
+
+  const onTabHoverEnter = () => {
+    // Ignore hover that happens during / right after a scroll.
+    if (Date.now() - lastScrollAtRef.current < SCROLL_HOVER_GUARD_MS) return;
+    setPaused(true);
+  };
+  const onTabHoverLeave = () => setPaused(false);
 
   return (
     <section
@@ -151,8 +182,8 @@ export function FiveInputs() {
                     aria-controls={`five-inputs-panel-${it.key}`}
                     tabIndex={isActive ? 0 : -1}
                     onClick={() => setActive(i)}
-                    onMouseEnter={() => setPaused(true)}
-                    onMouseLeave={() => setPaused(false)}
+                    onMouseEnter={onTabHoverEnter}
+                    onMouseLeave={onTabHoverLeave}
                     onFocus={() => setPaused(true)}
                     onBlur={() => setPaused(false)}
                     className={[
@@ -208,11 +239,7 @@ export function FiveInputs() {
 
         {/* ---------- Showcase card · 4/8 split, image-led ---------- */}
         <div className="mt-10">
-          <div
-            className="relative overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]"
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
-          >
+          <div className="relative overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
             <div
               role="tabpanel"
               id={`five-inputs-panel-${current.key}`}
