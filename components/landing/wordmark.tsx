@@ -1,0 +1,58 @@
+import Image from "next/image";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+
+type WordmarkProps = {
+  size?: "sm" | "md" | "lg";
+  /** When true, the wordmark is wrapped in a Link to "/". */
+  asLink?: boolean;
+  /** When false, the V/ logo image is hidden and only the text shows. */
+  showMark?: boolean;
+  className?: string;
+};
+
+const sizeMap = {
+  sm: { mark: 22, text: "text-base", gap: "gap-2" },
+  md: { mark: 28, text: "text-lg", gap: "gap-2.5" },
+  lg: { mark: 36, text: "text-2xl", gap: "gap-3" },
+} as const;
+
+export function Wordmark({
+  size = "md",
+  asLink = true,
+  showMark = true,
+  className,
+}: WordmarkProps) {
+  const s = sizeMap[size];
+  const inner = (
+    <span className={cn("inline-flex items-center", s.gap, className)}>
+      {showMark && (
+        <Image
+          src="/logo.png"
+          alt=""
+          width={s.mark}
+          height={s.mark}
+          priority
+          className="object-contain"
+          style={{ height: s.mark, width: "auto" }}
+        />
+      )}
+      <span
+        className={cn(
+          "font-semibold tracking-tight leading-none",
+          s.text,
+          "text-[color:var(--color-text-strong)]",
+        )}
+      >
+        Ventra<span className="text-[color:var(--color-brand)]">match</span>
+      </span>
+    </span>
+  );
+
+  if (!asLink) return inner;
+  return (
+    <Link href="/" aria-label="VentraMatch home" className="inline-flex items-center">
+      {inner}
+    </Link>
+  );
+}
