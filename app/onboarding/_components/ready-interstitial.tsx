@@ -67,8 +67,9 @@ export function ReadyInterstitial({ onComplete }: Props) {
       stagger: { each: stagger, from: "random" },
     });
 
-    // Once fully covered, navigate immediately
+    // Once fully covered, signal homepage to play dissolve-out, then navigate
     gsap.delayedCall(dur, () => {
+      try { sessionStorage.setItem("vm:pixel-reveal", "1"); } catch {}
       if (onComplete) {
         onComplete();
       } else {
