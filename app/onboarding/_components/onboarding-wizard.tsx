@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { Wordmark } from "@/components/landing/wordmark";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   founderInfoSchema,
   investorInfoSchema,
@@ -38,6 +38,7 @@ const INVESTOR_DEFAULTS: InvestorInfoInput = {
 export function OnboardingWizard() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
+  const [direction, setDirection] = useState(1);
   const [role, setRole] = useState<Role | null>(null);
   const [founderInfo, setFounderInfo] = useState<FounderInfoInput>(FOUNDER_DEFAULTS);
   const [investorInfo, setInvestorInfo] = useState<InvestorInfoInput>(INVESTOR_DEFAULTS);
@@ -47,18 +48,18 @@ export function OnboardingWizard() {
 
   function handleContinue() {
     setFormError(null);
-    if (step === 1) {
-      if (!role) {
-        setFormError("Pick a role to continue.");
-        return;
-      }
-      setStep(2);
+    if (!role) {
+      setFormError("Pick a role to continue.");
+      return;
     }
+    setDirection(1);
+    setStep(2);
   }
 
   function handleBack() {
     setFormError(null);
     setErrors({});
+    setDirection(-1);
     setStep(1);
   }
 
@@ -105,27 +106,45 @@ export function OnboardingWizard() {
     });
   }
 
+  const question =
+    step === 1
+      ? "What brings you to VentraMatch?"
+      : role === "investor"
+        ? "Tell us what you invest in."
+        : "Tell us about your raise.";
+
+  const subtitle =
+    step === 1
+      ? "This takes about a minute. You can complete your full profile later."
+      : "Just the essentials. Refine everything else from your profile.";
+
   return (
-    <div className="w-full max-w-[520px]">
-      <div className="mb-8 flex justify-center">
-        <Wordmark size="md" asLink={false} />
+    <div className="w-full max-w-[580px]">
+      {/* Step progress nodes */}
+      <StepProgress step={step} />
+
+      {/* Question headline */}
+      <div className="mt-10 mb-8">
+        <h1
+          className="font-serif font-semibold leading-[1.08] tracking-tight text-[var(--color-text)]"
+          style={{ fontSize: "clamp(28px, 4.5vw, 40px)" }}
+        >
+          {question}
+        </h1>
+        <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-[var(--color-text-muted)]">
+          {subtitle}
+        </p>
       </div>
 
-      <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-7 sm:p-8">
-        <ProgressIndicator step={step} />
-
-        <div className="mt-6">
-          <h1 className="text-[20px] font-semibold tracking-tight text-[var(--color-text)]">
-            {step === 1 ? "Help us start matching you with the right people." : matchInfoTitle(role)}
-          </h1>
-          <p className="mt-1 text-[14px] leading-5 text-[var(--color-text-muted)]">
-            {step === 1
-              ? "This only takes about a minute. You can complete your full profile later."
-              : "Just the essentials. You can refine the rest from your profile."}
-          </p>
-        </div>
-
-        <div className="mt-6">
+      {/* Step content — animated */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, y: direction > 0 ? 14 : -14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: direction > 0 ? -14 : 14 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        >
           {step === 1 ? (
             <RoleStep value={role} onChange={setRole} />
           ) : role === "founder" ? (
@@ -133,87 +152,115 @@ export function OnboardingWizard() {
           ) : role === "investor" ? (
             <InvestorStep value={investorInfo} onChange={setInvestorInfo} errors={errors} />
           ) : null}
-        </div>
+        </motion.div>
+      </AnimatePresence>
 
-        {formError ? (
-          <p
-            role="alert"
-            className="mt-5 rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[13px] text-[var(--color-danger)]"
-          >
-            {formError}
-          </p>
-        ) : null}
+      {/* Form-level error */}
+      {formError ? (
+        <p role="alert" className="mt-5 text-[13px] text-[var(--color-danger)]">
+          {formError}
+        </p>
+      ) : null}
 
-        <div className="mt-7 flex items-center justify-between gap-3">
-          {step === 2 ? (
-            <button
-              type="button"
-              onClick={handleBack}
-              disabled={isPending}
-              className={cn(
-                "inline-flex h-11 items-center gap-1.5 rounded-[var(--radius)] px-3 text-[14px] font-medium",
-                "text-[var(--color-text-muted)] transition-colors duration-150",
-                "hover:text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-60",
-              )}
-            >
-              <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-              Back
-            </button>
-          ) : (
-            <span aria-hidden="true" />
-          )}
-
+      {/* Navigation */}
+      <div className="mt-10 flex items-center justify-between gap-4">
+        {step === 2 ? (
           <button
             type="button"
-            onClick={step === 1 ? handleContinue : handleSubmit}
-            disabled={isPending || (step === 1 && !role)}
+            onClick={handleBack}
+            disabled={isPending}
             className={cn(
-              "inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[var(--radius)]",
-              "bg-[var(--color-brand-ink)] px-5 text-[15px] font-medium text-white",
-              "transition-colors duration-150 hover:bg-[var(--color-brand-ink-hov)]",
-              "disabled:cursor-not-allowed disabled:opacity-60",
+              "inline-flex h-11 items-center gap-1.5 rounded-[var(--radius)] px-3",
+              "text-[14px] font-medium text-[var(--color-text-muted)]",
+              "transition-colors duration-150 hover:text-[var(--color-text)]",
+              "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
-            {step === 1 ? "Continue" : "Finish"}
+            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+            Back
           </button>
-        </div>
+        ) : (
+          <span aria-hidden="true" />
+        )}
+
+        <button
+          type="button"
+          onClick={step === 1 ? handleContinue : handleSubmit}
+          disabled={isPending || (step === 1 && !role)}
+          className={cn(
+            "inline-flex h-11 min-w-[148px] items-center justify-center gap-2 rounded-[var(--radius)]",
+            "bg-[var(--color-brand-ink)] px-6 text-[15px] font-medium text-white",
+            "transition-colors duration-150 hover:bg-[var(--color-brand-ink-hov)]",
+            "disabled:cursor-not-allowed disabled:opacity-50",
+          )}
+        >
+          {isPending ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
+          {step === 1 ? "Continue" : "Finish setup"}
+        </button>
       </div>
 
-      <p className="mt-8 px-6 text-center text-[12px] leading-5 text-[var(--color-text-faint)]">
-        Informational only — not investment advice. You can refine your profile after onboarding.
+      {/* Legal */}
+      <p className="mt-10 text-center text-[11px] leading-5 text-[var(--color-text-faint)]">
+        Informational only — not investment advice. You can refine your profile at any time.
       </p>
     </div>
   );
 }
 
-function matchInfoTitle(role: Role | null): string {
-  if (role === "investor") return "Tell us what you invest in.";
-  return "Tell us about your raise.";
-}
-
-function ProgressIndicator({ step }: { step: Step }) {
+function StepProgress({ step }: { step: Step }) {
   return (
-    <div aria-label={`Step ${step} of 2`} className="flex items-center gap-3">
-      <div className="flex flex-1 items-center gap-1.5">
-        <Bar active={step >= 1} />
-        <Bar active={step >= 2} />
-      </div>
-      <span className="font-mono text-[12px] tracking-wide text-[var(--color-text-faint)] uppercase tabular-nums">
-        Step {step} / 2
-      </span>
+    <div
+      className="flex items-start gap-3"
+      aria-label={`Step ${step} of 2`}
+    >
+      <StepNode index={1} active={step >= 1} done={step > 1} label="Your role" />
+      <div
+        aria-hidden="true"
+        className="mt-4 h-px flex-1 bg-[var(--color-border)] transition-colors duration-300"
+        style={{
+          background: step > 1 ? "var(--color-brand-ink)" : "var(--color-border)",
+        }}
+      />
+      <StepNode index={2} active={step >= 2} done={false} label="Your details" />
     </div>
   );
 }
 
-function Bar({ active }: { active: boolean }) {
+function StepNode({
+  index,
+  active,
+  done,
+  label,
+}: {
+  index: number;
+  active: boolean;
+  done: boolean;
+  label: string;
+}) {
   return (
-    <span
-      className={cn(
-        "h-1 flex-1 rounded-full transition-colors duration-150",
-        active ? "bg-[var(--color-brand-ink)]" : "bg-[var(--color-surface-2)]",
-      )}
-    />
+    <div className="flex flex-col items-center gap-1.5">
+      <span
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-full text-[13px] font-semibold",
+          "border-2 transition-all duration-300",
+          done
+            ? "border-[var(--color-brand-ink)] bg-[var(--color-brand-ink)] text-white"
+            : active
+              ? "border-[var(--color-brand-ink)] bg-white text-[var(--color-brand-ink)]"
+              : "border-[var(--color-border)] bg-white text-[var(--color-text-faint)]",
+        )}
+      >
+        {index}
+      </span>
+      <span
+        className={cn(
+          "text-[11px] font-medium tracking-[0.04em] uppercase",
+          active ? "text-[var(--color-text-muted)]" : "text-[var(--color-text-faint)]",
+        )}
+      >
+        {label}
+      </span>
+    </div>
   );
 }
 
