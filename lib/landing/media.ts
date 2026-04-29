@@ -157,6 +157,36 @@ export const mediaSlots = {
     caption: "Animated visualization of mutual matching.",
   },
 
+  /* ---------- Profile builder (Slots G, H) ---------- */
+  profileBuilderStartup: {
+    id: "G",
+    section: "How matching works · Step 01 · Startup builder",
+    kind: "video",
+    src: "/media/profile-builder-startup.mp4",
+    srcWebm: "/media/profile-builder-startup.webm",
+    poster: "/media/profile-builder-startup-poster.jpg",
+    aspect: "16/9",
+    durationSec: 14,
+    brief:
+      "Sped-up screen recording of a startup completing the 8-step profile builder. Shows real typing into the inputs at /build, sector chips highlighting, file upload, and a clean Publish click at the end.",
+    ready: false,
+    caption: "Startup profile builder walkthrough.",
+  },
+  profileBuilderInvestor: {
+    id: "H",
+    section: "How matching works · Step 01 · Investor builder",
+    kind: "video",
+    src: "/media/profile-builder-investor.mp4",
+    srcWebm: "/media/profile-builder-investor.webm",
+    poster: "/media/profile-builder-investor-poster.jpg",
+    aspect: "16/9",
+    durationSec: 14,
+    brief:
+      "Sped-up screen recording of an investor completing the 8-step profile builder at /build/investor.",
+    ready: false,
+    caption: "Investor profile builder walkthrough.",
+  },
+
   /* ---------- Product vision bento (Slots E, F) ---------- */
   visionReadiness: {
     id: "E",
