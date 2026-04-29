@@ -71,7 +71,8 @@ type Party = {
   name: string;
   meta: string;
   detail: string;
-  initial: string;
+  /** Domain used to fetch a real favicon via Google's s2/favicons service. */
+  domain: string;
 };
 
 type Pair = {
@@ -82,23 +83,27 @@ type Pair = {
   reason: string;
 };
 
+/* Three illustrative pairings using real, recognizable companies so the
+   logos render via Google's favicon service. Pairings are not claims that
+   these matches actually happened — they're educational examples of what
+   a strong / weak / soft-signal score looks like. */
 const PAIRS: Pair[] = [
   {
-    id: "modal-northbound",
+    id: "modal-lux",
     startup: {
       name: "Modal Labs",
+      domain: "modal.com",
       meta: "AI / ML · Serverless compute",
       detail: "Seed · $1.0M raise · NYC",
-      initial: "ML",
     },
     investor: {
-      name: "Northbound Capital",
-      meta: "AI infra · DevTools · Data",
-      detail: "Pre-seed/Seed · $250K – $2.5M · NYC",
-      initial: "NB",
+      name: "Lux Capital",
+      domain: "luxcapital.com",
+      meta: "AI infra · Deep tech · Frontier",
+      detail: "Seed/A · $1M – $5M · NYC / SF",
     },
     inputs: [
-      { key: "sector", label: "Sector", value: 0.95, weight: 30, reason: "AI infra ⊂ AI / ML", tone: "brand" },
+      { key: "sector", label: "Sector", value: 0.95, weight: 30, reason: "AI infra ⊂ Deep tech", tone: "brand" },
       { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Seed", tone: "info" },
       { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$1.0M inside band", tone: "warn" },
       { key: "geo", label: "Geography", value: 1.0, weight: 15, reason: "NYC ⇄ NYC", tone: "ink" },
@@ -107,50 +112,50 @@ const PAIRS: Pair[] = [
     reason: "Sector, stage, check, geo all line up. Traction is early.",
   },
   {
-    id: "brace-khosla",
+    id: "public-khosla",
     startup: {
-      name: "Brace",
-      meta: "Consumer fintech",
-      detail: "Pre-seed · $500K raise · SF",
-      initial: "BR",
+      name: "Public",
+      domain: "public.com",
+      meta: "Consumer · Investing app",
+      detail: "Pre-seed · $500K raise · NYC",
     },
     investor: {
       name: "Khosla Ventures",
+      domain: "khoslaventures.com",
       meta: "Deep tech · Hard problems",
-      detail: "Seed/A/B · $2 – $10M · SF",
-      initial: "KV",
+      detail: "Seed/A/B · $2M – $10M · Bay Area",
     },
     inputs: [
       { key: "sector", label: "Sector", value: 0.3, weight: 30, reason: "Consumer fintech outside thesis", tone: "brand" },
       { key: "stage", label: "Stage", value: 0.5, weight: 25, reason: "KV rarely writes pre-seed", tone: "info" },
       { key: "check", label: "Check size", value: 0.4, weight: 20, reason: "$500K below their band", tone: "warn" },
-      { key: "geo", label: "Geography", value: 1.0, weight: 15, reason: "Both SF", tone: "ink" },
+      { key: "geo", label: "Geography", value: 0.6, weight: 15, reason: "NYC ⇄ Bay Area, soft signal", tone: "ink" },
       { key: "traction", label: "Traction", value: 0.8, weight: 10, reason: "Strong metrics for stage", tone: "muted" },
     ],
-    reason: "Same city, but check too small and sector outside the thesis.",
+    reason: "Sector and check are off; same-coast geo can't carry it.",
   },
   {
-    id: "pulse-a16z",
+    id: "linear-index",
     startup: {
-      name: "Pulse Health",
-      meta: "Healthtech · Continuous monitoring",
-      detail: "Seed · $3.0M raise · Boston",
-      initial: "PH",
+      name: "Linear",
+      domain: "linear.app",
+      meta: "Productivity · Issue tracking",
+      detail: "Series A · $15M raise · SF",
     },
     investor: {
-      name: "a16z Bio + Health",
-      meta: "Bio · Health systems",
-      detail: "Seed/A · $2 – $15M · Bay Area",
-      initial: "az",
+      name: "Index Ventures",
+      domain: "indexventures.com",
+      meta: "Software · Productivity · SaaS",
+      detail: "Seed/A · $5M – $30M · London / SF",
     },
     inputs: [
-      { key: "sector", label: "Sector", value: 0.85, weight: 30, reason: "Healthtech ∩ Health systems", tone: "brand" },
-      { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Seed", tone: "info" },
-      { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$3.0M inside band", tone: "warn" },
-      { key: "geo", label: "Geography", value: 0.4, weight: 15, reason: "Boston ⇄ Bay Area, soft signal", tone: "ink" },
-      { key: "traction", label: "Traction", value: 0.7, weight: 10, reason: "Solid pilots", tone: "muted" },
+      { key: "sector", label: "Sector", value: 0.9, weight: 30, reason: "Productivity SaaS in thesis", tone: "brand" },
+      { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Series A", tone: "info" },
+      { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$15M inside band", tone: "warn" },
+      { key: "geo", label: "Geography", value: 0.7, weight: 15, reason: "London ⇄ SF, secondary office", tone: "ink" },
+      { key: "traction", label: "Traction", value: 0.9, weight: 10, reason: "10K+ teams, 90% retention", tone: "muted" },
     ],
-    reason: "Strong fit on the algorithm; geography is the only soft signal.",
+    reason: "Strong fit on every input; geography is the only soft signal.",
   },
 ];
 
@@ -377,9 +382,7 @@ function PartyCard({
           side === "right" ? "flex-row-reverse" : "",
         ].join(" ")}
       >
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-[color:var(--color-bg)] font-mono text-[11px] font-semibold uppercase text-[color:var(--color-text-strong)] ring-1 ring-[color:var(--color-border-strong)]">
-          {party.initial}
-        </div>
+        <CompanyLogo domain={party.domain} name={party.name} />
         <p className="text-[16px] font-semibold leading-tight text-[color:var(--color-text-strong)]">
           {party.name}
         </p>
@@ -391,6 +394,40 @@ function PartyCard({
         {party.detail}
       </p>
     </motion.div>
+  );
+}
+
+/* ---------------- Real company logo (Google s2 favicons) ---------------- */
+
+function CompanyLogo({ domain, name }: { domain: string; name: string }) {
+  const [errored, setErrored] = useState(false);
+  const initial = name[0]?.toUpperCase() ?? "?";
+
+  if (errored) {
+    return (
+      <span
+        aria-label={name}
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-[color:var(--color-bg)] font-mono text-[12px] font-semibold uppercase text-[color:var(--color-text-strong)] ring-1 ring-[color:var(--color-border-strong)]"
+      >
+        {initial}
+      </span>
+    );
+  }
+
+  return (
+    <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-[color:var(--color-border-strong)] bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`https://www.google.com/s2/favicons?domain=${domain}&sz=128`}
+        alt={`${name} logo`}
+        width={32}
+        height={32}
+        className="h-7 w-7 object-contain"
+        loading="lazy"
+        decoding="async"
+        onError={() => setErrored(true)}
+      />
+    </span>
   );
 }
 

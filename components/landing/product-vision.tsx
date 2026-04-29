@@ -201,38 +201,89 @@ function AudienceTag({ children }: { children: ReactNode }) {
 /* ---------------- In-card visual mocks (no fake product UI) ---------------- */
 
 function DealMemoMock() {
-  // Three labeled sections of greyed text-line scaffolding. Reads as "structure
-  // of a memo" without pretending to be a real screenshot.
-  const sections: Array<{ label: string; widths: number[] }> = [
-    { label: "Problem", widths: [100, 86, 64] },
-    { label: "Market", widths: [100, 72] },
-    { label: "Traction", widths: [92, 58] },
+  // Staircase stack of memo cards — each card stepped down-and-right from the
+  // previous, vertical gaps deliberately uneven (tighter at top, wider at
+  // bottom) so it reads as a layered chart rather than a regular list.
+  // Logos are inline SVG marks of real, recognizable companies.
+  const memos: Array<{
+    name: string;
+    logo: ReactNode;
+    iconBg: string;
+  }> = [
+    {
+      name: "Linear",
+      logo: (
+        <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="#5E6AD2" aria-hidden>
+          <path d="M.403 13.795l9.802 9.802c4.067-1.18 7.267-4.38 8.447-8.447L.403 13.795zM.144 11.566L12.434 23.856c.327.027.658.04.992.04C19.852 23.896 24 19.748 24 13.575c0-.334-.013-.665-.04-.992L.144 11.566zm.351-2.198l14.337 14.337c2.71-.674 5.084-2.16 6.918-4.262L.495 9.368zm.998-2.428l11.738 11.738c-1.85-.65-3.6-1.53-5.18-2.61L1.493 6.94zm1.605-1.756L8.586 10.66c-1.073-1.5-1.93-3.225-2.534-5.083L3.098 5.184z" />
+        </svg>
+      ),
+      iconBg: "#F4F4FB",
+    },
+    {
+      name: "Vercel",
+      logo: (
+        <svg viewBox="0 0 24 24" className="h-[14px] w-[14px]" fill="#000000" aria-hidden>
+          <path d="M24 22.525H0l12-21.05 12 21.05z" />
+        </svg>
+      ),
+      iconBg: "#FFFFFF",
+    },
+    {
+      name: "Anthropic",
+      logo: (
+        <svg viewBox="0 0 24 24" className="h-[16px] w-[16px]" fill="#181818" aria-hidden>
+          <path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5527h3.7442L10.5363 3.541Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z" />
+        </svg>
+      ),
+      iconBg: "#F5F1EA",
+    },
   ];
+
+  // Uneven vertical gaps + uniform horizontal step → staircase.
+  // Each card is 64px shorter than the container; left + right offsets balance
+  // so card width stays constant across all three steps.
+  const positions: Array<{ top: number; left: number; right: number }> = [
+    { top: 0, left: 0, right: 64 },
+    { top: 56, left: 32, right: 32 },
+    { top: 128, left: 64, right: 0 },
+  ];
+
   return (
-    <div className="rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3.5">
-      {sections.map((s, i) => (
-        <div
-          key={s.label}
-          className={
-            i === 0
-              ? ""
-              : "mt-3 border-t border-[color:var(--color-border)] pt-3"
-          }
-        >
-          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
-            {s.label}
-          </p>
-          <div className="mt-1.5 space-y-1.5">
-            {s.widths.map((w, j) => (
-              <div
-                key={j}
-                className="h-1.5 rounded-sm bg-[color:var(--color-border)]"
-                style={{ width: `${w}%` }}
-              />
-            ))}
+    <div className="relative w-full" style={{ height: 192 }}>
+      {memos.map((m, i) => {
+        const pos = positions[i];
+        const isFront = i === memos.length - 1;
+        return (
+          <div
+            key={m.name}
+            className={[
+              "absolute flex items-center gap-3 rounded-[12px] border bg-[color:var(--color-surface)] py-2.5 pl-3 pr-3",
+              isFront
+                ? "border-[color:var(--color-border-strong)] shadow-[0_8px_22px_rgba(15,23,42,0.09)]"
+                : "border-[color:var(--color-border)] shadow-[0_2px_6px_rgba(15,23,42,0.04)]",
+            ].join(" ")}
+            style={{
+              top: pos.top,
+              left: pos.left,
+              right: pos.right,
+              zIndex: i + 1,
+            }}
+          >
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] ring-1 ring-[color:var(--color-border)]"
+              style={{ backgroundColor: m.iconBg }}
+            >
+              {m.logo}
+            </span>
+            <span className="truncate text-[14px] font-semibold text-[color:var(--color-text-strong)]">
+              {m.name}
+            </span>
+            <span className="ml-auto shrink-0 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
+              memo
+            </span>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

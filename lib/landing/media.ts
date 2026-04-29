@@ -165,7 +165,8 @@ export const mediaSlots = {
     src: "/media/profile-builder-startup.mp4",
     srcWebm: "/media/profile-builder-startup.webm",
     poster: "/media/profile-builder-startup-poster.jpg",
-    aspect: "1280/832", // matches the source recording, ≈ 1.54
+    // Source is 3024×1964; crop top 128px (Mac menu bar) → 1280×778 after scale.
+    aspect: "1280/778",
     durationSec: 36,
     brief:
       "Sped-up screen recording of a startup completing the 8-step profile builder at /build.",
@@ -179,7 +180,7 @@ export const mediaSlots = {
     src: "/media/profile-builder-investor.mp4",
     srcWebm: "/media/profile-builder-investor.webm",
     poster: "/media/profile-builder-investor-poster.jpg",
-    aspect: "1280/832",
+    aspect: "1280/778",
     durationSec: 35,
     brief:
       "Sped-up screen recording of an investor completing the 8-step profile builder at /build/investor.",

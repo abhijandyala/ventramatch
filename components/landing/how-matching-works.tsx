@@ -124,9 +124,12 @@ function Step1Panel() {
         {/* Side toggle */}
         <SideToggle side={side} onChange={setSide} />
 
-        {/* Video / placeholder */}
-        <div className="mt-8 w-full overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+        {/* Video / placeholder. `key` forces React to remount the player when
+            the side switches so the <video> element loads the new sources
+            instead of holding onto the previous file's playback. */}
+        <div className="mt-8 w-full overflow-hidden rounded-[14px] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)]">
           <MediaSlot
+            key={side}
             slot={side === "startup" ? "profileBuilderStartup" : "profileBuilderInvestor"}
           />
         </div>
