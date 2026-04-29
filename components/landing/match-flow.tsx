@@ -56,12 +56,13 @@ const PAIRS: Pair[] = [
       category: "Tech, multi-stage",
       chips: ["$250K – $5M", "AI · DevTools", "Menlo Park"],
     },
-    // Positions: y must clear the chip vertically (chip is ±80 from center).
-    // Mix of high-left / low-right etc. for the "spawned but conversational" feel.
+    // Startup bubbles always on the LEFT (x ≈ -160), investor always on the
+    // RIGHT (x ≈ 160). Vertical positions offset per-message to feel like a
+    // real chat exchange. y must clear the chip's middle (chip is ±80 tall).
     conversation: [
-      { from: "startup",  text: "Raising $1M for AI dev tools.",  x: -110, y: -130 },
-      { from: "investor", text: "Pre-seed AI fits our thesis.",   x: 90,   y: -110 },
-      { from: "startup",  text: "30 partners, 4 paying.",         x: -30,  y: 130  },
+      { from: "startup",  text: "Raising $1M for AI dev tools.",  x: -170, y: -120 },
+      { from: "investor", text: "Pre-seed AI fits our thesis.",   x: 170,  y: 110  },
+      { from: "startup",  text: "30 partners, 4 paying.",         x: -170, y: 120  },
     ],
   },
   {
@@ -78,9 +79,9 @@ const PAIRS: Pair[] = [
       chips: ["$5M – $40M", "SaaS · Tools", "Palo Alto"],
     },
     conversation: [
-      { from: "startup",  text: "Series A, $15M for PLG growth.", x: -120, y: -120 },
-      { from: "investor", text: "Productivity SaaS — our lane.",  x: 80,   y: 130  },
-      { from: "startup",  text: "100K teams, 90% retention.",     x: -100, y: 120  },
+      { from: "startup",  text: "Series A, $15M for PLG growth.", x: -170, y: -130 },
+      { from: "investor", text: "Productivity SaaS — our lane.",  x: 170,  y: -110 },
+      { from: "startup",  text: "100K teams, 90% retention.",     x: -170, y: 120  },
     ],
   },
   {
@@ -97,9 +98,9 @@ const PAIRS: Pair[] = [
       chips: ["$500K", "All sectors", "Mountain View"],
     },
     conversation: [
-      { from: "startup",  text: "Payment APIs for the web.",       x: -90,  y: -130 },
-      { from: "investor", text: "Devtools fintech — apply W'09.",  x: 100,  y: -110 },
-      { from: "startup",  text: "5 partners signed already.",      x: 30,   y: 130  },
+      { from: "startup",  text: "Payment APIs for the web.",       x: -170, y: -120 },
+      { from: "investor", text: "Devtools fintech — apply W'09.",  x: 170,  y: 130  },
+      { from: "startup",  text: "5 partners signed already.",      x: -170, y: 110  },
     ],
   },
   {
@@ -116,9 +117,9 @@ const PAIRS: Pair[] = [
       chips: ["$10M – $100M", "AI · Frontier", "Menlo Park"],
     },
     conversation: [
-      { from: "startup",  text: "Series B for Claude scaling.",    x: -110, y: -120 },
-      { from: "investor", text: "Backing the safety-first lab.",   x: 100,  y: 125  },
-      { from: "startup",  text: "Enterprise contracts ramping.",   x: -110, y: 130  },
+      { from: "startup",  text: "Series B for Claude scaling.",    x: -170, y: -130 },
+      { from: "investor", text: "Backing the safety-first lab.",   x: 170,  y: -110 },
+      { from: "startup",  text: "Enterprise contracts ramping.",   x: -170, y: 120  },
     ],
   },
   {
@@ -135,9 +136,9 @@ const PAIRS: Pair[] = [
       chips: ["$5M – $50M", "Workspace · SaaS", "London / SF"],
     },
     conversation: [
-      { from: "startup",  text: "Series C, going international.",  x: -120, y: -125 },
-      { from: "investor", text: "Workspace category leader.",      x: 30,   y: 130  },
-      { from: "startup",  text: "30M users globally.",             x: 100,  y: -110 },
+      { from: "startup",  text: "Series C, going international.",  x: -170, y: -110 },
+      { from: "investor", text: "Workspace category leader.",      x: 170,  y: 130  },
+      { from: "startup",  text: "30M users globally.",             x: -170, y: 130  },
     ],
   },
 ];
@@ -374,26 +375,33 @@ function ConversationOverlay({
   messages: Message[];
   visibleCount: number;
 }) {
+  // Each bubble is wrapped twice: an outer positioning div carries the
+  // centered (x, y) offset transform, and a motion.div inside handles the
+  // entrance fade. Splitting these prevents Framer Motion's transforms from
+  // overriding the position transform.
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
       <div className="relative h-full w-full">
         <AnimatePresence>
           {messages.slice(0, visibleCount).map((m, i) => (
-            <motion.div
+            <div
               key={i}
-              initial={{ opacity: 0, scale: 0.94, y: 6 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
               className="absolute"
               style={{
-                left: "50%",
-                top: "50%",
-                transform: `translate(calc(-50% + ${m.x}px), calc(-50% + ${m.y}px))`,
+                left: `calc(50% + ${m.x}px)`,
+                top: `calc(50% + ${m.y}px)`,
+                transform: "translate(-50%, -50%)",
               }}
             >
-              <ChatBubble from={m.from} text={m.text} />
-            </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <ChatBubble from={m.from} text={m.text} />
+              </motion.div>
+            </div>
           ))}
         </AnimatePresence>
       </div>
@@ -402,28 +410,50 @@ function ConversationOverlay({
 }
 
 function ChatBubble({ from, text }: { from: "startup" | "investor"; text: string }) {
+  // iMessage-style chat bubble:
+  //   - startup bubble lives on the LEFT side, has a tail at bottom-LEFT
+  //     pointing toward the startup card
+  //   - investor bubble lives on the RIGHT side, has a tail at bottom-RIGHT
+  //     pointing toward the investor card
+  //   - bubble's tail-side bottom corner is less rounded so the tail attaches
+  //     naturally (this is exactly how iMessage shapes its bubbles)
   const isStartup = from === "startup";
-  // Startup bubbles read like outgoing messages; investor bubbles read like
-  // incoming. Keep both side-neutral by NOT using a "you/me" label — just
-  // role chips so readers see the conversation symmetrically.
+
+  const fillVar = isStartup ? "var(--color-surface)" : "var(--color-brand-tint)";
+  const borderVar = isStartup ? "var(--color-info)" : "var(--color-brand)";
+
   return (
-    <div
-      className={`relative max-w-[220px] rounded-[12px] border px-3.5 py-2 text-[13px] leading-[1.4] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.18)] ${
-        isStartup
-          ? "border-[color:var(--color-info)]/30 bg-[color:var(--color-bg)] text-[color:var(--color-text-strong)]"
-          : "border-[color:var(--color-brand)]/35 bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
-      }`}
-    >
-      <span
-        className={`mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.14em] ${
+    <div className="relative">
+      <div
+        className={`relative max-w-[220px] border px-4 py-2.5 text-[13px] leading-[1.45] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.18)] ${
           isStartup
-            ? "text-[color:var(--color-info)]"
-            : "text-[color:var(--color-brand-strong)]"
+            ? "rounded-[20px] rounded-bl-[6px] text-[color:var(--color-text-strong)]"
+            : "rounded-[20px] rounded-br-[6px] text-[color:var(--color-brand-strong)]"
         }`}
+        style={{
+          backgroundColor: fillVar,
+          borderColor: `color-mix(in oklab, ${borderVar} 35%, transparent)`,
+        }}
       >
-        {isStartup ? "Startup" : "Investor"}
-      </span>
-      {text}
+        {text}
+      </div>
+
+      {/* Tail. Path is open (no Z) so the stroke only traces the two OUTER
+         edges, blending with the bubble's border on the seam side. */}
+      <svg
+        className={`absolute h-3.5 w-3 ${isStartup ? "-left-[6px]" : "-right-[6px]"} bottom-[2px]`}
+        viewBox="0 0 12 14"
+        aria-hidden
+      >
+        <path
+          d={isStartup ? "M 12 0 L 0 14 L 12 14" : "M 0 0 L 12 14 L 0 14"}
+          fill={fillVar}
+          stroke={`color-mix(in oklab, ${borderVar} 35%, transparent)`}
+          strokeWidth="1"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
     </div>
   );
 }
