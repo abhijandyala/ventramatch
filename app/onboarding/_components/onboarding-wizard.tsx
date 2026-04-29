@@ -84,7 +84,7 @@ export function OnboardingWizard() {
           setFormError(result.error);
           return;
         }
-        router.push("/dashboard");
+        router.push("/homepage");
         router.refresh();
       });
       return;
@@ -101,7 +101,7 @@ export function OnboardingWizard() {
         setFormError(result.error);
         return;
       }
-      router.push("/dashboard");
+      router.push("/homepage");
       router.refresh();
     });
   }

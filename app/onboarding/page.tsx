@@ -12,8 +12,11 @@ export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage() {
   const user = await requireUser();
+  console.log(`[onboarding] userId=${user.id} onboarded=${user.onboardingCompleted}`);
+
   if (user.onboardingCompleted) {
-    redirect("/dashboard");
+    console.log("[onboarding] → redirect /homepage (already onboarded)");
+    redirect("/homepage");
   }
 
   return <OnboardingWizard />;

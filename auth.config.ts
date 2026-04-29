@@ -18,6 +18,7 @@ function pathStartsWith(pathname: string, prefixes: readonly string[]): boolean 
 export const authConfig = {
   pages: {
     signIn: "/sign-in",
+    error: "/error",
   },
   session: { strategy: "jwt" },
   providers: [
@@ -37,31 +38,39 @@ export const authConfig = {
       const onOnboarding = pathStartsWith(pathname, ONBOARDING_PATHS);
       const completed = auth?.user?.onboardingCompleted === true;
 
+      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} completed=${completed} userId=${auth?.user?.id ?? "none"}`);
+
       if (onAuthPage && isLoggedIn) {
+        console.log("[auth:middleware] → redirect /post-auth (logged-in user on auth page)");
         return Response.redirect(new URL("/post-auth", request.nextUrl));
       }
 
       if ((onProtected || onOnboarding) && !isLoggedIn) {
+        console.log(`[auth:middleware] → redirect /sign-in (unauthenticated on ${pathname})`);
         const target = new URL("/sign-in", request.nextUrl);
         target.searchParams.set("from", pathname);
         return Response.redirect(target);
       }
 
       if (isLoggedIn && onOnboarding && completed) {
-        return Response.redirect(new URL("/dashboard", request.nextUrl));
+        console.log("[auth:middleware] → redirect /homepage (onboarding already done)");
+        return Response.redirect(new URL("/homepage", request.nextUrl));
       }
 
       if (isLoggedIn && onProtected && !completed) {
+        console.log("[auth:middleware] → redirect /onboarding (protected page, not onboarded)");
         return Response.redirect(new URL("/onboarding", request.nextUrl));
       }
 
+      console.log(`[auth:middleware] → pass through ${pathname}`);
       return true;
     },
-    jwt({ token, user }) {
+    jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = user.role ?? null;
         token.onboardingCompleted = user.onboardingCompleted ?? false;
+        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false}`);
       }
       return token;
     },
