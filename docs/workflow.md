@@ -28,7 +28,8 @@ When you change how things work, update docs in the **same PR**: **`README.md`**
 ## Database changes
 
 - **Source of truth for new deploys:** `db/migrations/*.sql` (append-only; add `0002_…`, do not edit old files).
-- Apply to your DB, e.g. `psql "$DATABASE_URL" -f db/migrations/0001_initial_schema.sql`.
+- Apply to your DB, e.g. `psql "$DATABASE_URL" -f db/migrations/0001_initial_schema.sql`, or from the repo root: `npm run db:apply -- db/migrations/0002_auth_schema.sql` (requires `DATABASE_URL`).
+- **`postgres.railway.internal`** only resolves **inside** Railway. From your laptop, use the **public** connection string from the Railway Postgres service (TCP proxy), or run the migration in a **Railway shell** / one-off job with the internal URL.
 - **Archives:** `db/legacy/` — old Supabase-oriented SQL for history only; do not apply on fresh Railway databases.
 
 ## Local setup
