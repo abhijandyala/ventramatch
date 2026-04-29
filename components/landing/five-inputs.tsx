@@ -123,44 +123,17 @@ export function FiveInputs() {
       id="how"
       className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]"
     >
-      <div className="mx-auto max-w-[1280px] px-6 py-24 md:py-32">
-        {/* ---------- Section head ---------- */}
-        <div className="mx-auto max-w-[60ch] text-center">
-          <Reveal>
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
-              The algorithm
-            </p>
-          </Reveal>
-          <Reveal delay={80}>
-            <h2
-              className="mt-5 text-balance font-semibold text-[color:var(--color-text-strong)]"
-              style={{
-                fontSize: "var(--type-h1)",
-                letterSpacing: "var(--tracking-h1)",
-                lineHeight: 1.05,
-              }}
-            >
-              Five inputs. One score. Always shown.
-            </h2>
-          </Reveal>
-          <Reveal delay={160}>
-            <p
-              className="mt-5 text-pretty text-[color:var(--color-text-muted)]"
-              style={{ fontSize: "var(--type-body-lg)", lineHeight: 1.55 }}
-            >
-              Match scores are a weighted sum, not a black-box ranking. The
-              exact formula lives in the repo at{" "}
-              <code className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-1.5 py-0.5 font-mono text-[13px] font-medium text-[color:var(--color-text-strong)]">
-                lib/matching/score.ts
-              </code>
-              .
-            </p>
-          </Reveal>
-        </div>
+      <div className="mx-auto max-w-[1280px] px-6 py-20 md:py-24">
+        {/* ---------- Section head — minimal label only ---------- */}
+        <Reveal>
+          <h2 className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+            The algorithm
+          </h2>
+        </Reveal>
 
         {/* ---------- Tab strip — bordered segmented control ---------- */}
-        <Reveal delay={240}>
-          <div className="mt-14 flex justify-center md:mt-16">
+        <Reveal delay={120}>
+          <div className="mt-8 flex justify-center md:mt-10">
             <div
               role="tablist"
               aria-label="Match score inputs"
