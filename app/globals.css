@@ -151,6 +151,18 @@
 }
 
 /* =====================================================================
+   Dashboard register — sharp grid aesthetic (building blocks).
+   Scoped to .dashboard so landing page retains rounded corners.
+   ===================================================================== */
+.dashboard {
+  --radius-sm: 0px;
+  --radius: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+}
+
+/* =====================================================================
    Shared utility patterns (used by landing primitives)
    ===================================================================== */
 
