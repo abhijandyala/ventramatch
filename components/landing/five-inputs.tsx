@@ -158,71 +158,78 @@ export function FiveInputs() {
           </Reveal>
         </div>
 
-        {/* ---------- Tab strip (underline = progress bar) ---------- */}
+        {/* ---------- Tab strip — bordered segmented control ---------- */}
         <Reveal delay={240}>
-          <div
-            role="tablist"
-            aria-label="Match score inputs"
-            className="mt-14 flex flex-wrap items-center justify-center gap-x-1 gap-y-1 border-b border-[color:var(--color-border)] md:mt-16"
-          >
-            {INPUTS.map((it, i) => {
-              const isActive = i === active;
-              return (
-                <button
-                  key={it.key}
-                  type="button"
-                  role="tab"
-                  id={`five-inputs-tab-${it.key}`}
-                  aria-selected={isActive}
-                  aria-controls={`five-inputs-panel-${it.key}`}
-                  tabIndex={isActive ? 0 : -1}
-                  onClick={() => setActive(i)}
-                  onMouseEnter={() => setPaused(true)}
-                  onMouseLeave={() => setPaused(false)}
-                  onFocus={() => setPaused(true)}
-                  onBlur={() => setPaused(false)}
-                  className={[
-                    "relative px-4 pb-3 pt-2 text-[13px] font-medium transition-colors md:px-5 md:text-[14px]",
-                    isActive
-                      ? "text-[color:var(--color-text-strong)]"
-                      : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]",
-                  ].join(" ")}
-                >
-                  <span className="flex items-center gap-2">
-                    <span>{it.name}</span>
-                    <span
-                      className={[
-                        "font-mono text-[10px] tabular-nums transition-colors md:text-[11px]",
-                        isActive
-                          ? "text-[color:var(--color-brand)]"
-                          : "text-[color:var(--color-text-faint)]",
-                      ].join(" ")}
-                    >
-                      {it.weightPct}%
-                    </span>
-                  </span>
-
-                  {isActive &&
-                    (animationActive ? (
+          <div className="mt-14 flex justify-center md:mt-16">
+            <div
+              role="tablist"
+              aria-label="Match score inputs"
+              className="inline-flex items-stretch overflow-hidden rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]"
+            >
+              {INPUTS.map((it, i) => {
+                const isActive = i === active;
+                return (
+                  <button
+                    key={it.key}
+                    type="button"
+                    role="tab"
+                    id={`five-inputs-tab-${it.key}`}
+                    aria-selected={isActive}
+                    aria-controls={`five-inputs-panel-${it.key}`}
+                    tabIndex={isActive ? 0 : -1}
+                    onClick={() => setActive(i)}
+                    onMouseEnter={() => setPaused(true)}
+                    onMouseLeave={() => setPaused(false)}
+                    onFocus={() => setPaused(true)}
+                    onBlur={() => setPaused(false)}
+                    className={[
+                      "relative px-4 py-3 text-[13px] font-medium transition-colors md:px-6 md:py-3.5 md:text-[14px]",
+                      i > 0
+                        ? "border-l border-[color:var(--color-border)]"
+                        : "",
+                      isActive
+                        ? "text-[color:var(--color-text-strong)]"
+                        : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-bg)] hover:text-[color:var(--color-text-strong)]",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>{it.name}</span>
                       <span
-                        // key on `active` so the bar resets when tab changes;
-                        // pause/resume happens via animationPlayState (no remount).
-                        key={active}
-                        onAnimationEnd={advance}
-                        style={{
-                          transformOrigin: "left",
-                          animation: `vm-progress ${CYCLE_MS}ms linear forwards`,
-                          animationPlayState: playState,
-                        }}
-                        className="absolute -bottom-[1px] left-2 right-2 h-[2px] rounded-full bg-[color:var(--color-text-strong)] md:left-3 md:right-3"
-                      />
-                    ) : (
-                      // Reduced motion / out of view: solid underline, no animation.
-                      <span className="absolute -bottom-[1px] left-2 right-2 h-[2px] rounded-full bg-[color:var(--color-text-strong)] md:left-3 md:right-3" />
-                    ))}
-                </button>
-              );
-            })}
+                        className={[
+                          "font-mono text-[10px] tabular-nums transition-colors md:text-[11px]",
+                          isActive
+                            ? "text-[color:var(--color-brand)]"
+                            : "text-[color:var(--color-text-faint)]",
+                        ].join(" ")}
+                      >
+                        {it.weightPct}%
+                      </span>
+                    </span>
+
+                    {isActive &&
+                      (animationActive ? (
+                        <span
+                          // key on `active` so the bar resets when tab changes;
+                          // pause/resume happens via animationPlayState (no remount).
+                          key={active}
+                          onAnimationEnd={advance}
+                          style={{
+                            transformOrigin: "left",
+                            animation: `vm-progress ${CYCLE_MS}ms linear forwards`,
+                            animationPlayState: playState,
+                          }}
+                          className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2px] bg-[color:var(--color-text-strong)]"
+                        />
+                      ) : (
+                        // Reduced motion / out of view: solid underline, no animation.
+                        <span className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2px] bg-[color:var(--color-text-strong)]" />
+                      ))}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </Reveal>
 
@@ -267,14 +274,6 @@ export function FiveInputs() {
                     <p className="mt-4 max-w-[36ch] text-[13.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
                       {current.body}
                     </p>
-                    <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-3 py-1">
-                      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
-                        Weight
-                      </span>
-                      <span className="font-mono text-[12px] font-semibold tabular-nums text-[color:var(--color-brand)]">
-                        {current.weightPct}%
-                      </span>
-                    </div>
                   </motion.div>
                 </AnimatePresence>
               </div>
@@ -301,9 +300,6 @@ export function FiveInputs() {
           </div>
         </div>
 
-        <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
-          Hover to pause · click any tab to jump
-        </p>
       </div>
     </section>
   );
