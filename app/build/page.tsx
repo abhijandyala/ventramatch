@@ -11,215 +11,25 @@ import { Wordmark } from "@/components/landing/wordmark";
  * NO backend wiring, NO validation, NO persistence — every input is purely
  * visual. The whole route can be deleted once the videos are captured.
  *
- * Layout:
- *   - 56px top bar (logo + breadcrumb + Save & exit)
- *   - 300px sidebar with the 8 steps + progress bar
- *   - Main content with one step at a time
+ * Layout (desktop and mobile both):
+ *   - 56px sticky top bar (logo + breadcrumb + Save & exit)
+ *   - Horizontal progress stepper (centered, max-w 960)
+ *   - Centered content column (max-w 760)
  *   - Sticky footer with Back / Continue / Publish
  *
- * Steps mirror the data model in db/migrations/0001_initial_schema.sql
- * and the planning doc: company → sector → stage → round → traction →
- * deck → founder → review.
+ * No sidebar — keeps the page from sprawling at any viewport width.
  */
 
 const STEPS = [
-  {
-    key: "company",
-    title: "Company",
-    description: "Public info on your profile.",
-  },
-  {
-    key: "sector",
-    title: "Sector",
-    description: "Industries you build in.",
-  },
-  {
-    key: "stage",
-    title: "Stage",
-    description: "What you're raising at.",
-  },
-  {
-    key: "round",
-    title: "Round",
-    description: "Raise size, check range, timing.",
-  },
-  {
-    key: "traction",
-    title: "Traction",
-    description: "What's actually working.",
-  },
-  {
-    key: "deck",
-    title: "Deck",
-    description: "Pitch deck and materials.",
-  },
-  {
-    key: "founder",
-    title: "Founder",
-    description: "Identity verification.",
-  },
-  {
-    key: "review",
-    title: "Review",
-    description: "Final pass before publishing.",
-  },
+  { key: "company", title: "Company" },
+  { key: "sector", title: "Sector" },
+  { key: "stage", title: "Stage" },
+  { key: "round", title: "Round" },
+  { key: "traction", title: "Traction" },
+  { key: "deck", title: "Deck" },
+  { key: "founder", title: "Founder" },
+  { key: "review", title: "Review" },
 ];
-
-export default function BuildPage() {
-  const [step, setStep] = useState(0);
-  const total = STEPS.length;
-  const progress = Math.round(((step + 1) / total) * 100);
-
-  return (
-    <main className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
-      {/* ---------- Top bar ---------- */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 px-6 backdrop-blur">
-        <div className="flex items-center gap-4">
-          <Wordmark size="sm" />
-          <span aria-hidden className="h-4 w-px bg-[color:var(--color-border)]" />
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">
-            Build profile · Startup
-          </span>
-        </div>
-        <div className="flex items-center gap-5">
-          <button
-            type="button"
-            className="text-[12.5px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-strong)]"
-          >
-            Save draft
-          </button>
-          <Link
-            href="/"
-            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
-          >
-            Save &amp; exit
-          </Link>
-        </div>
-      </header>
-
-      <div className="grid min-h-[calc(100vh-3.5rem)] grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
-        {/* ---------- Sidebar ---------- */}
-        <aside className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)] p-6 lg:border-b-0 lg:border-r">
-          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
-            Steps
-          </p>
-          <ol className="mt-4 space-y-1">
-            {STEPS.map((s, i) => {
-              const isActive = i === step;
-              const isComplete = i < step;
-              return (
-                <li key={s.key}>
-                  <button
-                    type="button"
-                    onClick={() => setStep(i)}
-                    className={[
-                      "flex w-full items-start gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors",
-                      isActive
-                        ? "bg-[color:var(--color-surface)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                        : "hover:bg-[color:var(--color-surface)]/60",
-                    ].join(" ")}
-                  >
-                    <span
-                      className={[
-                        "mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px] font-semibold tabular-nums",
-                        isComplete
-                          ? "bg-[color:var(--color-brand)] text-white"
-                          : isActive
-                            ? "border-2 border-[color:var(--color-text-strong)] text-[color:var(--color-text-strong)]"
-                            : "border border-[color:var(--color-border-strong)] text-[color:var(--color-text-faint)]",
-                      ].join(" ")}
-                    >
-                      {isComplete ? "✓" : String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={[
-                          "block text-[13px] font-medium",
-                          isActive
-                            ? "text-[color:var(--color-text-strong)]"
-                            : isComplete
-                              ? "text-[color:var(--color-text-muted)]"
-                              : "text-[color:var(--color-text-muted)]",
-                        ].join(" ")}
-                      >
-                        {s.title}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] leading-snug text-[color:var(--color-text-faint)]">
-                        {s.description}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-
-          <div className="mt-8 border-t border-[color:var(--color-border)] pt-6">
-            <div className="flex items-center justify-between text-[11px] text-[color:var(--color-text-faint)]">
-              <span className="font-mono uppercase tracking-[0.16em]">
-                Progress
-              </span>
-              <span className="font-mono tabular-nums">{progress}%</span>
-            </div>
-            <div className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-[color:var(--color-border)]">
-              <div
-                className="h-full bg-[color:var(--color-brand)] transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-        </aside>
-
-        {/* ---------- Main ---------- */}
-        <section className="flex flex-col">
-          <div className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-[760px] px-6 py-12 md:px-10 md:py-14">
-              <StepHeader step={step} />
-              <div className="mt-10">
-                <StepBody step={step} />
-              </div>
-            </div>
-          </div>
-
-          {/* Footer nav */}
-          <div className="border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-6 py-5 md:px-10">
-            <div className="mx-auto flex w-full max-w-[760px] items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setStep((s) => Math.max(0, s - 1))}
-                disabled={step === 0}
-                className="text-[13px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                ← Back
-              </button>
-              <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)] sm:inline">
-                Step {step + 1} of {total}
-              </span>
-              {step < total - 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setStep((s) => Math.min(total - 1, s + 1))}
-                  className="rounded-[10px] bg-[color:var(--color-text-strong)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-text)]"
-                >
-                  Continue →
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="rounded-[10px] bg-[color:var(--color-brand)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)]"
-                >
-                  Publish profile
-                </button>
-              )}
-            </div>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-/* ---------------- Step header ---------------- */
 
 const STEP_HEADERS = [
   {
@@ -256,23 +66,179 @@ const STEP_HEADERS = [
   },
 ];
 
-function StepHeader({ step }: { step: number }) {
+export default function BuildPage() {
+  const [step, setStep] = useState(0);
+  const total = STEPS.length;
   const t = STEP_HEADERS[step];
+
   return (
-    <div>
-      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
-        Step {String(step + 1).padStart(2, "0")} · {STEPS[step].title}
-      </p>
-      <h1
-        className="mt-3 text-balance font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]"
-        style={{ fontSize: "clamp(26px, 3vw, 34px)", lineHeight: 1.12 }}
-      >
-        {t.title}
-      </h1>
-      <p className="mt-3 max-w-[58ch] text-[14.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
-        {t.sub}
-      </p>
-    </div>
+    <main className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+      {/* ---------- Top bar ---------- */}
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 px-5 backdrop-blur md:px-8">
+        <div className="flex items-center gap-4">
+          <Wordmark size="sm" />
+          <span aria-hidden className="hidden h-4 w-px bg-[color:var(--color-border)] sm:block" />
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-text-muted)] sm:inline">
+            Build profile · Startup
+          </span>
+        </div>
+        <div className="flex items-center gap-5">
+          <button
+            type="button"
+            className="text-[12.5px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-strong)]"
+          >
+            Save draft
+          </button>
+          <Link
+            href="/"
+            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+          >
+            Save &amp; exit
+          </Link>
+        </div>
+      </header>
+
+      {/* ---------- Stepper ---------- */}
+      <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+        <div className="mx-auto max-w-[960px] px-5 py-7 md:px-8 md:py-8">
+          <Stepper step={step} setStep={setStep} />
+        </div>
+      </div>
+
+      {/* ---------- Content ---------- */}
+      <section className="mx-auto w-full max-w-[760px] px-5 py-12 md:px-8 md:py-16">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+          Step {String(step + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}
+          <span aria-hidden className="mx-2 text-[color:var(--color-border-strong)]">·</span>
+          {STEPS[step].title}
+        </p>
+        <h1
+          className="mt-3 text-balance font-semibold tracking-[-0.014em] text-[color:var(--color-text-strong)]"
+          style={{ fontSize: "clamp(26px, 3vw, 34px)", lineHeight: 1.12 }}
+        >
+          {t.title}
+        </h1>
+        <p className="mt-3 max-w-[58ch] text-[14.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
+          {t.sub}
+        </p>
+
+        <div className="mt-10">
+          <StepBody step={step} />
+        </div>
+      </section>
+
+      {/* ---------- Footer nav ---------- */}
+      <footer className="sticky bottom-0 border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between px-5 py-4 md:px-8 md:py-5">
+          <button
+            type="button"
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={step === 0}
+            className="text-[13px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ← Back
+          </button>
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)] sm:inline">
+            {step + 1} / {total}
+          </span>
+          {step < total - 1 ? (
+            <button
+              type="button"
+              onClick={() => setStep((s) => Math.min(total - 1, s + 1))}
+              className="rounded-[10px] bg-[color:var(--color-text-strong)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-text)]"
+            >
+              Continue →
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="rounded-[10px] bg-[color:var(--color-brand)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)]"
+            >
+              Publish profile
+            </button>
+          )}
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+/* ---------------- Horizontal stepper ---------------- */
+
+function Stepper({
+  step,
+  setStep,
+}: {
+  step: number;
+  setStep: (i: number) => void;
+}) {
+  return (
+    <ol className="flex items-start">
+      {STEPS.map((s, i) => {
+        const isActive = i === step;
+        const isComplete = i < step;
+        const isLast = i === STEPS.length - 1;
+        return (
+          <li key={s.key} className="flex min-w-0 flex-1 flex-col items-center">
+            {/* Dot row with connector half-lines on either side */}
+            <div className="flex w-full items-center">
+              <span
+                aria-hidden
+                className={[
+                  "h-[2px] flex-1 transition-colors",
+                  i === 0
+                    ? "bg-transparent"
+                    : i <= step
+                      ? "bg-[color:var(--color-brand)]"
+                      : "bg-[color:var(--color-border)]",
+                ].join(" ")}
+              />
+              <button
+                type="button"
+                onClick={() => setStep(i)}
+                aria-current={isActive ? "step" : undefined}
+                aria-label={`Step ${i + 1}: ${s.title}`}
+                className={[
+                  "grid h-7 w-7 shrink-0 place-items-center rounded-full font-mono text-[11px] font-semibold tabular-nums transition-all",
+                  isComplete
+                    ? "bg-[color:var(--color-brand)] text-white"
+                    : isActive
+                      ? "bg-[color:var(--color-text-strong)] text-white ring-[3px] ring-[color:var(--color-text-strong)]/15"
+                      : "border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] text-[color:var(--color-text-faint)] hover:border-[color:var(--color-text-strong)] hover:text-[color:var(--color-text-strong)]",
+                ].join(" ")}
+              >
+                {isComplete ? "✓" : i + 1}
+              </button>
+              <span
+                aria-hidden
+                className={[
+                  "h-[2px] flex-1 transition-colors",
+                  isLast
+                    ? "bg-transparent"
+                    : i < step
+                      ? "bg-[color:var(--color-brand)]"
+                      : "bg-[color:var(--color-border)]",
+                ].join(" ")}
+              />
+            </div>
+
+            {/* Step name */}
+            <button
+              type="button"
+              onClick={() => setStep(i)}
+              className={[
+                "mt-2.5 max-w-full truncate px-1 text-[11.5px] font-medium transition-colors",
+                isActive
+                  ? "text-[color:var(--color-text-strong)]"
+                  : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]",
+              ].join(" ")}
+            >
+              {s.title}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -364,7 +330,6 @@ const SECTORS = [
 ];
 
 function SectorStep() {
-  // Pre-select two for the demo state — purely visual.
   const selected = new Set(["AI / ML", "SaaS"]);
   return (
     <div>
@@ -412,7 +377,7 @@ const STAGES = [
 ];
 
 function StageStep() {
-  const activeIndex = 1; // visual demo: Seed selected
+  const activeIndex = 1;
   return (
     <div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -506,7 +471,7 @@ function RoundStep() {
         </Field>
       </div>
 
-      <Field label="Use of funds" full>
+      <Field label="Use of funds">
         <Textarea
           placeholder="What this round buys you in three short bullets."
           defaultValue="Hire two engineers, ship matching v2, and reach $200K MRR by Q4."
@@ -533,14 +498,14 @@ function TractionStep() {
         </Field>
       </div>
 
-      <Field label="Notable signals" full>
+      <Field label="Notable signals">
         <Textarea
           placeholder="Pilots, design partners, enterprise interest, key hires."
           defaultValue="Two enterprise pilots in flight. Top-of-funnel growing 30% MoM. Three design partners across logistics and fintech."
         />
       </Field>
 
-      <Field label="Anything else investors should know" full>
+      <Field label="Anything else investors should know">
         <Textarea
           placeholder="Optional context — recent press, partnerships, awards."
           defaultValue=""
@@ -577,7 +542,6 @@ function DeckStep() {
         </button>
       </Dropzone>
 
-      {/* Mock "uploaded" state */}
       <div className="flex items-center justify-between rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3.5">
         <div className="flex items-center gap-3">
           <div className="grid h-9 w-9 place-items-center rounded-[8px] bg-[color:var(--color-bg)] font-mono text-[10px] font-semibold uppercase text-[color:var(--color-text-strong)]">
@@ -664,7 +628,10 @@ function FounderStep() {
           <Input placeholder="Your full name" defaultValue="Abhi Jandyala" />
         </Field>
         <Field label="Role" required>
-          <Input placeholder="CEO &amp; Co-founder" defaultValue="CEO & Co-founder" />
+          <Input
+            placeholder="CEO &amp; Co-founder"
+            defaultValue="CEO & Co-founder"
+          />
         </Field>
         <Field label="Work email" required>
           <Input
