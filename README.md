@@ -4,6 +4,10 @@
 
 **Repo:** https://github.com/abhijandyala/ventramatch
 
+**Keep this file current.** When you change the stack, env vars, folder layout, scripts, or major milestones, update `README.md` in the same PR (and adjust `docs/workflow.md` or `docs/architecture.md` when the workflow or system shape changes). The README is the first thing new people and tools read; stale docs cost more time than a five-minute edit.
+
+**CodeRabbit:** automatic AI reviews on every PR are **disabled** in [`.coderabbit.yaml`](.coderabbit.yaml). See the **CodeRabbit** section in [`docs/workflow.md`](docs/workflow.md).
+
 ---
 
 ## Read this first (every Cursor / dev machine)

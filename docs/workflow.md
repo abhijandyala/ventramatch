@@ -15,6 +15,16 @@
 1. **Do not commit directly to `main`.** Open a feature branch, push, open a **PR**, merge after review.
 2. Branch names: `feat/…`, `fix/…`, `chore/…`, `docs/…` (see `docs/team.md`).
 
+## CodeRabbit (PR reviews)
+
+Automatic CodeRabbit runs on every PR are **off** via **`.coderabbit.yaml`** (`reviews.auto_review.enabled: false`). Anyone can still request a run by commenting `@coderabbitai review` on a PR. To change that behavior, edit the YAML (see [CodeRabbit auto-review docs](https://docs.coderabbit.ai/configuration/auto-review)).
+
+If a **required status check** still shows CodeRabbit on PRs, a **repo or org admin** may need to adjust **branch protection rules** or the **CodeRabbit** installation settings on GitHub—this file only controls CodeRabbit’s own auto-review behavior.
+
+## Documentation (keep in sync)
+
+When you change how things work, update docs in the **same PR**: **`README.md`** for overview, scripts, and layout; **`docs/workflow.md`** for process and stack; **`docs/architecture.md`** for data flow and boundaries. Stale top-level docs confuse the next person and any AI working from the repo.
+
 ## Database changes
 
 - **Source of truth for new deploys:** `db/migrations/*.sql` (append-only; add `0002_…`, do not edit old files).
