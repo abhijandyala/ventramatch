@@ -4,11 +4,11 @@ node_modules/
 .pnp.js
 .yarn/install-state.gz
 
-# Build / cache
+# Build / cache (root-anchored so app/build/ etc. aren't ignored)
 .next/
-out/
-build/
-dist/
+/out/
+/build/
+/dist/
 *.tsbuildinfo
 .turbo/
 
