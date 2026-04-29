@@ -1,7 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { requireRole } from "@/lib/dashboards/role-guard";
 import { founderDashboardMock } from "@/lib/dashboards/mock-data";
 import { TopMatchCard } from "@/components/dashboard/TopMatchCard";
 import { RecommendedInvestorCard } from "@/components/dashboard/RecommendedInvestorCard";
@@ -14,10 +13,13 @@ import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFi
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { cn } from "@/lib/utils";
 
+// TODO(handoff): replace hardcoded name with real session user once auth
+// integration is wired. Use requireUser() from lib/auth/session.ts.
+const MOCK_FIRST_NAME = "Alex";
+
 export default async function FounderDashboardPage() {
-  const user = await requireRole("founder");
   const data = founderDashboardMock;
-  const firstName = user.displayName.split(" ")[0];
+  const firstName = MOCK_FIRST_NAME;
   const profileComplete = data.profileStrength.percent >= 100;
 
   return (

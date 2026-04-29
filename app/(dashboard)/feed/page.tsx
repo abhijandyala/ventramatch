@@ -1,7 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { requireRole } from "@/lib/dashboards/role-guard";
 import {
   getSampleStartupById,
   investorFeedMock,
@@ -17,12 +16,15 @@ import { MatchAnalysisCard } from "@/components/dashboard/MatchAnalysisCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { cn } from "@/lib/utils";
 
+// TODO(handoff): replace hardcoded name with real session user once auth
+// integration is wired. Use requireUser() from lib/auth/session.ts.
+const MOCK_FIRST_NAME = "Jules";
+
 type FeedPageProps = {
   searchParams: Promise<{ focus?: string }>;
 };
 
 export default async function InvestorFeedPage({ searchParams }: FeedPageProps) {
-  const user = await requireRole("investor");
   const params = await searchParams;
   const data = investorFeedMock;
 
@@ -54,7 +56,7 @@ export default async function InvestorFeedPage({ searchParams }: FeedPageProps) 
             Investor dashboard
           </p>
           <h1 className="mt-1 text-[20px] leading-7 font-semibold tracking-[-0.015em] text-[var(--color-text)]">
-            Welcome back, {user.displayName.split(" ")[0]}.
+            Welcome back, {MOCK_FIRST_NAME}.
           </h1>
           <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
             Four new startups matched your thesis today.
