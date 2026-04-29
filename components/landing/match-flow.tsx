@@ -76,7 +76,7 @@ export function MatchFlow() {
   const pair = PAIRS[index];
 
   return (
-    <div className="relative mx-auto w-full max-w-[1000px]">
+    <div className="relative mx-auto w-full max-w-[1280px]">
       <style jsx>{`
         @keyframes vm-trace-right {
           to {
@@ -101,27 +101,33 @@ export function MatchFlow() {
         }
       `}</style>
 
-      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(180px,260px)_minmax(0,1fr)] items-center gap-4 sm:gap-6">
+      <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(380px,500px)_minmax(0,1fr)] items-center gap-5 sm:gap-8">
         {/* LEFT — startup */}
         <div className="relative flex min-w-0 justify-end">
           <AnimatePresence mode="wait">
             <motion.div
               key={`s-${index}`}
-              initial={{ opacity: 0, x: -10 }}
+              initial={{ opacity: 0, x: -14 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full max-w-[340px]"
+              exit={{ opacity: 0, x: -14 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-[420px]"
             >
               <SideCard side={pair.startup} role="startup" />
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* CENTER — traces + chip */}
-        <div className="relative flex h-[140px] items-center justify-center">
-          <TraceField direction="right" className="absolute left-0 top-1/2 h-[100px] w-[calc(50%-72px)] -translate-y-1/2" />
-          <TraceField direction="left" className="absolute right-0 top-1/2 h-[100px] w-[calc(50%-72px)] -translate-y-1/2" />
+        {/* CENTER — traces + chip. Tall to give the spaced trace lines room. */}
+        <div className="relative flex h-[260px] items-center justify-center">
+          <TraceField
+            direction="right"
+            className="absolute left-0 top-1/2 h-[220px] w-[calc(50%-128px)] -translate-y-1/2"
+          />
+          <TraceField
+            direction="left"
+            className="absolute right-0 top-1/2 h-[220px] w-[calc(50%-128px)] -translate-y-1/2"
+          />
           <MatchChip />
         </div>
 
@@ -130,21 +136,17 @@ export function MatchFlow() {
           <AnimatePresence mode="wait">
             <motion.div
               key={`i-${index}`}
-              initial={{ opacity: 0, x: 10 }}
+              initial={{ opacity: 0, x: 14 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-              className="w-full max-w-[340px]"
+              exit={{ opacity: 0, x: 14 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-[420px]"
             >
               <SideCard side={pair.investor} role="investor" />
             </motion.div>
           </AnimatePresence>
         </div>
       </div>
-
-      <p className="mt-7 text-center font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--color-text-faint)]">
-        Sample pairings · cycling
-      </p>
     </div>
   );
 }
@@ -154,19 +156,19 @@ export function MatchFlow() {
 function SideCard({ side, role }: { side: Side; role: "startup" | "investor" }) {
   return (
     <div
-      className="relative flex w-full flex-col gap-4 rounded-[12px] border border-[color:var(--color-border)] bg-white p-5 shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_36px_-24px_rgba(15,23,42,0.16)]"
+      className="relative flex w-full flex-col gap-6 rounded-[16px] border border-[color:var(--color-border)] bg-white p-7 shadow-[0_1px_0_rgba(15,23,42,0.04),0_24px_48px_-28px_rgba(15,23,42,0.18)]"
       aria-label={`${role === "startup" ? "Startup" : "Investor"}: ${side.name}, ${side.category}`}
     >
-      <span className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-text-faint)]">
+      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
         {role === "startup" ? "Startup" : "Investor"}
       </span>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-5">
         <CompanyLogo domain={side.domain} name={side.name} />
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="text-[16px] font-semibold tracking-[-0.005em] text-[color:var(--color-text-strong)]">
+          <span className="text-[22px] font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]">
             {side.name}
           </span>
-          <span className="mt-1 text-[13px] text-[color:var(--color-text-muted)]">
+          <span className="mt-1.5 text-[14px] text-[color:var(--color-text-muted)]">
             {side.category}
           </span>
         </span>
@@ -184,21 +186,21 @@ function CompanyLogo({ domain, name }: { domain: string; name: string }) {
 
   if (errored) {
     return (
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] bg-[color:var(--color-brand-tint)] text-[18px] font-semibold text-[color:var(--color-brand-strong)]">
+      <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[10px] bg-[color:var(--color-brand-tint)] text-[24px] font-semibold text-[color:var(--color-brand-strong)]">
         {initial}
       </span>
     );
   }
 
   return (
-    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-[color:var(--color-border)] bg-white">
+    <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[color:var(--color-border)] bg-white">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`https://www.google.com/s2/favicons?domain=${domain}&sz=128`}
         alt=""
-        width={32}
-        height={32}
-        className="h-8 w-8 object-contain"
+        width={48}
+        height={48}
+        className="h-12 w-12 object-contain"
         loading="lazy"
         decoding="async"
         onError={() => setErrored(true)}
@@ -210,30 +212,123 @@ function CompanyLogo({ domain, name }: { domain: string; name: string }) {
 /* ---------- Center chip ---------- */
 
 function MatchChip() {
+  // Processor-chip aesthetic, intentionally asymmetric — like a real IC:
+  //   - Different pin counts per side (4 left, 6 right)
+  //   - Top pins clustered to the right; bottom pins clustered to the left
+  //   - Pin 1 indicator dot in the top-left
+  //   - Off-center "VMX/01" silkscreen label in the bottom-right
+  //   - Center core (V/ + match) positioned slightly left of geometric center
+  //   - Internal grid lines at uneven positions
+  //
+  // Light theme. Brand-green accents only (no cyan / no purple).
+
+  // Side pin positions match where the trace convergence dots land (y=40 in
+  // 0..80 viewBox = 50% of the chip height vertically); the rest of the side
+  // pins are decorative.
+  const leftPins = [22, 50, 72]; // 3 — fewer
+  const rightPins = [12, 28, 44, 60, 76, 92]; // 6 — denser
+
+  // Top pins cluster on the right side; bottom on the left. Picks asymmetry.
+  const topPins = [54, 64, 74, 84, 94];
+  const bottomPins = [8, 18, 28, 38, 48, 58];
+
   return (
-    <div className="relative z-10 flex items-center gap-2 rounded-[10px] border border-[color:var(--color-border-strong)] bg-white px-4 py-2.5 shadow-[0_6px_24px_-6px_rgba(22,163,74,0.35)]">
-      {/* SMT-style corner pads */}
-      <span className="pointer-events-none absolute -left-[3px] -top-[3px] h-1.5 w-1.5 rounded-[1px] bg-[color:var(--color-border-strong)]" />
-      <span className="pointer-events-none absolute -right-[3px] -top-[3px] h-1.5 w-1.5 rounded-[1px] bg-[color:var(--color-border-strong)]" />
-      <span className="pointer-events-none absolute -left-[3px] -bottom-[3px] h-1.5 w-1.5 rounded-[1px] bg-[color:var(--color-border-strong)]" />
-      <span className="pointer-events-none absolute -right-[3px] -bottom-[3px] h-1.5 w-1.5 rounded-[1px] bg-[color:var(--color-border-strong)]" />
+    <div className="relative z-10">
+      {/* Side pins */}
+      {leftPins.map((top, i) => (
+        <span
+          key={`l-${i}`}
+          className="pointer-events-none absolute h-[6px] w-3 rounded-[1px] bg-[color:var(--color-border-strong)]"
+          style={{ left: -10, top: `${top}%`, transform: "translateY(-50%)" }}
+        >
+          <span className="absolute right-0 top-0 block h-full w-[3px] bg-[color:var(--color-brand)]" />
+        </span>
+      ))}
+      {rightPins.map((top, i) => (
+        <span
+          key={`r-${i}`}
+          className="pointer-events-none absolute h-[6px] w-3 rounded-[1px] bg-[color:var(--color-border-strong)]"
+          style={{ right: -10, top: `${top}%`, transform: "translateY(-50%)" }}
+        >
+          <span className="absolute left-0 top-0 block h-full w-[3px] bg-[color:var(--color-brand)]" />
+        </span>
+      ))}
 
-      {/* Lead indicators (where traces visually attach) */}
-      <span className="pointer-events-none absolute -left-2 top-1/2 h-[2px] w-2 -translate-y-1/2 bg-[color:var(--color-brand)]" />
-      <span className="pointer-events-none absolute -right-2 top-1/2 h-[2px] w-2 -translate-y-1/2 bg-[color:var(--color-brand)]" />
+      {/* Top + bottom pins (asymmetric clusters) */}
+      {topPins.map((left, i) => (
+        <span
+          key={`t-${i}`}
+          className="pointer-events-none absolute h-3 w-[6px] rounded-[1px] bg-[color:var(--color-border-strong)]"
+          style={{ top: -10, left: `${left}%`, transform: "translateX(-50%)" }}
+        >
+          <span className="absolute bottom-0 left-0 block h-[3px] w-full bg-[color:var(--color-brand)]" />
+        </span>
+      ))}
+      {bottomPins.map((left, i) => (
+        <span
+          key={`b-${i}`}
+          className="pointer-events-none absolute h-3 w-[6px] rounded-[1px] bg-[color:var(--color-border-strong)]"
+          style={{ bottom: -10, left: `${left}%`, transform: "translateX(-50%)" }}
+        >
+          <span className="absolute left-0 top-0 block h-[3px] w-full bg-[color:var(--color-brand)]" />
+        </span>
+      ))}
 
-      {/* Body */}
-      <Image
-        src="/logo.png"
-        alt=""
-        width={18}
-        height={18}
-        className="object-contain"
-        style={{ height: 18, width: "auto" }}
-      />
-      <span className="text-[14px] font-semibold tracking-tight text-[color:var(--color-brand-strong)]">
-        match
-      </span>
+      {/* Chip body — landscape rectangle, slightly wider than tall */}
+      <div className="relative h-[180px] w-[260px] overflow-hidden rounded-[8px] border border-[color:var(--color-border-strong)] bg-white shadow-[0_14px_44px_-14px_rgba(22,163,74,0.4)]">
+        {/* Corner notches — top-right is omitted intentionally so the chip
+            reads as having a defined orientation, not a centered emblem */}
+        <span className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 border-l-2 border-t-2 border-[color:var(--color-brand)]" />
+        <span className="pointer-events-none absolute bottom-2 left-2 h-3.5 w-3.5 border-l-2 border-b-2 border-[color:var(--color-brand)]" />
+        <span className="pointer-events-none absolute bottom-2 right-2 h-3.5 w-3.5 border-r-2 border-b-2 border-[color:var(--color-brand)]" />
+
+        {/* Pin 1 indicator (small filled circle, industry-standard chip marker) */}
+        <span
+          className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[color:var(--color-brand)]"
+          style={{ left: 14, top: 14 }}
+        />
+
+        {/* Internal grid (uneven spacing) */}
+        <div className="pointer-events-none absolute inset-0 opacity-25">
+          <span className="absolute left-0 right-0 block h-px bg-[color:var(--color-brand)]" style={{ top: "32%" }} />
+          <span className="absolute left-0 right-0 block h-px bg-[color:var(--color-brand)]" style={{ top: "72%" }} />
+          <span className="absolute top-0 bottom-0 block w-px bg-[color:var(--color-brand)]" style={{ left: "26%" }} />
+          <span className="absolute top-0 bottom-0 block w-px bg-[color:var(--color-brand)]" style={{ left: "62%" }} />
+        </div>
+
+        {/* Faint die outline behind the core (shifted off-center) */}
+        <span
+          className="pointer-events-none absolute rounded-[3px] border border-dashed border-[color:var(--color-brand)]/25"
+          style={{ left: "16%", top: "26%", width: "62%", height: "44%" }}
+        />
+
+        {/* Center core (V/ + match) — positioned slightly left of geometric center */}
+        <div className="absolute inset-0 flex items-center" style={{ paddingLeft: "10%" }}>
+          <div className="relative flex items-center gap-2 rounded-[6px] border border-[color:var(--color-brand)]/45 bg-[color:var(--color-bg)] px-3.5 py-2">
+            <span className="pointer-events-none absolute -left-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
+            <span className="pointer-events-none absolute -right-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
+            <span className="pointer-events-none absolute -left-[3px] -bottom-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
+            <span className="pointer-events-none absolute -right-[3px] -bottom-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
+
+            <Image
+              src="/logo.png"
+              alt=""
+              width={20}
+              height={20}
+              className="object-contain"
+              style={{ height: 20, width: "auto" }}
+            />
+            <span className="text-[17px] font-semibold tracking-tight text-[color:var(--color-brand-strong)]">
+              match
+            </span>
+          </div>
+        </div>
+
+        {/* Silkscreen label — bottom-right, off-center, like real chip markings */}
+        <span className="pointer-events-none absolute bottom-3 right-3 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+          vmx · 01
+        </span>
+      </div>
     </div>
   );
 }
@@ -255,23 +350,41 @@ function TraceField({
   // depths so the field reads as a busy circuit, not a uniform comb.
   const isRight = direction === "right";
 
+  // ViewBox is 100×80 (taller now to give the spaced lines room). All four
+  // traces converge on the chip-side edge near y=40.
   const traces = isRight
     ? [
-        "0,12 22,12 22,30 100,30",
-        "0,28 100,28",
-        "0,32 100,32",
-        "0,48 64,48 64,30 100,30",
+        "0,8  20,8  20,40 100,40",
+        "0,28 38,28 38,40 100,40",
+        "0,52 56,52 56,40 100,40",
+        "0,72 70,72 70,40 100,40",
       ]
     : [
-        "100,12 78,12 78,30 0,30",
-        "100,28 0,28",
-        "100,32 0,32",
-        "100,48 36,48 36,30 0,30",
+        "100,8  80,8  80,40 0,40",
+        "100,28 62,28 62,40 0,40",
+        "100,52 44,52 44,40 0,40",
+        "100,72 30,72 30,40 0,40",
       ];
+
+  // Card-side endpoints (where dots go on the card side)
+  const cardEndpoints = isRight
+    ? [
+        [0, 8],
+        [0, 28],
+        [0, 52],
+        [0, 72],
+      ]
+    : [
+        [100, 8],
+        [100, 28],
+        [100, 52],
+        [100, 72],
+      ];
+  const chipEndpoint = isRight ? [100, 40] : [0, 40];
 
   return (
     <svg
-      viewBox="0 0 100 60"
+      viewBox="0 0 100 80"
       preserveAspectRatio="none"
       className={`${isRight ? "vm-trace-r" : "vm-trace-l"} ${className ?? ""}`}
       aria-hidden="true"
@@ -291,15 +404,27 @@ function TraceField({
             className="vm-trace-anim"
             points={pts}
             stroke="var(--color-brand)"
-            strokeWidth="1.25"
-            strokeDasharray="4 12"
+            strokeWidth="1.5"
+            strokeDasharray="5 14"
             fill="none"
-            opacity={i === 1 || i === 2 ? 0.55 : 0.85}
+            opacity={0.85}
             style={{ animationDelay: `${i * 0.18}s` } as React.CSSProperties}
             vectorEffect="non-scaling-stroke"
           />
         </Fragment>
       ))}
+
+      {/* PCB-via dots at the card-side endpoints */}
+      {cardEndpoints.map(([x, y], i) => (
+        <Fragment key={`endpoint-card-${i}`}>
+          <circle cx={x} cy={y} r="2.5" fill="white" stroke="var(--color-brand)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          <circle cx={x} cy={y} r="1" fill="var(--color-brand)" />
+        </Fragment>
+      ))}
+
+      {/* Convergence dot at the chip-side endpoint (slightly larger) */}
+      <circle cx={chipEndpoint[0]} cy={chipEndpoint[1]} r="3.5" fill="white" stroke="var(--color-brand)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      <circle cx={chipEndpoint[0]} cy={chipEndpoint[1]} r="1.5" fill="var(--color-brand)" />
     </svg>
   );
 }
