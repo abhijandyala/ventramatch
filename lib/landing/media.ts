@@ -165,11 +165,11 @@ export const mediaSlots = {
     src: "/media/profile-builder-startup.mp4",
     srcWebm: "/media/profile-builder-startup.webm",
     poster: "/media/profile-builder-startup-poster.jpg",
-    aspect: "16/9",
-    durationSec: 14,
+    aspect: "1280/832", // matches the source recording, ≈ 1.54
+    durationSec: 36,
     brief:
-      "Sped-up screen recording of a startup completing the 8-step profile builder. Shows real typing into the inputs at /build, sector chips highlighting, file upload, and a clean Publish click at the end.",
-    ready: false,
+      "Sped-up screen recording of a startup completing the 8-step profile builder at /build.",
+    ready: true,
     caption: "Startup profile builder walkthrough.",
   },
   profileBuilderInvestor: {
@@ -179,11 +179,11 @@ export const mediaSlots = {
     src: "/media/profile-builder-investor.mp4",
     srcWebm: "/media/profile-builder-investor.webm",
     poster: "/media/profile-builder-investor-poster.jpg",
-    aspect: "16/9",
-    durationSec: 14,
+    aspect: "1280/832",
+    durationSec: 35,
     brief:
       "Sped-up screen recording of an investor completing the 8-step profile builder at /build/investor.",
-    ready: false,
+    ready: true,
     caption: "Investor profile builder walkthrough.",
   },
 

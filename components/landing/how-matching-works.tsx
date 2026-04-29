@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Reveal } from "@/components/landing/reveal";
 import { MediaSlot } from "@/components/landing/media-slot";
 import { ScoreViz } from "@/components/landing/score-viz";
@@ -150,6 +151,12 @@ function Step1Panel() {
   );
 }
 
+/**
+ * Side toggle — two text-button tabs with an animated underline.
+ * Active label uses the side's tone color (startup = brand green,
+ * investor = info blue). Underline slides between tabs via shared
+ * layoutId. Not a pill.
+ */
 function SideToggle({
   side,
   onChange,
@@ -157,8 +164,12 @@ function SideToggle({
   side: "startup" | "investor";
   onChange: (s: "startup" | "investor") => void;
 }) {
+  const TONE = {
+    startup: "var(--color-brand)",
+    investor: "var(--color-info)",
+  } as const;
   return (
-    <div className="inline-flex items-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-1">
+    <div className="inline-flex items-end gap-8 border-b border-[color:var(--color-border)] px-1">
       {(["startup", "investor"] as const).map((s) => {
         const on = side === s;
         return (
@@ -168,13 +179,21 @@ function SideToggle({
             onClick={() => onChange(s)}
             aria-pressed={on}
             className={[
-              "rounded-full px-5 py-1.5 text-[12.5px] font-medium capitalize transition-colors",
+              "relative pb-3 text-[14px] font-semibold capitalize tracking-[-0.005em] transition-colors",
               on
-                ? "bg-[color:var(--color-text-strong)] text-white"
-                : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]",
+                ? "text-[color:var(--color-text-strong)]"
+                : "text-[color:var(--color-text-faint)] hover:text-[color:var(--color-text-strong)]",
             ].join(" ")}
           >
             {s}
+            {on && (
+              <motion.span
+                layoutId="hmw-side-underline"
+                className="absolute -bottom-[1px] left-0 right-0 h-[2px] rounded-full"
+                style={{ backgroundColor: TONE[s] }}
+                transition={{ type: "spring", stiffness: 380, damping: 32 }}
+              />
+            )}
           </button>
         );
       })}

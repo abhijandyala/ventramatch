@@ -4,18 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 /**
- * ScoreViz — the auto-cycling scoring visualization.
+ * ScoreViz — auto-cycling, color-coded scoring visualization.
  *
- * Two parties flank a circular score gauge. Below the gauge, five inputs
- * reveal one at a time, each pushing the gauge forward. After all five,
- * a one-line reason appears. Then the cycle moves to the next pair.
+ * Two parties flank a circular gauge made of 5 segments — one per input,
+ * each in its own brand-palette color. As inputs reveal, their segments
+ * fill from segment-start to (segment-length × value). The cumulative
+ * score number ticks up at the center. Below, a breakdown table mirrors
+ * the same color coding.
+ *
+ * Design choices (vs. the earlier "single green ring + grey rows"):
+ *   - Per-input tones (brand · info · warn · ink · muted)
+ *   - Sharper corners (rounded-[14px] / [10px], not 24/16)
+ *   - Stronger borders (border-strong on outer card)
+ *   - Accent strip on each party card (startup → brand; investor → info)
+ *   - Color-coded left bars on breakdown rows
  *
  * Used by:
  *   - /score (the dedicated page)
  *   - HowMatchingWorks (the homepage sticky-scroll section, step 02)
  *
  * Props:
- *   - showFooter (default true): render the pair dots + "view the formula" link
+ *   - showFooter (default true): pair dots + "view the formula" link
  */
 
 const CYCLE_MS = 10000;
@@ -23,12 +32,39 @@ const REVEAL_FIRST_DELAY_MS = 700;
 const REVEAL_INTERVAL_MS = 700;
 const REASON_DELAY_MS = 4700;
 
+type Tone = "brand" | "info" | "warn" | "ink" | "muted";
+
+const TONE_STROKE: Record<Tone, string> = {
+  brand: "var(--color-brand)",
+  info: "var(--color-info)",
+  warn: "var(--color-warn)",
+  ink: "var(--color-text-strong)",
+  muted: "var(--color-text-muted)",
+};
+
+const TONE_TEXT: Record<Tone, string> = {
+  brand: "text-[color:var(--color-brand-strong)]",
+  info: "text-[color:var(--color-info)]",
+  warn: "text-[color:var(--color-warn)]",
+  ink: "text-[color:var(--color-text-strong)]",
+  muted: "text-[color:var(--color-text-muted)]",
+};
+
+const TONE_BG_BAR: Record<Tone, string> = {
+  brand: "bg-[color:var(--color-brand)]",
+  info: "bg-[color:var(--color-info)]",
+  warn: "bg-[color:var(--color-warn)]",
+  ink: "bg-[color:var(--color-text-strong)]",
+  muted: "bg-[color:var(--color-text-faint)]",
+};
+
 type Input = {
   key: string;
   label: string;
   value: number;
   weight: number;
   reason: string;
+  tone: Tone;
 };
 
 type Party = {
@@ -42,7 +78,7 @@ type Pair = {
   id: string;
   startup: Party;
   investor: Party;
-  inputs: Input[];
+  inputs: Input[]; // exactly 5; weights sum to 100
   reason: string;
 };
 
@@ -62,11 +98,11 @@ const PAIRS: Pair[] = [
       initial: "NB",
     },
     inputs: [
-      { key: "sector", label: "Sector", value: 0.95, weight: 30, reason: "AI infra ⊂ AI / ML" },
-      { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Seed" },
-      { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$1.0M inside band" },
-      { key: "geo", label: "Geography", value: 1.0, weight: 15, reason: "NYC ⇄ NYC" },
-      { key: "traction", label: "Traction", value: 0.5, weight: 10, reason: "Early — 3-mo growth only" },
+      { key: "sector", label: "Sector", value: 0.95, weight: 30, reason: "AI infra ⊂ AI / ML", tone: "brand" },
+      { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Seed", tone: "info" },
+      { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$1.0M inside band", tone: "warn" },
+      { key: "geo", label: "Geography", value: 1.0, weight: 15, reason: "NYC ⇄ NYC", tone: "ink" },
+      { key: "traction", label: "Traction", value: 0.5, weight: 10, reason: "Early — 3-mo growth only", tone: "muted" },
     ],
     reason: "Sector, stage, check, geo all line up. Traction is early.",
   },
@@ -85,11 +121,11 @@ const PAIRS: Pair[] = [
       initial: "KV",
     },
     inputs: [
-      { key: "sector", label: "Sector", value: 0.3, weight: 30, reason: "Consumer fintech outside thesis" },
-      { key: "stage", label: "Stage", value: 0.5, weight: 25, reason: "KV rarely writes pre-seed" },
-      { key: "check", label: "Check size", value: 0.4, weight: 20, reason: "$500K below their band" },
-      { key: "geo", label: "Geography", value: 1.0, weight: 15, reason: "Both SF" },
-      { key: "traction", label: "Traction", value: 0.8, weight: 10, reason: "Strong metrics for stage" },
+      { key: "sector", label: "Sector", value: 0.3, weight: 30, reason: "Consumer fintech outside thesis", tone: "brand" },
+      { key: "stage", label: "Stage", value: 0.5, weight: 25, reason: "KV rarely writes pre-seed", tone: "info" },
+      { key: "check", label: "Check size", value: 0.4, weight: 20, reason: "$500K below their band", tone: "warn" },
+      { key: "geo", label: "Geography", value: 1.0, weight: 15, reason: "Both SF", tone: "ink" },
+      { key: "traction", label: "Traction", value: 0.8, weight: 10, reason: "Strong metrics for stage", tone: "muted" },
     ],
     reason: "Same city, but check too small and sector outside the thesis.",
   },
@@ -108,11 +144,11 @@ const PAIRS: Pair[] = [
       initial: "az",
     },
     inputs: [
-      { key: "sector", label: "Sector", value: 0.85, weight: 30, reason: "Healthtech ∩ Health systems" },
-      { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Seed" },
-      { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$3.0M inside band" },
-      { key: "geo", label: "Geography", value: 0.4, weight: 15, reason: "Boston ⇄ Bay Area, soft signal" },
-      { key: "traction", label: "Traction", value: 0.7, weight: 10, reason: "Solid pilots" },
+      { key: "sector", label: "Sector", value: 0.85, weight: 30, reason: "Healthtech ∩ Health systems", tone: "brand" },
+      { key: "stage", label: "Stage", value: 1.0, weight: 25, reason: "Both back Seed", tone: "info" },
+      { key: "check", label: "Check size", value: 1.0, weight: 20, reason: "$3.0M inside band", tone: "warn" },
+      { key: "geo", label: "Geography", value: 0.4, weight: 15, reason: "Boston ⇄ Bay Area, soft signal", tone: "ink" },
+      { key: "traction", label: "Traction", value: 0.7, weight: 10, reason: "Solid pilots", tone: "muted" },
     ],
     reason: "Strong fit on the algorithm; geography is the only soft signal.",
   },
@@ -210,22 +246,22 @@ export function ScoreViz({ showFooter = true }: { showFooter?: boolean }) {
       onMouseEnter={onHoverEnter}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+      <div className="overflow-hidden rounded-[14px] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
         {/* Top: cards + gauge */}
-        <div className="grid grid-cols-1 items-center gap-8 p-7 md:grid-cols-[1fr_auto_1fr] md:gap-10 md:p-10 lg:p-14">
-          <PartyCard label="Startup" party={pair.startup} align="left" pairId={pair.id} />
-          <Gauge score={score} pairId={pair.id} />
-          <PartyCard label="Investor" party={pair.investor} align="right" pairId={pair.id} />
+        <div className="grid grid-cols-1 items-stretch gap-6 p-6 md:grid-cols-[1fr_auto_1fr] md:gap-10 md:p-9 lg:p-12">
+          <PartyCard label="Startup" tone="brand" party={pair.startup} pairId={pair.id} side="left" />
+          <SegmentedGauge inputs={pair.inputs} revealedCount={revealedCount} score={score} pairId={pair.id} />
+          <PartyCard label="Investor" tone="info" party={pair.investor} pairId={pair.id} side="right" />
         </div>
 
         <div className="border-t border-[color:var(--color-border)]" />
 
         {/* Breakdown */}
-        <div className="p-7 md:p-10 lg:p-14">
+        <div className="bg-[color:var(--color-bg)] p-6 md:p-9 lg:p-12">
           <p className="font-mono text-[10.5px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
             Breakdown
           </p>
-          <ul className="mt-4 divide-y divide-[color:var(--color-border)]">
+          <ul className="mt-4 overflow-hidden rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] divide-y divide-[color:var(--color-border)]">
             {pair.inputs.map((input, i) => {
               const revealed = i < revealedCount;
               const contribution = (input.value * input.weight).toFixed(1);
@@ -240,7 +276,7 @@ export function ScoreViz({ showFooter = true }: { showFooter?: boolean }) {
             })}
           </ul>
 
-          <div className="mt-7 min-h-[68px]">
+          <div className="mt-6 min-h-[64px]">
             <AnimatePresence mode="wait">
               {showReason && (
                 <motion.div
@@ -249,12 +285,13 @@ export function ScoreViz({ showFooter = true }: { showFooter?: boolean }) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                  className="rounded-[10px] border-l-[3px] border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] px-4 py-3"
                 >
-                  <p className="font-mono text-[10.5px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+                  <p className="font-mono text-[10.5px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-brand-strong)]">
                     One-line reason
                   </p>
-                  <p className="mt-2 max-w-[60ch] text-[15px] leading-[1.55] text-[color:var(--color-text-strong)]">
-                    &ldquo;{pair.reason}&rdquo;
+                  <p className="mt-1 max-w-[60ch] text-[14.5px] leading-[1.55] text-[color:var(--color-text-strong)]">
+                    {pair.reason}
                   </p>
                 </motion.div>
               )}
@@ -295,84 +332,137 @@ export function ScoreViz({ showFooter = true }: { showFooter?: boolean }) {
   );
 }
 
-/* ---------------- Internal components ---------------- */
+/* ---------------- Party card with accent strip ---------------- */
 
 function PartyCard({
   label,
   party,
-  align,
+  side,
+  tone,
   pairId,
 }: {
   label: string;
   party: Party;
-  align: "left" | "right";
+  side: "left" | "right";
+  tone: Tone;
   pairId: string;
 }) {
   return (
     <motion.div
-      key={`${pairId}-${align}`}
-      initial={{ opacity: 0, x: align === "left" ? -16 : 16 }}
+      key={`${pairId}-${side}`}
+      initial={{ opacity: 0, x: side === "left" ? -16 : 16 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       className={[
-        "rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] p-5",
-        align === "right" ? "text-right" : "text-left",
+        "relative overflow-hidden rounded-[12px] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] p-5 pt-6",
+        side === "right" ? "text-right" : "text-left",
       ].join(" ")}
     >
-      <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+      {/* Accent strip — top edge */}
+      <span
+        aria-hidden
+        className={["absolute inset-x-0 top-0 h-[3px]", TONE_BG_BAR[tone]].join(" ")}
+      />
+      <p
+        className={[
+          "font-mono text-[10px] font-semibold uppercase tracking-[0.18em]",
+          TONE_TEXT[tone],
+        ].join(" ")}
+      >
         {label}
       </p>
       <div
         className={[
           "mt-2.5 flex items-center gap-3",
-          align === "right" ? "flex-row-reverse" : "",
+          side === "right" ? "flex-row-reverse" : "",
         ].join(" ")}
       >
-        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-[color:var(--color-surface)] font-mono text-[11px] font-semibold uppercase text-[color:var(--color-text-strong)] ring-1 ring-[color:var(--color-border)]">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-[color:var(--color-bg)] font-mono text-[11px] font-semibold uppercase text-[color:var(--color-text-strong)] ring-1 ring-[color:var(--color-border-strong)]">
           {party.initial}
         </div>
         <p className="text-[16px] font-semibold leading-tight text-[color:var(--color-text-strong)]">
           {party.name}
         </p>
       </div>
-      <p className="mt-3 text-[12.5px] text-[color:var(--color-text-muted)]">
+      <p className="mt-3 text-[12.5px] text-[color:var(--color-text-strong)]">
         {party.meta}
       </p>
-      <p className="mt-1 font-mono text-[11px] text-[color:var(--color-text-faint)]">
+      <p className="mt-1 font-mono text-[11px] text-[color:var(--color-text-muted)]">
         {party.detail}
       </p>
     </motion.div>
   );
 }
 
-function Gauge({ score, pairId }: { score: number; pairId: string }) {
+/* ---------------- Segmented multi-color gauge ---------------- */
+
+function SegmentedGauge({
+  inputs,
+  revealedCount,
+  score,
+  pairId,
+}: {
+  inputs: Input[];
+  revealedCount: number;
+  score: number;
+  pairId: string;
+}) {
   const r = 86;
+  const cx = 100;
+  const cy = 100;
   const c = 2 * Math.PI * r;
+
+  // Pre-compute each segment's geometry. Weights are out of 100; the ring
+  // covers a full revolution so 1pt of weight = c/100 of arc length.
+  let cumulativeWeight = 0;
+  const segments = inputs.map((input) => {
+    const startWeight = cumulativeWeight;
+    const segmentLen = (input.weight / 100) * c;
+    cumulativeWeight += input.weight;
+    return { input, startWeight, segmentLen };
+  });
+
   return (
-    <div className="relative mx-auto h-[210px] w-[210px]" key={pairId}>
+    <div
+      className="relative mx-auto h-[210px] w-[210px] shrink-0"
+      key={pairId}
+    >
       <svg viewBox="0 0 200 200" className="h-full w-full" aria-hidden>
-        <circle cx="100" cy="100" r={r} fill="none" stroke="var(--color-border)" strokeWidth="6" />
-        <motion.circle
-          cx="100"
-          cy="100"
+        {/* Track — single faint ring underneath */}
+        <circle
+          cx={cx}
+          cy={cy}
           r={r}
           fill="none"
-          stroke="var(--color-brand)"
+          stroke="var(--color-border)"
           strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          initial={{ strokeDashoffset: c }}
-          animate={{ strokeDashoffset: c * (1 - score / 100) }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          transform="rotate(-90 100 100)"
         />
-        {[0.25, 0.5, 0.75].map((t) => {
-          const angle = -Math.PI / 2 + t * Math.PI * 2;
-          const x1 = 100 + Math.cos(angle) * (r + 6);
-          const y1 = 100 + Math.sin(angle) * (r + 6);
-          const x2 = 100 + Math.cos(angle) * (r + 11);
-          const y2 = 100 + Math.sin(angle) * (r + 11);
-          return <line key={t} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-border-strong)" strokeWidth={1} />;
+        {/* Per-input segments */}
+        {segments.map(({ input, startWeight, segmentLen }, i) => {
+          const revealed = i < revealedCount;
+          const fillFraction = revealed ? input.value : 0;
+          // Rotate so the segment starts at the top (`-90°`) plus its
+          // cumulative weight expressed in degrees.
+          const startAngle = (startWeight / 100) * 360 - 90;
+          return (
+            <motion.circle
+              key={input.key}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill="none"
+              stroke={TONE_STROKE[input.tone]}
+              strokeWidth="6"
+              strokeLinecap="butt"
+              strokeDasharray={`${segmentLen} ${c - segmentLen}`}
+              initial={{ strokeDashoffset: 0 - 0 + segmentLen }}
+              animate={{
+                strokeDashoffset: segmentLen - segmentLen * fillFraction,
+              }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              transform={`rotate(${startAngle} ${cx} ${cy})`}
+            />
+          );
         })}
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -395,6 +485,8 @@ function Gauge({ score, pairId }: { score: number; pairId: string }) {
   );
 }
 
+/* ---------------- Breakdown row with tone bar ---------------- */
+
 function BreakdownRow({
   input,
   revealed,
@@ -407,30 +499,55 @@ function BreakdownRow({
   return (
     <li>
       <motion.div
-        animate={{ opacity: revealed ? 1 : 0.28 }}
+        animate={{ opacity: revealed ? 1 : 0.32 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-center gap-4 py-3 md:gap-6"
+        className="relative flex items-center gap-4 px-4 py-3 md:gap-6 md:px-5"
       >
+        {/* Tone bar — left edge */}
+        <span
+          aria-hidden
+          className={[
+            "absolute inset-y-0 left-0 w-[3px]",
+            TONE_BG_BAR[input.tone],
+          ].join(" ")}
+        />
+        {/* Check */}
         <span
           className={[
-            "grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold transition-colors",
+            "ml-1 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-bold transition-colors",
             revealed
-              ? "bg-[color:var(--color-brand)] text-white"
+              ? `${TONE_BG_BAR[input.tone]} text-white`
               : "border border-[color:var(--color-border-strong)] text-[color:var(--color-text-faint)]",
           ].join(" ")}
         >
           {revealed ? "✓" : ""}
         </span>
-        <span className="w-[100px] shrink-0 font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-[color:var(--color-text-strong)]">
+        {/* Label */}
+        <span
+          className={[
+            "w-[100px] shrink-0 font-mono text-[10.5px] font-semibold uppercase tracking-[0.16em]",
+            TONE_TEXT[input.tone],
+          ].join(" ")}
+        >
           {input.label}
         </span>
-        <span className="flex-1 truncate text-[13.5px] text-[color:var(--color-text-muted)]">
+        {/* Reason */}
+        <span className="flex-1 truncate text-[13.5px] text-[color:var(--color-text-strong)]">
           {input.reason}
         </span>
+        {/* Weight badge */}
         <span className="hidden w-[70px] shrink-0 text-right font-mono text-[11px] tabular-nums text-[color:var(--color-text-faint)] sm:inline">
           weight {input.weight}
         </span>
-        <span className="w-[60px] shrink-0 text-right font-mono text-[12px] font-semibold tabular-nums text-[color:var(--color-text-strong)]">
+        {/* Contribution */}
+        <span
+          className={[
+            "w-[60px] shrink-0 text-right font-mono text-[12px] font-semibold tabular-nums",
+            revealed
+              ? TONE_TEXT[input.tone]
+              : "text-[color:var(--color-text-faint)]",
+          ].join(" ")}
+        >
           +{contribution}
         </span>
       </motion.div>
