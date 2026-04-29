@@ -1,16 +1,28 @@
 import { Wordmark } from "@/components/landing/wordmark";
 import { MatchFlow } from "@/components/landing/match-flow";
+import { SourceTicker } from "@/components/landing/source-ticker";
+import { FiveInputs } from "@/components/landing/five-inputs";
+import { Numbers } from "@/components/landing/numbers";
+import { HowMatchingWorks } from "@/components/landing/how-matching-works";
+import { ComplianceStrip } from "@/components/landing/compliance-strip";
 
 /**
- * Landing page — Phase 0 (foundation).
+ * Landing page — Phase 1.
  *
- * The hero is intentionally side-neutral: founders use this app to find
- * investors, investors use it to find founders. Copy must serve both sides
- * and never address one of them in the second person.
+ * Side-neutral throughout: founders use this app to find investors,
+ * investors use it to find founders. Copy must serve both sides.
  *
- * Hero layout: centered stacked headline + two short sentences + the
- * MatchFlow visual (animated startup × investor pairs cycling through).
- * No video slot here in v1 — the MatchFlow is the hero proof.
+ * Section order:
+ *   1. Sticky nav
+ *   2. Hero (centered + MatchFlow visual)
+ *   3. Source ticker (credibility row, no marquee)
+ *   4. Five inputs (the algorithm, made readable, with B1–B5 slots)
+ *   5. Numbers (real research + custom SVG bar chart)
+ *   6. How matching works (3 steps + Slot D motion graphic)
+ *   7. Compliance strip (4 short factual lines)
+ *   8. Footer
+ *
+ * No waitlist (per locked decision). No fake product mockups.
  */
 
 export default function HomePage() {
@@ -18,6 +30,11 @@ export default function HomePage() {
     <main className="bg-[color:var(--color-bg)] text-[color:var(--color-text)]">
       <Nav />
       <Hero />
+      <SourceTicker />
+      <FiveInputs />
+      <Numbers />
+      <HowMatchingWorks />
+      <ComplianceStrip />
       <Footer />
     </main>
   );
@@ -26,11 +43,30 @@ export default function HomePage() {
 function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/85 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--color-bg)]/70">
-      <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-6">
+      <div className="mx-auto flex h-16 max-w-[1280px] items-center justify-between px-6">
         <Wordmark size="md" />
-        <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-text-faint)]">
-          Phase 0 · foundation
-        </span>
+        <nav aria-label="Primary" className="hidden items-center gap-7 md:flex">
+          <a
+            href="#how"
+            className="text-sm text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+          >
+            How matching works
+          </a>
+          <a
+            href="#compliance"
+            className="text-sm text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+          >
+            Compliance
+          </a>
+          <a
+            href="https://github.com/abhijandyala/ventramatch"
+            className="text-sm text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
+        </nav>
       </div>
     </header>
   );
@@ -73,20 +109,43 @@ function Hero() {
 
 function Footer() {
   return (
-    <footer className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
-      <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-4 px-6 py-10 md:flex-row md:items-center">
-        <Wordmark size="sm" />
-        <p className="text-[12px] text-[color:var(--color-text-faint)]">
-          © {new Date().getFullYear()} VentraMatch. Informational only. Not investment advice.
-        </p>
-        <a
-          href="https://github.com/abhijandyala/ventramatch"
-          className="text-[13px] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]"
-          target="_blank"
-          rel="noreferrer"
-        >
-          GitHub
-        </a>
+    <footer className="bg-[color:var(--color-bg)]">
+      <div className="mx-auto max-w-[1280px] px-6 py-16">
+        <div className="flex flex-col items-start gap-10 md:flex-row md:items-end md:justify-between">
+          <div>
+            <Wordmark size="lg" />
+            <p className="mt-5 max-w-[40ch] text-[14px] leading-[1.65] text-[color:var(--color-text-muted)]">
+              Score-based matching for founders and investors. Mutual interest unlocks contact.
+            </p>
+          </div>
+          <nav
+            aria-label="Footer"
+            className="flex flex-wrap gap-x-8 gap-y-3 text-[14px] text-[color:var(--color-text-muted)]"
+          >
+            <a href="#how" className="hover:text-[color:var(--color-text-strong)]">
+              How matching works
+            </a>
+            <a href="#compliance" className="hover:text-[color:var(--color-text-strong)]">
+              Compliance
+            </a>
+            <a
+              href="https://github.com/abhijandyala/ventramatch"
+              className="hover:text-[color:var(--color-text-strong)]"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+            </a>
+          </nav>
+        </div>
+
+        <div className="mt-14 flex flex-col items-start gap-3 border-t border-[color:var(--color-border)] pt-6 text-[12px] text-[color:var(--color-text-faint)] md:flex-row md:items-center md:justify-between">
+          <p>© {new Date().getFullYear()} VentraMatch.</p>
+          <p>
+            Informational only. Not investment advice. Sample pairings shown
+            on this page are illustrative.
+          </p>
+        </div>
       </div>
     </footer>
   );
