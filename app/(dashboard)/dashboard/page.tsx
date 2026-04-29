@@ -1,25 +1,49 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { founderDashboardMock } from "@/lib/dashboards/mock-data";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import {
+  founderDashboardMock,
+  investorFeedMock,
+  getSampleStartupById,
+  type SampleStartup,
+} from "@/lib/dashboards/mock-data";
 import { TopMatchCard } from "@/components/dashboard/TopMatchCard";
+import { TopStartupCard } from "@/components/dashboard/TopStartupCard";
 import { RecommendedInvestorCard } from "@/components/dashboard/RecommendedInvestorCard";
+import { RecommendedStartupCard } from "@/components/dashboard/RecommendedStartupCard";
 import { ActionRequiredCard } from "@/components/dashboard/ActionRequiredCard";
 import { ProfilePerformanceCard } from "@/components/dashboard/ProfilePerformanceCard";
 import { ImproveMatchesCard } from "@/components/dashboard/ImproveMatchesCard";
 import { ProfileCompletionCard } from "@/components/dashboard/ProfileCompletionCard";
 import { CombinedActivityCard } from "@/components/dashboard/CombinedActivityCard";
 import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
+import { MatchAnalysisCard } from "@/components/dashboard/MatchAnalysisCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { cn } from "@/lib/utils";
 
-// TODO(handoff): replace hardcoded name with real session user once auth
-// integration is wired. Use requireUser() from lib/auth/session.ts.
-const MOCK_FIRST_NAME = "Alex";
+export const dynamic = "force-dynamic";
 
-export default async function FounderDashboardPage() {
+export default async function DashboardPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/sign-in");
+  if (!session.user.onboardingCompleted) redirect("/onboarding");
+
+  const role = session.user.role as "founder" | "investor" | null;
+  const firstName = session.user.name?.split(" ")[0] ?? "there";
+
+  console.log(`[dashboard] userId=${session.user.id} role=${role}`);
+
+  if (role === "investor") {
+    return <InvestorDashboard firstName={firstName} />;
+  }
+
+  return <FounderDashboard firstName={firstName} />;
+}
+
+function FounderDashboard({ firstName }: { firstName: string }) {
   const data = founderDashboardMock;
-  const firstName = MOCK_FIRST_NAME;
   const profileComplete = data.profileStrength.percent >= 100;
 
   return (
@@ -47,7 +71,6 @@ export default async function FounderDashboardPage() {
       </section>
 
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
-        {/* Row 1: Hero + Right rail */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
             <TopMatchCard matches={data.topMatches} newToday={data.newInvestorsToday} />
@@ -100,7 +123,6 @@ export default async function FounderDashboardPage() {
           </aside>
         </div>
 
-        {/* Row 2: Bottom cards */}
         <section
           aria-label="Profile and activity overview"
           className={cn(
@@ -121,6 +143,117 @@ export default async function FounderDashboardPage() {
             activity={data.investorActivity}
           />
           <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
+        </section>
+      </main>
+    </>
+  );
+}
+
+function InvestorDashboard({ firstName }: { firstName: string }) {
+  const data = investorFeedMock;
+  const profileComplete = data.profileStrength.percent >= 100;
+
+  const topStartup: SampleStartup | undefined = data.topStartups[0]
+    ? getSampleStartupById(data.topStartups[0].startupId)
+    : undefined;
+
+  return (
+    <>
+      <section className="relative overflow-hidden border-b border-[var(--color-border)]">
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-x-0 top-0 -z-10 h-[180px]",
+            "bg-[radial-gradient(60%_60%_at_15%_0%,var(--color-brand-tint)_0%,transparent_70%)]",
+            "opacity-70",
+          )}
+        />
+        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 sm:py-6">
+          <p className="text-[11px] leading-4 font-medium tracking-[0.08em] uppercase text-[var(--color-text-faint)]">
+            Investor dashboard
+          </p>
+          <h1 className="mt-1 text-[20px] leading-7 font-semibold tracking-[-0.015em] text-[var(--color-text)]">
+            Welcome back, {firstName}.
+          </h1>
+          <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
+            New startups matching your thesis this week.
+          </p>
+        </div>
+      </section>
+
+      <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
+          <section className="lg:col-span-8 flex flex-col gap-5">
+            {topStartup && data.topStartups[0] && (
+              <TopStartupCard startup={topStartup} match={data.topStartups[0]} />
+            )}
+            <Disclaimer />
+
+            <section aria-labelledby="pipeline-title" className="flex flex-col">
+              <header className="flex items-baseline justify-between gap-4">
+                <h2
+                  id="pipeline-title"
+                  className="text-[15px] leading-5 font-semibold tracking-tight text-[var(--color-text)]"
+                >
+                  Your pipeline
+                </h2>
+                <ViewAllLink href="/feed" label="View all" />
+              </header>
+
+              <ul className="mt-3 flex flex-col gap-3">
+                {data.recommended.map((startup) => (
+                  <li key={startup.id}>
+                    <RecommendedStartupCard startup={startup} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </section>
+
+          <aside className="lg:col-span-4 flex flex-col">
+            <div className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+              <RailSection title="Profile performance" aside="(this month)">
+                <ProfilePerformanceCard
+                  stats={data.profilePerformance.stats}
+                  series={data.profilePerformance.series}
+                  borderless
+                />
+              </RailSection>
+              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
+              <RailSection title="Match analysis">
+                <MatchAnalysisCard
+                  dimensions={data.matchAnalysis.dimensions}
+                  borderless
+                />
+              </RailSection>
+              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
+              <RailSection title="How to improve your matches" aside={undefined}>
+                <ImproveMatchesCard
+                  items={data.improveMatches}
+                  completionPct={data.profileStrength.percent}
+                  completeHref="/profile"
+                  borderless
+                />
+              </RailSection>
+            </div>
+          </aside>
+        </div>
+
+        <section
+          aria-label="Profile and activity overview"
+          className={cn(
+            "mt-5 grid grid-cols-1 gap-3",
+            profileComplete ? "md:grid-cols-1" : "md:grid-cols-2",
+          )}
+        >
+          {!profileComplete && (
+            <ProfileCompletionCard
+              percent={data.profileStrength.percent}
+              band={data.profileStrength.band}
+              upliftPct={data.profileStrength.completionUpliftPct}
+              checklist={data.profileStrength.checklist}
+            />
+          )}
         </section>
       </main>
     </>
