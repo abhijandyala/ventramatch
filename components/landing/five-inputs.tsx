@@ -126,7 +126,7 @@ export function FiveInputs() {
       <div className="mx-auto max-w-[1280px] px-6 py-20 md:py-24">
         {/* ---------- Section head — minimal label only ---------- */}
         <Reveal>
-          <h2 className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+          <h2 className="text-center font-mono text-[16px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-strong)] md:text-[18px]">
             The algorithm
           </h2>
         </Reveal>
