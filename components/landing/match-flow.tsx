@@ -556,7 +556,10 @@ function MatchChip({ stage }: { stage: Stage }) {
       ))}
 
       {/* Chip body — animates background color from white to brand-green
-         over MATCHING_DURATION_MS, with an outer-to-inner radial fill. */}
+         over MATCHING_DURATION_MS. When the body is green, the green
+         decorative elements (corner notches, Pin 1, grid, inner-core
+         border + corner ticks) all transition to white so they don't
+         disappear into the body color. */}
       <motion.div
         animate={{
           backgroundColor: isFilled ? "var(--color-brand)" : "var(--color-surface)",
@@ -566,33 +569,92 @@ function MatchChip({ stage }: { stage: Stage }) {
         className="relative h-[160px] w-[220px] overflow-hidden rounded-[8px] border shadow-[0_14px_44px_-14px_rgba(22,163,74,0.4)]"
       >
         {/* Corner notches (3 — top-right omitted for orientation) */}
-        <span className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 border-l-2 border-t-2 border-[color:var(--color-brand)]" />
-        <span className="pointer-events-none absolute bottom-2 left-2 h-3.5 w-3.5 border-l-2 border-b-2 border-[color:var(--color-brand)]" />
-        <span className="pointer-events-none absolute bottom-2 right-2 h-3.5 w-3.5 border-r-2 border-b-2 border-[color:var(--color-brand)]" />
+        <span
+          className={`pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 border-l-2 border-t-2 transition-colors duration-1000 ${
+            isFilled ? "border-white" : "border-[color:var(--color-brand)]"
+          }`}
+        />
+        <span
+          className={`pointer-events-none absolute bottom-2 left-2 h-3.5 w-3.5 border-l-2 border-b-2 transition-colors duration-1000 ${
+            isFilled ? "border-white" : "border-[color:var(--color-brand)]"
+          }`}
+        />
+        <span
+          className={`pointer-events-none absolute bottom-2 right-2 h-3.5 w-3.5 border-r-2 border-b-2 transition-colors duration-1000 ${
+            isFilled ? "border-white" : "border-[color:var(--color-brand)]"
+          }`}
+        />
 
         {/* Pin 1 indicator */}
         <span
-          className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[color:var(--color-brand)]"
+          className={`pointer-events-none absolute h-1.5 w-1.5 rounded-full transition-colors duration-1000 ${
+            isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+          }`}
           style={{ left: 14, top: 14 }}
         />
 
-        {/* Internal grid (uneven) */}
-        <div className="pointer-events-none absolute inset-0 opacity-25">
-          <span className="absolute left-0 right-0 block h-px bg-[color:var(--color-brand)]" style={{ top: "32%" }} />
-          <span className="absolute left-0 right-0 block h-px bg-[color:var(--color-brand)]" style={{ top: "72%" }} />
-          <span className="absolute top-0 bottom-0 block w-px bg-[color:var(--color-brand)]" style={{ left: "26%" }} />
-          <span className="absolute top-0 bottom-0 block w-px bg-[color:var(--color-brand)]" style={{ left: "62%" }} />
+        {/* Internal grid (uneven). Stays subtle but switches to white
+           at low opacity once the body is green. */}
+        <div
+          className={`pointer-events-none absolute inset-0 transition-opacity duration-1000 ${
+            isFilled ? "opacity-30" : "opacity-25"
+          }`}
+        >
+          <span
+            className={`absolute left-0 right-0 block h-px transition-colors duration-1000 ${
+              isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+            }`}
+            style={{ top: "32%" }}
+          />
+          <span
+            className={`absolute left-0 right-0 block h-px transition-colors duration-1000 ${
+              isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+            }`}
+            style={{ top: "72%" }}
+          />
+          <span
+            className={`absolute top-0 bottom-0 block w-px transition-colors duration-1000 ${
+              isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+            }`}
+            style={{ left: "26%" }}
+          />
+          <span
+            className={`absolute top-0 bottom-0 block w-px transition-colors duration-1000 ${
+              isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+            }`}
+            style={{ left: "62%" }}
+          />
         </div>
 
-        {/* Inner core (white box). Stays white even when outer fills green —
-           per the spec, the inner box is "shielded" from the green wash.
-           Centered both axes on the chip body. */}
+        {/* Inner core (white box). Stays its own color even when outer
+           fills green; border + corner ticks switch to white so they
+           don't disappear against the green body. */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative flex items-center gap-1 rounded-[6px] border border-[color:var(--color-brand)]/45 bg-[color:var(--color-bg)] px-4 py-2">
-            <span className="pointer-events-none absolute -left-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
-            <span className="pointer-events-none absolute -right-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
-            <span className="pointer-events-none absolute -left-[3px] -bottom-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
-            <span className="pointer-events-none absolute -right-[3px] -bottom-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
+          <div
+            className={`relative flex items-center gap-1 rounded-[6px] border bg-[color:var(--color-bg)] px-4 py-2 transition-colors duration-1000 ${
+              isFilled ? "border-white" : "border-[color:var(--color-brand)]/45"
+            }`}
+          >
+            <span
+              className={`pointer-events-none absolute -left-[3px] -top-[3px] h-1.5 w-1.5 transition-colors duration-1000 ${
+                isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+              }`}
+            />
+            <span
+              className={`pointer-events-none absolute -right-[3px] -top-[3px] h-1.5 w-1.5 transition-colors duration-1000 ${
+                isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+              }`}
+            />
+            <span
+              className={`pointer-events-none absolute -left-[3px] -bottom-[3px] h-1.5 w-1.5 transition-colors duration-1000 ${
+                isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+              }`}
+            />
+            <span
+              className={`pointer-events-none absolute -right-[3px] -bottom-[3px] h-1.5 w-1.5 transition-colors duration-1000 ${
+                isFilled ? "bg-white" : "bg-[color:var(--color-brand)]"
+              }`}
+            />
 
             <AnimatePresence mode="wait">
               <motion.span
@@ -609,8 +671,12 @@ function MatchChip({ stage }: { stage: Stage }) {
           </div>
         </div>
 
-        {/* Silkscreen label */}
-        <span className="pointer-events-none absolute bottom-3 right-3 font-mono text-[9px] uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+        {/* Silkscreen label — switches to white-ish when body is green */}
+        <span
+          className={`pointer-events-none absolute bottom-3 right-3 font-mono text-[9px] uppercase tracking-[0.18em] transition-colors duration-1000 ${
+            isFilled ? "text-white/80" : "text-[color:var(--color-text-faint)]"
+          }`}
+        >
           vmx · 01
         </span>
       </motion.div>
