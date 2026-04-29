@@ -2,11 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Wordmark } from "@/components/landing/wordmark";
 import { ProviderButtons } from "./provider-buttons";
 import { EmailForm } from "./email-form";
-import { cn } from "@/lib/utils";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -38,8 +36,6 @@ const COPY: Record<
 
 export function AuthCard({ mode }: { mode: Mode }) {
   const copy = COPY[mode];
-  const pathname = usePathname();
-  const current: Mode = pathname === "/sign-up" ? "sign-up" : "sign-in";
 
   return (
     <div className="flex min-h-dvh">
@@ -108,11 +104,8 @@ export function AuthCard({ mode }: { mode: Mode }) {
 
         <div className="w-full max-w-[380px]">
 
-          {/* Tab strip */}
-          <Tabs current={current} />
-
           {/* Heading */}
-          <div className="mt-5 mb-5">
+          <div className="mb-5">
             <h2 className="text-[20px] font-semibold tracking-tight text-[var(--color-text)]">
               {copy.heading}
             </h2>
@@ -157,44 +150,5 @@ export function AuthCard({ mode }: { mode: Mode }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function Tabs({ current }: { current: Mode }) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Authentication mode"
-      className="grid grid-cols-2 rounded-[var(--radius)] bg-[var(--color-border)] p-[3px]"
-    >
-      <TabLink href="/sign-in" active={current === "sign-in"} label="Sign In" />
-      <TabLink href="/sign-up" active={current === "sign-up"} label="Sign Up" />
-    </div>
-  );
-}
-
-function TabLink({
-  href,
-  active,
-  label,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href as "/sign-in" | "/sign-up"}
-      role="tab"
-      aria-selected={active}
-      className={cn(
-        "flex h-9 items-center justify-center rounded-[7px] text-[13px] font-medium transition-colors duration-150",
-        active
-          ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
-          : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
-      )}
-    >
-      {label}
-    </Link>
   );
 }
