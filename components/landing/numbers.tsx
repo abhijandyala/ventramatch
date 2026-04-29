@@ -43,18 +43,18 @@ const PRISMS = [
 
 // SVG viewBox + prism geometry (all in viewBox units)
 const VIEW_W = 600;
-const VIEW_H = 360;
-const BASE_Y = 312; // common baseline the prisms sit on
-const PRISM_W = 76;
-const DEPTH_X = 26;
-const DEPTH_Y = 20;
-const MIN_H = 80; // smallest prism is still tall enough for an engraved label
-const MAX_H = 232;
-const SCALE_REF_PCT = 70; // 70% of headroom maps to MAX_H
+const VIEW_H = 400;
+const BASE_Y = 340; // common baseline the prisms sit on
+const PRISM_W = 84;
+const DEPTH_X = 28;
+const DEPTH_Y = 22;
+const MIN_H = 90; // smallest prism still tall enough for an engraved label on its front face
+const MAX_H = 290; // tallest prism caps at this height
+const SCALE_REF_PCT = 65; // VentraMatch's 65% maps exactly to MAX_H
 
 // Hand-placed prism x positions so the visible footprint (PRISM_W + DEPTH_X)
 // is evenly spaced across the viewBox.
-const PRISM_X = [78, 248, 418];
+const PRISM_X = [66, 244, 422];
 
 // Face palettes per tone — small shade-shift between front / top / right
 // gives the cartoon-y oblique-3D look without any rendering tricks.
@@ -87,15 +87,15 @@ export function Numbers() {
           <div>
             <Reveal>
               <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
-                The market we&apos;re in
+                Reply rates
               </p>
             </Reveal>
             <Reveal delay={80}>
               <h2
-                className="mt-5 max-w-[24ch] text-balance font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]"
+                className="mt-5 max-w-[16ch] text-balance font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]"
                 style={{ fontSize: "var(--type-h2)", lineHeight: 1.1 }}
               >
-                A search problem dressed up as a sales problem.
+                Cold email is broken.
               </h2>
             </Reveal>
             <Reveal delay={160}>
@@ -103,15 +103,15 @@ export function Numbers() {
                 className="mt-6 text-[color:var(--color-text-muted)]"
                 style={{ fontSize: "var(--type-body-lg)", lineHeight: 1.65 }}
               >
-                A pre-seed founder reaches out to <Stat>50–250</Stat> investors to close{" "}
-                <Stat>5–20</Stat> checks. Cold-email reply rates sit at <Stat>1–10%</Stat>.
-                There are <Stat>300,000+</Stat> active US angels and <Stat>2,500+</Stat>{" "}
-                active VC funds, and most aren&apos;t the right fit for your raise.
+                Pre-seed founders contact <Stat>50–250</Stat> investors to close{" "}
+                <Stat>5–20</Stat> checks. With <Stat>300,000+</Stat> US angels and{" "}
+                <Stat>2,500+</Stat> VC funds, most aren&apos;t the right fit, so reply
+                rates sit at <Stat>1–10%</Stat>.
               </p>
             </Reveal>
             <Reveal delay={220}>
               <p className="mt-5 text-[14px] leading-relaxed text-[color:var(--color-text-faint)]">
-                Sources: Carta state-of-startups 2025, AngelList market data, OpenVC.
+                Sources: Carta state-of-startups 2025, AngelList, OpenVC.
               </p>
             </Reveal>
           </div>
@@ -279,13 +279,14 @@ function Prism({
   const topPoints = `${x},${top} ${x + w},${top} ${x + w + dx},${top - dy} ${x + dx},${top - dy}`;
   const rightPoints = `${x + w},${top} ${x + w + dx},${top - dy} ${x + w + dx},${baseY - dy} ${x + w},${baseY}`;
 
-  // Engraved label centered on the right face, rotated -90° to read sideways.
-  const rightCx = x + w + dx / 2;
-  const rightCy = top + h / 2 - dy / 2;
+  // Engraved label centered on the FRONT face (the main visible face),
+  // rotated -90° to read sideways. Front face center: (x + w/2, top + h/2).
+  const frontCx = x + w / 2;
+  const frontCy = top + h / 2;
 
   // Value range below the baseline, centered under the prism's visible footprint.
   const valueX = x + (w + dx) / 2;
-  const valueY = baseY + 26;
+  const valueY = baseY + 28;
 
   const prismDuration = 1100;
   const labelDelay = delay + (reduced ? 0 : prismDuration - 250);
@@ -337,20 +338,20 @@ function Prism({
         />
       </g>
 
-      {/* Engraved label on the right side face (rotated -90°). Fades in
-          after the prism finishes growing. */}
+      {/* Engraved label on the front face (rotated -90° to read sideways).
+          Fades in after the prism finishes growing. */}
       <text
-        x={rightCx}
-        y={rightCy}
+        x={frontCx}
+        y={frontCy}
         textAnchor="middle"
         dominantBaseline="middle"
         fill={palette.label}
-        fontSize={10}
+        fontSize={11}
         fontWeight={700}
         letterSpacing="0.14em"
         fontFamily="var(--font-mono, ui-monospace, monospace)"
         style={{ textTransform: "uppercase", ...fadeStyle }}
-        transform={`rotate(-90 ${rightCx} ${rightCy})`}
+        transform={`rotate(-90 ${frontCx} ${frontCy})`}
       >
         {label}
       </text>
