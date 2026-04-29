@@ -1,18 +1,16 @@
 import { Wordmark } from "@/components/landing/wordmark";
-import { MediaSlot } from "@/components/landing/media-slot";
+import { MatchFlow } from "@/components/landing/match-flow";
 
 /**
  * Landing page — Phase 0 (foundation).
  *
- * Minimal by design. Phase 1 builds the structural page on top of these
- * primitives once foundation is reviewed.
+ * The hero is intentionally side-neutral: founders use this app to find
+ * investors, investors use it to find founders. Copy must serve both sides
+ * and never address one of them in the second person.
  *
- * Hero is intentionally side-neutral: founders use this app to find
- * investors, investors use it to find founders. The copy must serve both
- * sides and never address one of them in the second person.
- *
- * Layout: centered text. Right-side visual removed. The hero media slot
- * sits below the text as a wide block (lands in Phase 1+).
+ * Hero layout: centered stacked headline + two short sentences + the
+ * MatchFlow visual (animated startup × investor pairs cycling through).
+ * No video slot here in v1 — the MatchFlow is the hero proof.
  */
 
 export default function HomePage() {
@@ -44,33 +42,30 @@ function Hero() {
       {/* Subtle grid backdrop. Masked so it fades into the page. */}
       <div className="pointer-events-none absolute inset-0 grid-faint [mask-image:linear-gradient(to_bottom,white_25%,transparent_85%)]" />
 
-      <div className="relative mx-auto flex max-w-[960px] flex-col items-center gap-8 px-6 pt-24 pb-12 text-center md:pt-32">
+      <div className="relative mx-auto flex max-w-[960px] flex-col items-center gap-7 px-6 pt-24 pb-14 text-center md:pt-32">
         <h1
-          className="text-balance font-semibold text-[color:var(--color-text-strong)]"
+          className="text-balance font-semibold leading-[0.98]"
           style={{
             fontSize: "var(--type-display)",
-            lineHeight: 1.02,
             letterSpacing: "var(--tracking-display)",
           }}
         >
-          Fundraising matches, scored on fit.
+          <span className="block text-[color:var(--color-text-strong)]">Fundraising,</span>
+          <span className="block text-[color:var(--color-brand)]">matched.</span>
         </h1>
 
-        <p
-          className="max-w-[62ch] text-pretty text-[color:var(--color-text-muted)]"
+        <div
+          className="max-w-[56ch] text-pretty text-[color:var(--color-text-muted)]"
           style={{ fontSize: "var(--type-body-lg)", lineHeight: 1.55 }}
         >
-          VentraMatch scores every founder–investor pair on the five things both sides actually filter on — sector, stage, check size, geography, traction. Mutual interest unlocks contact. No cold-email lottery, no warm-intro gatekeeping.
-        </p>
-
-        <p className="text-[12px] font-mono uppercase tracking-[0.1em] text-[color:var(--color-text-faint)]">
-          Phase 1 builds the full landing page on top of these foundation primitives
-        </p>
+          <p>Founders find investors who back their stage.</p>
+          <p>Investors find startups in their thesis.</p>
+        </div>
       </div>
 
-      {/* Hero media block — full-width within the max content width, sits below the centered text. */}
+      {/* Hero proof — animated sample pairings cycling through. */}
       <div className="relative mx-auto max-w-[1200px] px-6 pb-24 md:pb-32">
-        <MediaSlot slot="hero" className="mx-auto max-w-[1100px]" />
+        <MatchFlow />
       </div>
     </section>
   );
