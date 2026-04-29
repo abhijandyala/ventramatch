@@ -6,6 +6,7 @@ import { Numbers } from "@/components/landing/numbers";
 import { HowMatchingWorks } from "@/components/landing/how-matching-works";
 import { ProductVision } from "@/components/landing/product-vision";
 import { FAQ } from "@/components/landing/faq";
+import GradualBlur from "@/components/ui/gradual-blur";
 
 /**
  * Landing page — Phase 2.5.
@@ -43,6 +44,17 @@ export default function HomePage() {
       <ProductVision />
       <FAQ />
       <Footer />
+      
+      <GradualBlur
+        target="page"
+        position="bottom"
+        height="7rem"
+        strength={2}
+        divCount={5}
+        curve="bezier"
+        exponential
+        opacity={1}
+      />
     </main>
   );
 }
