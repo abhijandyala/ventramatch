@@ -1,9 +1,14 @@
-import { NextResponse, type NextRequest } from "next/server";
+import NextAuth from "next-auth";
+import type { NextRequest } from "next/server";
+import { authConfig } from "@/auth.config";
 
-// Next.js 16+ proxy. Add session refresh / auth when an auth library is wired (Auth.js, Clerk, etc.).
+const { auth } = NextAuth(authConfig);
 
-export function proxy(_request: NextRequest) {
-  return NextResponse.next();
+// Next 16 proxy. Wraps Auth.js v5's edge-safe middleware. Route-protection
+// logic lives in authConfig.callbacks.authorized so it can be tested and
+// reused.
+export function proxy(request: NextRequest) {
+  return (auth as unknown as (req: NextRequest) => Response | Promise<Response>)(request);
 }
 
 export const config = {

@@ -95,7 +95,7 @@ We are explicitly **not** trying to look or feel like:
 | Surface | Register | Notes |
 |---|---|---|
 | `/` (marketing landing) | brand | Only brand surface. Carries the strongest opinion. |
-| `/login`, `/signup` | product | Quiet, minimal, no decoration. |
+| `/sign-in`, `/sign-up` | product | Quiet, minimal, no decoration. |
 | `/feed` (investor) | product | Core loop. Dense, fast, cards are scannable in <5s. |
 | `/profile` (founder) | product | Form-led, encouraging. Live readiness preview. |
 | `/profile` (investor) | product | Form-led, terse. |

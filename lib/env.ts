@@ -6,6 +6,22 @@ const serverEnvSchema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   RESEND_API_KEY: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(1).optional(),
+
+  // ---------- Auth.js (NextAuth v5) ----------
+  AUTH_SECRET: z.string().min(1).optional(),
+  AUTH_URL: z.string().url().optional(),
+  AUTH_TRUST_HOST: z.string().optional(),
+
+  // ---------- OAuth providers ----------
+  AUTH_GOOGLE_ID: z.string().optional(),
+  AUTH_GOOGLE_SECRET: z.string().optional(),
+
+  AUTH_LINKEDIN_ID: z.string().optional(),
+  AUTH_LINKEDIN_SECRET: z.string().optional(),
+
+  AUTH_MICROSOFT_ENTRA_ID_ID: z.string().optional(),
+  AUTH_MICROSOFT_ENTRA_ID_SECRET: z.string().optional(),
+  AUTH_MICROSOFT_ENTRA_ID_ISSUER: z.string().url().optional(),
 });
 
 const clientEnvSchema = z.object({
