@@ -163,6 +163,39 @@
   to { transform: scaleX(1); }
 }
 
+/* Vertical carousel for the AI-deal-memo card in ProductVision.
+   Track content is duplicated; -50% wraps seamlessly back to 0%. */
+@keyframes vm-memo-scroll {
+  0%   { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(0, -50%, 0); }
+}
+
+.vm-memo-track {
+  animation: vm-memo-scroll 18s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vm-memo-track {
+    animation: none;
+  }
+}
+
+/* Slow drift for the green-dot "MEMO" text background. The dots
+   wander in a small loop so the letters feel alive. */
+@keyframes vm-dot-drift {
+  0%   { background-position: 0px 0px; }
+  25%  { background-position: 3px -2px; }
+  50%  { background-position: -1px 3px; }
+  75%  { background-position: -3px -1px; }
+  100% { background-position: 0px 0px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vm-dot-drift { animation: none !important; }
+}
+
 /* MediaSlot placeholder — the labeled card shown when an asset hasn't shipped. */
 .slot-placeholder {
   position: relative;

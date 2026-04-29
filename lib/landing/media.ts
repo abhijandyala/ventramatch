@@ -192,13 +192,15 @@ export const mediaSlots = {
   visionReadiness: {
     id: "E",
     section: "Vision · Readiness score",
-    kind: "lottie",
-    src: "/media/vision/readiness.json",
+    kind: "video",
+    src: "/media/vision/readiness.mp4",
+    srcWebm: "/media/vision/readiness.webm",
+    poster: "/media/vision/readiness-poster.jpg",
     aspect: "16/9",
-    durationSec: 6,
+    durationSec: 4,
     brief:
       "Radial dial slowly fills toward a labeled threshold while small chips (deck · traction · timing · fit) tick in around it. Cool restraint, no glow blobs.",
-    ready: false,
+    ready: true,
     caption: "Animated readiness score dial.",
   },
   visionOutreach: {
