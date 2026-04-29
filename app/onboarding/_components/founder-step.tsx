@@ -17,7 +17,7 @@ const STAGE_VALUES = Object.keys(STAGE_LABELS) as Stage[];
 
 export function FounderStep({ value, onChange, errors }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Field
         id="industry"
         label="Industry"

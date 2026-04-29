@@ -7,7 +7,7 @@ import {
   type LeadFollow,
   type Stage,
 } from "@/lib/validation/onboarding";
-import { Field, Select } from "./form-controls";
+import { Field, Select, SectorChips } from "./form-controls";
 
 type Props = {
   value: InvestorInfoInput;
@@ -20,7 +20,7 @@ const LEAD_FOLLOW_VALUES = Object.keys(LEAD_FOLLOW_LABELS) as LeadFollow[];
 
 export function InvestorStep({ value, onChange, errors }: Props) {
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <Field
         id="checkSize"
         label="Check size"
@@ -29,6 +29,7 @@ export function InvestorStep({ value, onChange, errors }: Props) {
         onChange={(v) => onChange({ ...value, checkSize: v })}
         error={errors.checkSize}
       />
+
       <Select
         id="preferredStage"
         label="Preferred stage"
@@ -42,23 +43,13 @@ export function InvestorStep({ value, onChange, errors }: Props) {
           </option>
         ))}
       </Select>
-      <Field
-        id="sectors"
-        label="Sectors"
-        placeholder="e.g. Climate, Fintech, Bio (comma separated)"
-        value={value.sectors.join(", ")}
-        onChange={(v) =>
-          onChange({
-            ...value,
-            sectors: v
-              .split(",")
-              .map((s) => s.trim())
-              .filter((s) => s.length > 0),
-          })
-        }
+
+      <SectorChips
+        value={value.sectors}
+        onChange={(sectors) => onChange({ ...value, sectors })}
         error={errors.sectors}
-        hint="Up to 12 sectors. Separate with commas."
       />
+
       <Field
         id="geography"
         label="Geography"
@@ -67,6 +58,7 @@ export function InvestorStep({ value, onChange, errors }: Props) {
         onChange={(v) => onChange({ ...value, geography: v })}
         error={errors.geography}
       />
+
       <Select
         id="leadFollow"
         label="Lead or follow?"
