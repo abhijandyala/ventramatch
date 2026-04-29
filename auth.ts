@@ -59,9 +59,7 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   ],
   events: {
     async signIn({ user, account, isNewUser }) {
-      // OAuth users land here without role/onboarding metadata; the adapter's
-      // createUser only persists name/email/image/emailVerified. Make sure the
-      // app-level columns exist and surface to the JWT callback.
+      console.log(`[auth:event:signIn] userId=${user.id} provider=${account?.provider} isNewUser=${isNewUser}`);
       if (!isNewUser || !user.id || !account || account.provider === "credentials") {
         return;
       }
@@ -72,6 +70,13 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
           where id = ${user.id!}
         `;
       });
+      console.log(`[auth:event:signIn] initialized onboarding_completed for new OAuth user ${user.id}`);
+    },
+    async createUser({ user }) {
+      console.log(`[auth:event:createUser] userId=${user.id} email=${user.email}`);
+    },
+    async linkAccount({ user, account }) {
+      console.log(`[auth:event:linkAccount] userId=${user.id} provider=${account.provider}`);
     },
   },
 });

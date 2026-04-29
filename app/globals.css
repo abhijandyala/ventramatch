@@ -198,6 +198,70 @@
   }
 }
 
+/* Counter-scrolling horizontal marquees on the post-auth /homepage.
+   Track content is duplicated; -50% wraps seamlessly back to 0%. */
+@keyframes vm-marquee-left {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes vm-marquee-right {
+  from { transform: translate3d(-50%, 0, 0); }
+  to   { transform: translate3d(0, 0, 0); }
+}
+
+.vm-marquee-left {
+  animation: vm-marquee-left 40s linear infinite;
+  will-change: transform;
+}
+
+.vm-marquee-right {
+  animation: vm-marquee-right 40s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vm-marquee-left,
+  .vm-marquee-right {
+    animation: none;
+  }
+}
+
+/* Slow asymmetric drift for the green orb layers on /homepage.
+   Each layer wanders its own wobbly path so the orb breathes
+   organically — no two layers move the same way. */
+@keyframes vm-orb-drift-1 {
+  0%   { transform: translate(-50%, 0) translate(0px, 0px) scale(1); }
+  25%  { transform: translate(-50%, 0) translate(30px, -20px) scale(1.03); }
+  50%  { transform: translate(-50%, 0) translate(-15px, 15px) scale(0.98); }
+  75%  { transform: translate(-50%, 0) translate(20px, 25px) scale(1.02); }
+  100% { transform: translate(-50%, 0) translate(0px, 0px) scale(1); }
+}
+
+@keyframes vm-orb-drift-2 {
+  0%   { transform: translate(-50%, 0) translate(0px, 0px) scale(1); }
+  30%  { transform: translate(-50%, 0) translate(-25px, 18px) scale(1.04); }
+  60%  { transform: translate(-50%, 0) translate(18px, -12px) scale(0.97); }
+  80%  { transform: translate(-50%, 0) translate(-10px, -22px) scale(1.01); }
+  100% { transform: translate(-50%, 0) translate(0px, 0px) scale(1); }
+}
+
+@keyframes vm-orb-drift-3 {
+  0%   { transform: translate(-50%, 0) translate(0px, 0px) scale(1); }
+  20%  { transform: translate(-50%, 0) translate(15px, 20px) scale(1.05); }
+  45%  { transform: translate(-50%, 0) translate(-20px, -10px) scale(0.96); }
+  70%  { transform: translate(-50%, 0) translate(25px, -18px) scale(1.03); }
+  100% { transform: translate(-50%, 0) translate(0px, 0px) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vm-orb-1, .vm-orb-2, .vm-orb-3 { animation: none; }
+}
+
+.vm-orb-1 { animation: vm-orb-drift-1 14s ease-in-out infinite; }
+.vm-orb-2 { animation: vm-orb-drift-2 18s ease-in-out infinite; }
+.vm-orb-3 { animation: vm-orb-drift-3 22s ease-in-out infinite; }
+
 /* Slow drift for the green-dot "MEMO" text background. The dots
    wander in a small loop so the letters feel alive. */
 @keyframes vm-dot-drift {

@@ -65,6 +65,7 @@ function toAdapterAccount(row: DbAccountRow): AdapterAccount {
 export function ventramatchAdapter(): Adapter {
   return {
     async createUser(user) {
+      console.log(`[auth:adapter:createUser] email=${user.email} name=${user.name}`);
       const rows = await withUserRls<DbUserRow[]>(null, async (sql) => {
         const result = await sql<DbUserRow[]>`
           insert into public.users (email, name, image, email_verified_at)
@@ -80,6 +81,7 @@ export function ventramatchAdapter(): Adapter {
       });
       const created = toAdapterUser(rows[0]);
       if (!created) throw new Error("Failed to create user");
+      console.log(`[auth:adapter:createUser] created userId=${created.id}`);
       return created;
     },
 
@@ -110,6 +112,7 @@ export function ventramatchAdapter(): Adapter {
     },
 
     async getUserByAccount({ provider, providerAccountId }) {
+      console.log(`[auth:adapter:getUserByAccount] provider=${provider}`);
       const rows = await withUserRls<DbUserRow[]>(null, async (sql) => {
         const result = await sql<DbUserRow[]>`
           select u.id, u.email, u.name, u.image, u.email_verified_at
@@ -121,7 +124,9 @@ export function ventramatchAdapter(): Adapter {
         `;
         return [...result];
       });
-      return toAdapterUser(rows[0]);
+      const user = toAdapterUser(rows[0]);
+      console.log(`[auth:adapter:getUserByAccount] found=${!!user} userId=${user?.id ?? "none"}`);
+      return user;
     },
 
     async updateUser(user) {
@@ -150,6 +155,7 @@ export function ventramatchAdapter(): Adapter {
     },
 
     async linkAccount(account) {
+      console.log(`[auth:adapter:linkAccount] userId=${account.userId} provider=${account.provider}`);
       const rows = await withUserRls<DbAccountRow[]>(null, async (sql) => {
         const result = await sql<DbAccountRow[]>`
           insert into public.accounts (

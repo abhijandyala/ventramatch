@@ -10,7 +10,10 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 export async function saveOnboardingAction(input: OnboardingInput): Promise<ActionResult> {
   const session = await auth();
   const userId = session?.user?.id;
+  console.log(`[saveOnboarding] userId=${userId ?? "none"} role=${input.role}`);
+
   if (!userId) {
+    console.error("[saveOnboarding] no session — unauthorized");
     return { ok: false, error: "Unauthorized." };
   }
 
@@ -86,5 +89,7 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
 
   revalidatePath("/dashboard");
   revalidatePath("/onboarding");
+  revalidatePath("/homepage");
+  console.log(`[saveOnboarding] success for userId=${userId} role=${data.role}`);
   return { ok: true };
 }

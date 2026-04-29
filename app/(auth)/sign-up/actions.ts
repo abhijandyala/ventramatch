@@ -10,9 +10,11 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) {
+    console.log(`[signUpAction] validation failed: ${parsed.error.issues[0]?.message}`);
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { name, email, password } = parsed.data;
+  console.log(`[signUpAction] attempting sign-up for email=${email}`);
 
   try {
     const passwordHash = await hashPassword(password);
@@ -50,6 +52,6 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     return { ok: false, error: "Account created but sign-in failed. Please sign in." };
   }
 
-  // TODO: After signup, redirect new users to /onboarding once onboarding is implemented.
+  console.log(`[signUpAction] success for email=${email}`);
   return { ok: true };
 }
