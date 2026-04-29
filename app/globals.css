@@ -8,7 +8,7 @@
 
 @theme {
   /* Surfaces */
-  --color-bg: #ede8d0;        /* warm beige page background */
+  --color-bg: #f6efe8;        /* warm beige page background */
   --color-surface: #ffffff;    /* cards / chip body — kept white for contrast */
   --color-surface-2: #f3f4f6;
 
@@ -81,6 +81,26 @@
 @layer base {
   :root {
     color-scheme: light;
+
+    /* Belt + suspenders: explicitly set the same vars again so consumers
+       that read them via var(--color-bg) etc. resolve correctly even if
+       Tailwind v4's @theme generation doesn't expose them on :root. */
+    --color-bg: #f6efe8;
+    --color-surface: #ffffff;
+    --color-surface-2: #f3f4f6;
+    --color-border: #e5e7eb;
+    --color-border-strong: #d1d5db;
+    --color-text: #0f172a;
+    --color-text-strong: #111827;
+    --color-text-muted: #6b7280;
+    --color-text-faint: #9ca3af;
+    --color-brand: #16a34a;
+    --color-brand-strong: #15803d;
+    --color-brand-soft: #22c55e;
+    --color-brand-tint: #ecfdf5;
+    --color-info: #3b82f6;
+    --color-warn: #f59e0b;
+    --color-danger: #ef4444;
   }
 
   html {
@@ -92,7 +112,9 @@
   }
 
   body {
-    background-color: var(--color-bg);
+    /* Hard-coded so this can't be overridden by Tailwind utility class
+       variations or stale @theme generation. Mirror --color-bg above. */
+    background-color: #f6efe8;
     color: var(--color-text);
     font-size: var(--type-body);
     line-height: 1.6;
