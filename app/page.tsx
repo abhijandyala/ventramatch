@@ -7,6 +7,7 @@ import { HowMatchingWorks } from "@/components/landing/how-matching-works";
 import { ProductVision } from "@/components/landing/product-vision";
 import { FAQ } from "@/components/landing/faq";
 import GradualBlur from "@/components/ui/gradual-blur";
+import { auth } from "@/auth";
 
 /**
  * Landing page — Phase 2.5.
@@ -29,14 +30,18 @@ import GradualBlur from "@/components/ui/gradual-blur";
  * No SEC / compliance band (intentionally cut).
  */
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await auth();
+  const isLoggedIn = Boolean(session?.user);
+  const onboarded = session?.user?.onboardingCompleted === true;
+
   return (
     <main
       id="main-content"
       className="bg-[color:var(--color-bg)] text-[color:var(--color-text)]"
     >
-      <Nav />
-      <Hero />
+      <Nav isLoggedIn={isLoggedIn} onboarded={onboarded} />
+      <Hero isLoggedIn={isLoggedIn} onboarded={onboarded} />
       <SourceTicker />
       <FiveInputs />
       <Numbers />
@@ -59,7 +64,11 @@ export default function HomePage() {
   );
 }
 
-function Nav() {
+function Nav({ isLoggedIn, onboarded }: { isLoggedIn: boolean; onboarded: boolean }) {
+  const cta = isLoggedIn
+    ? onboarded ? { href: "/homepage", label: "Go to app" } : { href: "/onboarding", label: "Finish setup" }
+    : null;
+
   return (
     <header className="sticky top-0 z-40 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/85 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--color-bg)]/70">
       <div className="mx-auto flex h-16 max-w-[1280px] items-center justify-between px-6">
@@ -84,18 +93,39 @@ function Nav() {
             FAQ
           </a>
           <div className="ml-1 flex items-center gap-3">
-            <a
-              href="/sign-in"
-              className="text-sm font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
-            >
-              Sign in
-            </a>
-            <a
-              href="/sign-up"
-              className="rounded-[var(--radius-sm)] bg-[color:var(--color-brand)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)]"
-            >
-              Get started
-            </a>
+            {isLoggedIn ? (
+              <>
+                <a
+                  href="/api/auth/signout"
+                  className="text-sm font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+                >
+                  Sign out
+                </a>
+                {cta && (
+                  <a
+                    href={cta.href}
+                    className="rounded-[var(--radius-sm)] bg-[color:var(--color-brand)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)]"
+                  >
+                    {cta.label}
+                  </a>
+                )}
+              </>
+            ) : (
+              <>
+                <a
+                  href="/sign-in"
+                  className="text-sm font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+                >
+                  Sign in
+                </a>
+                <a
+                  href="/sign-up"
+                  className="rounded-[var(--radius-sm)] bg-[color:var(--color-brand)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)]"
+                >
+                  Get started
+                </a>
+              </>
+            )}
           </div>
         </nav>
       </div>
@@ -103,7 +133,14 @@ function Nav() {
   );
 }
 
-function Hero() {
+function Hero({ isLoggedIn, onboarded }: { isLoggedIn: boolean; onboarded: boolean }) {
+  const primaryHref = isLoggedIn
+    ? onboarded ? "/homepage" : "/onboarding"
+    : "/sign-up";
+  const primaryLabel = isLoggedIn
+    ? onboarded ? "Go to app" : "Finish setup"
+    : "Get started";
+
   return (
     <section className="relative overflow-hidden">
       {/* Subtle grid backdrop. Masked so it fades into the page. */}
@@ -131,17 +168,19 @@ function Hero() {
 
         <div className="flex items-center gap-4">
           <a
-            href="/sign-up"
+            href={primaryHref}
             className="rounded-[var(--radius)] bg-[color:var(--color-brand)] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_1px_3px_rgba(22,163,74,0.25)] transition-all hover:bg-[color:var(--color-brand-strong)] hover:shadow-[0_2px_8px_rgba(22,163,74,0.3)]"
           >
-            Get started
+            {primaryLabel}
           </a>
-          <a
-            href="/sign-in"
-            className="rounded-[var(--radius)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] px-6 py-3 text-[15px] font-semibold text-[color:var(--color-text-strong)] transition-colors hover:bg-[color:var(--color-bg)]"
-          >
-            Sign in
-          </a>
+          {!isLoggedIn && (
+            <a
+              href="/sign-in"
+              className="rounded-[var(--radius)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] px-6 py-3 text-[15px] font-semibold text-[color:var(--color-text-strong)] transition-colors hover:bg-[color:var(--color-bg)]"
+            >
+              Sign in
+            </a>
+          )}
         </div>
       </div>
 
