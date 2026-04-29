@@ -28,7 +28,11 @@ type Side = {
   name: string;
   domain: string;
   category: string;
-  /** small chips listed under name; keep ≤ 3, each ≤ ~14 chars */
+  /** italic one-liner: pitch (startups) or thesis (investors) */
+  tagline: string;
+  /** key data row shown mid-card */
+  metric: { label: string; value: string };
+  /** small chips listed at the bottom; keep ≤ 3, each ≤ ~14 chars */
   chips: string[];
 };
 
@@ -48,17 +52,18 @@ const PAIRS: Pair[] = [
       name: "Cursor",
       domain: "cursor.com",
       category: "AI dev tools",
+      tagline: "AI-first code editor for pros.",
+      metric: { label: "Traction", value: "Top-of-funnel for dev AI" },
       chips: ["Pre-seed", "$1M raise", "San Francisco"],
     },
     investor: {
       name: "Sequoia",
       domain: "sequoiacap.com",
       category: "Tech, multi-stage",
+      tagline: "Backing the daring since 1972.",
+      metric: { label: "Portfolio", value: "Apple · Google · OpenAI" },
       chips: ["$250K – $5M", "AI · DevTools", "Menlo Park"],
     },
-    // Startup bubbles always on the LEFT (x ≈ -160), investor always on the
-    // RIGHT (x ≈ 160). Vertical positions offset per-message to feel like a
-    // real chat exchange. y must clear the chip's middle (chip is ±80 tall).
     conversation: [
       { from: "startup",  text: "Raising $1M for AI dev tools.",  x: -170, y: -120 },
       { from: "investor", text: "Pre-seed AI fits our thesis.",   x: 170,  y: 110  },
@@ -70,12 +75,16 @@ const PAIRS: Pair[] = [
       name: "Linear",
       domain: "linear.app",
       category: "Productivity",
+      tagline: "Issue tracking for modern teams.",
+      metric: { label: "Traction", value: "10K+ teams, 90% retention" },
       chips: ["Series A", "$15M raise", "San Francisco"],
     },
     investor: {
       name: "Accel",
       domain: "accel.com",
       category: "Software, growth",
+      tagline: "Software-first venture capital.",
+      metric: { label: "Portfolio", value: "Slack · Atlassian · Vercel" },
       chips: ["$5M – $40M", "SaaS · Tools", "Palo Alto"],
     },
     conversation: [
@@ -89,12 +98,16 @@ const PAIRS: Pair[] = [
       name: "Stripe",
       domain: "stripe.com",
       category: "Payments infra",
+      tagline: "Payment APIs for the internet.",
+      metric: { label: "Traction", value: "$1T+ processed" },
       chips: ["Seed", "$2M raise", "San Francisco"],
     },
     investor: {
       name: "Y Combinator",
       domain: "ycombinator.com",
       category: "Accelerator",
+      tagline: "Make something people want.",
+      metric: { label: "Portfolio", value: "Airbnb · Stripe · Reddit" },
       chips: ["$500K", "All sectors", "Mountain View"],
     },
     conversation: [
@@ -108,12 +121,16 @@ const PAIRS: Pair[] = [
       name: "Anthropic",
       domain: "anthropic.com",
       category: "AI research",
+      tagline: "AI safety, deeply considered.",
+      metric: { label: "Traction", value: "Top-3 frontier AI lab" },
       chips: ["Series B", "$300M raise", "San Francisco"],
     },
     investor: {
       name: "a16z",
       domain: "a16z.com",
       category: "Tech, all stages",
+      tagline: "Software is eating the world.",
+      metric: { label: "Portfolio", value: "OpenAI · Coinbase · Figma" },
       chips: ["$10M – $100M", "AI · Frontier", "Menlo Park"],
     },
     conversation: [
@@ -127,12 +144,16 @@ const PAIRS: Pair[] = [
       name: "Notion",
       domain: "notion.so",
       category: "Workspace",
+      tagline: "All-in-one workspace.",
+      metric: { label: "Traction", value: "30M+ active users" },
       chips: ["Series C", "$275M ARR", "San Francisco"],
     },
     investor: {
       name: "Index",
       domain: "indexventures.com",
       category: "Software, growth",
+      tagline: "Building enduring companies.",
+      metric: { label: "Portfolio", value: "Figma · Discord · Roblox" },
       chips: ["$5M – $50M", "Workspace · SaaS", "London / SF"],
     },
     conversation: [
@@ -304,11 +325,11 @@ function SideCard({ side, role }: { side: Side; role: "startup" | "investor" }) 
         {role === "startup" ? "Startup" : "Investor"}
       </span>
 
-      {/* Middle: logo + name */}
-      <div className="mt-7 flex items-center gap-4">
+      {/* Logo + name + category */}
+      <div className="mt-6 flex items-center gap-4">
         <CompanyLogo domain={side.domain} name={side.name} />
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="text-[26px] font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]">
+          <span className="text-[24px] font-semibold tracking-[-0.012em] text-[color:var(--color-text-strong)]">
             {side.name}
           </span>
           <span className="mt-1.5 text-[14px] text-[color:var(--color-text-muted)]">
@@ -317,10 +338,28 @@ function SideCard({ side, role }: { side: Side; role: "startup" | "investor" }) 
         </span>
       </div>
 
-      {/* Spacer */}
+      {/* Divider */}
+      <div className="my-6 h-px w-full bg-[color:var(--color-border)]" />
+
+      {/* Tagline (italic, like a quote) */}
+      <p className="text-[14px] italic leading-snug text-[color:var(--color-text-muted)]">
+        &ldquo;{side.tagline}&rdquo;
+      </p>
+
+      {/* Metric */}
+      <div className="mt-5">
+        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
+          {side.metric.label}
+        </p>
+        <p className="mt-1.5 text-[14px] font-medium text-[color:var(--color-text-strong)]">
+          {side.metric.value}
+        </p>
+      </div>
+
+      {/* Spacer pushes chips to the bottom */}
       <div className="flex-1" />
 
-      {/* Bottom: chips */}
+      {/* Chips */}
       <div className="flex flex-wrap gap-2">
         {side.chips.map((c) => (
           <span
@@ -425,7 +464,7 @@ function ChatBubble({ from, text }: { from: "startup" | "investor"; text: string
   return (
     <div className="relative">
       <div
-        className={`relative max-w-[220px] border px-4 py-2.5 text-[13px] leading-[1.45] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.18)] ${
+        className={`relative whitespace-nowrap border px-4 py-2.5 text-[13px] leading-[1.45] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.18)] ${
           isStartup
             ? "rounded-[20px] rounded-bl-[6px] text-[color:var(--color-text-strong)]"
             : "rounded-[20px] rounded-br-[6px] text-[color:var(--color-brand-strong)]"
@@ -541,8 +580,9 @@ function MatchChip({ stage }: { stage: Stage }) {
         </div>
 
         {/* Inner core (white box). Stays white even when outer fills green —
-           per the spec, the inner box is "shielded" from the green wash. */}
-        <div className="absolute inset-0 flex items-center" style={{ paddingLeft: "10%" }}>
+           per the spec, the inner box is "shielded" from the green wash.
+           Centered both axes on the chip body. */}
+        <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative flex items-center gap-1 rounded-[6px] border border-[color:var(--color-brand)]/45 bg-[color:var(--color-bg)] px-4 py-2">
             <span className="pointer-events-none absolute -left-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
             <span className="pointer-events-none absolute -right-[3px] -top-[3px] h-1.5 w-1.5 bg-[color:var(--color-brand)]" />
