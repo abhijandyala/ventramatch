@@ -71,14 +71,20 @@ function Nav() {
           >
             FAQ
           </a>
-          <a
-            href="https://github.com/abhijandyala/ventramatch"
-            className="text-sm text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub
-          </a>
+          <div className="ml-1 flex items-center gap-3">
+            <a
+              href="/sign-in"
+              className="text-sm font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+            >
+              Sign in
+            </a>
+            <a
+              href="/sign-up"
+              className="rounded-[var(--radius-sm)] bg-[color:var(--color-brand)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)]"
+            >
+              Get started
+            </a>
+          </div>
         </nav>
       </div>
     </header>
@@ -109,6 +115,21 @@ function Hero() {
         >
           <p>Founders find investors who back their stage.</p>
           <p>Investors find startups in their thesis.</p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <a
+            href="/sign-up"
+            className="rounded-[var(--radius)] bg-[color:var(--color-brand)] px-6 py-3 text-[15px] font-semibold text-white shadow-[0_1px_3px_rgba(22,163,74,0.25)] transition-all hover:bg-[color:var(--color-brand-strong)] hover:shadow-[0_2px_8px_rgba(22,163,74,0.3)]"
+          >
+            Get started
+          </a>
+          <a
+            href="/sign-in"
+            className="rounded-[var(--radius)] border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface)] px-6 py-3 text-[15px] font-semibold text-[color:var(--color-text-strong)] transition-colors hover:bg-[color:var(--color-bg)]"
+          >
+            Sign in
+          </a>
         </div>
       </div>
 
