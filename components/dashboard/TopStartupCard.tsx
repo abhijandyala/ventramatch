@@ -131,6 +131,11 @@ export function TopStartupCard({ startups, focusedId, newToday }: TopStartupCard
                   {` · ${startup.location}`}
                 </span>
               </p>
+              {startup.description && (
+                <p className="mt-2 text-[13px] leading-5 text-[var(--color-text-muted)]">
+                  {startup.description}
+                </p>
+              )}
             </div>
           </div>
 

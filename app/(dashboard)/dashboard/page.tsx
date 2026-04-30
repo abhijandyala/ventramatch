@@ -16,32 +16,43 @@ import { ProfilePerformanceCard } from "@/components/dashboard/ProfilePerformanc
 import { ImproveMatchesCard } from "@/components/dashboard/ImproveMatchesCard";
 import { ProfileCompletionCard } from "@/components/dashboard/ProfileCompletionCard";
 import { CombinedActivityCard } from "@/components/dashboard/CombinedActivityCard";
+import { FounderMatchAnalysisCard } from "@/components/dashboard/FounderMatchAnalysisCard";
 import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{ focus?: string }>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await auth();
   if (!session?.user) redirect("/sign-in");
   if (!session.user.onboardingCompleted) redirect("/onboarding");
 
   const role = session.user.role as "founder" | "investor" | null;
   const firstName = session.user.name?.split(" ")[0] ?? "there";
+  const params = await searchParams;
 
   console.log(`[dashboard] userId=${session.user.id} role=${role}`);
 
   if (role === "investor") {
-    return <InvestorDashboard firstName={firstName} />;
+    return <InvestorDashboard firstName={firstName} searchParams={params} />;
   }
 
-  return <FounderDashboard firstName={firstName} />;
+  return <FounderDashboard firstName={firstName} searchParams={params} />;
 }
 
-function FounderDashboard({ firstName }: { firstName: string }) {
+function FounderDashboard({ firstName, searchParams }: { firstName: string; searchParams: { focus?: string } }) {
   const data = founderDashboardMock;
   const profileComplete = data.profileStrength.percent >= 100;
+
+  const defaultTop = data.topMatches[0];
+  const focusedInvestor =
+    (searchParams.focus && data.topMatches.find((m) => m.id === searchParams.focus)) ||
+    defaultTop;
 
   return (
     <>
@@ -70,7 +81,7 @@ function FounderDashboard({ firstName }: { firstName: string }) {
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
-            <TopMatchCard matches={data.topMatches} newToday={data.newInvestorsToday} />
+            <TopMatchCard matches={data.topMatches} focusedId={focusedInvestor.id} newToday={data.newInvestorsToday} />
             <Disclaimer />
 
             <section aria-labelledby="recommended-title" className="flex flex-col">
@@ -96,8 +107,8 @@ function FounderDashboard({ firstName }: { firstName: string }) {
 
           <aside className="lg:col-span-4 flex flex-col">
             <div className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
-              <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
-                <ActionRequiredCard items={data.actionRequired} borderless />
+              <RailSection title="Match analysis" aside={focusedInvestor.name}>
+                <FounderMatchAnalysisCard investor={focusedInvestor} borderless />
               </RailSection>
               <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
               <RailSection title="Profile performance" aside="(this month)">
@@ -124,7 +135,7 @@ function FounderDashboard({ firstName }: { firstName: string }) {
           aria-label="Profile and activity overview"
           className={cn(
             "mt-5 grid grid-cols-1 gap-3",
-            profileComplete ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
+            profileComplete ? "md:grid-cols-1" : "md:grid-cols-2",
           )}
         >
           {!profileComplete && (
@@ -139,14 +150,13 @@ function FounderDashboard({ firstName }: { firstName: string }) {
             actions={data.actionRequired}
             activity={data.investorActivity}
           />
-          <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
         </section>
       </main>
     </>
   );
 }
 
-function InvestorDashboard({ firstName }: { firstName: string }) {
+function InvestorDashboard({ firstName, searchParams }: { firstName: string; searchParams: { focus?: string } }) {
   const data = investorFeedMock;
   const profileComplete = data.profileStrength.percent >= 100;
   const focusedStartup = data.startups[0];

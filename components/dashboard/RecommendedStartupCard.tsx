@@ -49,6 +49,11 @@ export function RecommendedStartupCard({ startup, className }: RecommendedStartu
         <p className="mt-0.5 text-[12px] leading-4 text-[var(--color-text-muted)] truncate">
           {startup.oneLiner}
         </p>
+        {startup.description && (
+          <p className="mt-1 text-[12px] leading-4 text-[var(--color-text-muted)] line-clamp-2">
+            {startup.description}
+          </p>
+        )}
       </div>
 
       <ul className="hidden sm:flex shrink-0 items-center gap-1">

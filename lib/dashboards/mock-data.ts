@@ -30,12 +30,18 @@ export type SampleInvestor = {
   score: number;
   reason: string;
   description: string;
-  /** "Why it's a great match" chips surfaced on the hero card. Each chip is a
-   *  short, deterministic statement derived from the matching breakdown.
-   */
   whyMatchChips: string[];
   /** Optional truthful trust label. Only set when the verification source is real. */
   verified?: VerifiedBadge;
+  /** Per-axis match breakdown (0–1). Mirrors the scoring spec in
+   *  docs/matching-algorithm.md. Used by FounderMatchAnalysisCard. */
+  breakdown?: {
+    sector: number;
+    stage: number;
+    check: number;
+    geography: number;
+    traction: number;
+  };
 };
 
 export type SampleStartup = {
@@ -226,6 +232,7 @@ const sharedInvestors: SampleInvestor[] = [
       "Strong portfolio overlap",
     ],
     verified: { source: "firm domain", label: "Firm verified" },
+    breakdown: { sector: 1.0, stage: 1.0, check: 1.0, geography: 1.0, traction: 0.6 },
   },
   {
     id: "inv-northbound",
@@ -246,6 +253,7 @@ const sharedInvestors: SampleInvestor[] = [
       "Leads small rounds in B2B financial infrastructure with a hands-on operating partner.",
     whyMatchChips: ["Stage match", "Check size fits", "Sector overlap"],
     verified: { source: "firm domain", label: "Firm verified" },
+    breakdown: { sector: 0.6, stage: 1.0, check: 1.0, geography: 0.4, traction: 0.6 },
   },
   {
     id: "inv-mreyes",
@@ -266,6 +274,7 @@ const sharedInvestors: SampleInvestor[] = [
       "Writes small checks for technical founders shipping payments or developer tooling.",
     whyMatchChips: ["Stage match", "Geography match", "Sector overlap"],
     verified: { source: "linkedin", label: "Identity verified" },
+    breakdown: { sector: 1.0, stage: 1.0, check: 0.4, geography: 1.0, traction: 0.6 },
   },
 ];
 
@@ -517,6 +526,7 @@ const startups: SampleStartup[] = [
     initials: "GL",
     name: "Greenlytic",
     oneLiner: "ESG reporting and analytics for mid-market companies.",
+    description: "Greenlytic helps mid-market companies turn ESG mandates into competitive advantage. $950K MRR, growing 7% MoM, with three enterprise contracts signed in Q1.",
     location: "Boston, MA",
     stage: "Series A",
     sectors: ["Climate Tech", "SaaS"],
@@ -534,6 +544,7 @@ const startups: SampleStartup[] = [
     initials: "SC",
     name: "Stagecast",
     oneLiner: "Live operations console for product teams.",
+    description: "Stagecast replaces spreadsheet-driven ops with a real-time dashboard used by 40+ product teams. 14% MoM growth on $420K MRR and strong expansion revenue from existing customers.",
     location: "Seattle, WA",
     stage: "Seed",
     sectors: ["Dev Tools", "B2B SaaS"],
@@ -550,6 +561,7 @@ const startups: SampleStartup[] = [
     initials: "OM",
     name: "Oremico",
     oneLiner: "Analytics warehouse for non-technical operators.",
+    description: "Oremico lets ops and finance teams query and visualize data without SQL or code. Pre-revenue but 3 paying pilots in progress; raising $800K to close the first enterprise contract.",
     location: "Remote",
     stage: "Pre-Seed",
     sectors: ["Data", "B2B SaaS"],
@@ -566,6 +578,7 @@ const startups: SampleStartup[] = [
     initials: "HL",
     name: "Holta",
     oneLiner: "Compliance automation for healthcare operators.",
+    description: "Holta cuts HIPAA and CMS audit prep from weeks to hours for hospital groups and clinic networks. $310K MRR with 6% MoM growth and a pipeline of 8 enterprise conversations.",
     location: "Chicago, IL",
     stage: "Seed",
     sectors: ["Healthcare", "B2B SaaS"],

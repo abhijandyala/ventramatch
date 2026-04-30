@@ -2,7 +2,7 @@
 
 import type { Route } from "next";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { ArrowRight, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Chip } from "@/components/common/Chip";
@@ -14,18 +14,35 @@ import {
 
 type TopMatchCardProps = {
   matches: SampleInvestor[];
+  focusedId: string;
   newToday: number;
 };
 
-export function TopMatchCard({ matches, newToday }: TopMatchCardProps) {
-  const [index, setIndex] = useState(0);
-  const safeIndex = Math.max(0, Math.min(matches.length - 1, index));
-  const investor = matches[safeIndex];
+export function TopMatchCard({ matches, focusedId, newToday }: TopMatchCardProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+
+  const safeIndex = Math.max(
+    0,
+    matches.findIndex((m) => m.id === focusedId),
+  );
+  const investor = matches[safeIndex] ?? matches[0];
+
+  const setFocus = (id: string) => {
+    const next = new URLSearchParams(Array.from(params.entries()));
+    next.set("focus", id);
+    router.replace(`${pathname}?${next.toString()}` as Route, { scroll: false });
+  };
 
   const go = (delta: number) => {
-    const next = (safeIndex + delta + matches.length) % matches.length;
-    setIndex(next);
+    const len = matches.length;
+    if (len < 2) return;
+    const nextIndex = (safeIndex + delta + len) % len;
+    setFocus(matches[nextIndex].id);
   };
+
+  const hasMultiple = matches.length > 1;
 
   return (
     <section
@@ -73,137 +90,138 @@ export function TopMatchCard({ matches, newToday }: TopMatchCardProps) {
           )}
         />
 
-        <div className="relative px-6 pt-7 pb-6 sm:px-10 sm:pt-9 sm:pb-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-            <div className="flex flex-1 min-w-0 flex-col">
-              <div className="flex items-start gap-4">
-                <span
-                  aria-hidden
-                  className={cn(
-                    "shrink-0 inline-flex items-center justify-center",
-                    "w-14 h-14 rounded-none",
-                    "text-[18px] font-semibold tracking-tight",
-                    "bg-[var(--color-brand-tint)] text-[var(--color-brand-ink)]",
-                    "ring-1 ring-[var(--color-border)]",
-                  )}
-                >
-                  {investor.initials}
+        <div className="relative px-6 pt-7 pb-6 sm:px-8 sm:pt-7 sm:pb-6">
+          <div className="flex items-start gap-4">
+            <span
+              aria-hidden
+              className={cn(
+                "shrink-0 inline-flex items-center justify-center",
+                "w-14 h-14 rounded-none",
+                "text-[18px] font-semibold tracking-tight",
+                "bg-[var(--color-brand-tint)] text-[var(--color-brand)]",
+                "ring-1 ring-[var(--color-border)]",
+              )}
+            >
+              {investor.initials}
+            </span>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                <h3 className="text-[20px] leading-7 font-semibold tracking-[-0.015em] text-[var(--color-text)]">
+                  {investor.name}
+                </h3>
+                {investor.verified && (
+                  <span
+                    title={`Verified via ${investor.verified.source}`}
+                    className="inline-flex items-center gap-1 text-[12px] leading-4 font-medium"
+                    style={{ color: "var(--color-brand)" }}
+                  >
+                    <ShieldCheck aria-hidden size={14} strokeWidth={1.75} />
+                    {investor.verified.label}
+                  </span>
+                )}
+                <MatchScore
+                  score={investor.score}
+                  reason={investor.reason}
+                  className="ml-auto sm:ml-2"
+                />
+              </div>
+              <p className="mt-1 text-[13px] leading-5 text-[var(--color-text-muted)]">
+                {investor.firm}
+                <span className="text-[var(--color-text-faint)]">
+                  {` · ${investor.location}`}
                 </span>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <h3 className="text-[20px] leading-7 font-semibold tracking-[-0.015em] text-[var(--color-text)]">
-                      {investor.name}
-                    </h3>
-                    {investor.verified && (
-                      <span
-                        title={`Verified via ${investor.verified.source}`}
-                        className="inline-flex items-center gap-1 text-[12px] leading-4 font-medium text-[var(--color-brand-ink)]"
-                      >
-                        <ShieldCheck aria-hidden size={14} strokeWidth={1.75} />
-                        {investor.verified.label}
-                      </span>
-                    )}
-                    <MatchScore
-                      score={investor.score}
-                      reason={investor.reason}
-                      className="ml-auto sm:ml-2"
-                    />
-                  </div>
-                  <p className="mt-1 text-[13px] leading-5 text-[var(--color-text-muted)]">
-                    {investor.firm}
-                    <span className="text-[var(--color-text-faint)]">
-                      {` · ${investor.location}`}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-                <Detail label="Check size" value={formatCheckRange(investor.checkMin, investor.checkMax)} />
-                <Detail label="Stage" value={investor.stages.join(", ")} />
-                <Detail label="Geography" value={investor.geographies[0]} />
-                <Detail label="Focus" value={investor.sectors.join(", ")} />
-              </dl>
-
-              <div className="mt-6">
-                <p className="text-[12px] leading-4 font-medium tracking-[0.04em] uppercase text-[var(--color-text-faint)]">
-                  Why it&apos;s a great match
+              </p>
+              {investor.description && (
+                <p className="mt-2 text-[13px] leading-5 text-[var(--color-text-muted)]">
+                  {investor.description}
                 </p>
-                <ul className="mt-2 flex flex-wrap gap-1.5">
-                  {investor.whyMatchChips.map((chip) => (
-                    <li key={chip}>
-                      <Chip>{chip}</Chip>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              )}
             </div>
-
-            <aside className="flex shrink-0 flex-col gap-3 lg:w-[260px]">
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex items-center justify-center gap-2",
-                  "h-12 px-5 w-full",
-                  "rounded-none",
-                  "text-[15px] font-semibold text-white",
-                  "bg-[var(--color-brand-ink)]",
-                  "transition-colors duration-[120ms] ease-out",
-                  "hover:bg-[var(--color-brand-ink-hov)]",
-                )}
-              >
-                Interested
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex items-center justify-center gap-2",
-                  "h-12 px-5 w-full",
-                  "rounded-none",
-                  "border border-[var(--color-border)]",
-                  "text-[15px] font-semibold text-[var(--color-text)]",
-                  "bg-[var(--color-bg)]",
-                  "transition-colors duration-[120ms] ease-out",
-                  "hover:bg-[var(--color-surface-2)] hover:border-[var(--color-text-faint)]",
-                )}
-              >
-                Pass
-              </button>
-              <Link
-                href={`/investors/${investor.id}` as Route}
-                className={cn(
-                  "inline-flex items-center justify-center gap-1.5",
-                  "h-10 w-full",
-                  "text-[13px] font-medium",
-                  "text-[var(--color-brand-ink)]",
-                  "transition-colors duration-[120ms] ease-out",
-                  "hover:text-[var(--color-brand-ink-hov)]",
-                )}
-              >
-                View profile
-                <ArrowRight aria-hidden size={14} strokeWidth={1.75} />
-              </Link>
-            </aside>
           </div>
 
-          {matches.length > 1 && (
-            <div className="mt-7 flex items-center justify-center gap-3 pt-5 border-t border-[var(--color-border)]">
+          <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
+            <Detail label="Check size" value={formatCheckRange(investor.checkMin, investor.checkMax)} />
+            <Detail label="Stage" value={investor.stages.join(", ")} />
+            <Detail label="Geography" value={investor.geographies[0]} />
+            <Detail label="Focus" value={investor.sectors.join(", ")} />
+          </dl>
+
+          <div className="mt-5">
+            <p className="text-[11px] leading-4 font-medium tracking-[0.04em] uppercase text-[var(--color-text-faint)]">
+              Why it&apos;s a great match
+            </p>
+            <ul className="mt-2 flex flex-wrap gap-1.5">
+              {investor.whyMatchChips.map((chip) => (
+                <li key={chip}>
+                  <Chip>{chip}</Chip>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 pt-5 border-t border-[var(--color-border)]">
+            <button
+              type="button"
+              className={cn(
+                "inline-flex items-center justify-center gap-1.5",
+                "h-10 px-5",
+                "rounded-none",
+                "text-[14px] font-semibold text-white",
+                "transition-colors duration-[120ms] ease-out",
+              )}
+              style={{ backgroundColor: "var(--color-brand)" }}
+            >
+              Interested
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "inline-flex items-center justify-center gap-1.5",
+                "h-10 px-5",
+                "rounded-none",
+                "border border-[var(--color-border)]",
+                "text-[14px] font-medium text-[var(--color-text)]",
+                "bg-[var(--color-bg)]",
+                "transition-colors duration-[120ms] ease-out",
+                "hover:bg-[var(--color-surface-2)] hover:border-[var(--color-text-faint)]",
+              )}
+            >
+              Pass
+            </button>
+            <Link
+              href={`/investors/${investor.id}` as Route}
+              className={cn(
+                "inline-flex items-center gap-1",
+                "h-10 px-2",
+                "text-[13px] font-medium",
+                "transition-colors duration-[120ms] ease-out",
+              )}
+              style={{ color: "var(--color-brand)" }}
+            >
+              View profile
+              <ArrowRight aria-hidden size={14} strokeWidth={1.75} />
+            </Link>
+          </div>
+
+          {hasMultiple && (
+            <div className="mt-5 flex items-center justify-center gap-3">
               <PaginationArrow side="left" onClick={() => go(-1)} />
               <div className="flex items-center gap-1.5">
                 {matches.map((m, i) => (
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setIndex(i)}
+                    onClick={() => setFocus(m.id)}
                     aria-label={`Show match ${i + 1} of ${matches.length}`}
                     aria-current={i === safeIndex ? "true" : undefined}
                     className={cn(
                       "h-1.5 rounded-full transition-all duration-[180ms] ease-out",
                       i === safeIndex
-                        ? "w-6 bg-[var(--color-brand-ink)]"
+                        ? "w-6"
                         : "w-1.5 bg-[var(--color-border)] hover:bg-[var(--color-text-faint)]",
                     )}
+                    style={i === safeIndex ? { backgroundColor: "var(--color-brand)" } : undefined}
                   />
                 ))}
               </div>

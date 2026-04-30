@@ -76,7 +76,7 @@ function FounderFeedView({ firstName }: { firstName: string }) {
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
-            <TopMatchCard matches={data.topMatches} newToday={data.newInvestorsToday} />
+            <TopMatchCard matches={data.topMatches} focusedId={data.topMatches[0].id} newToday={data.newInvestorsToday} />
             <Disclaimer />
 
             <section aria-labelledby="feed-recommended-founders" className="flex flex-col">

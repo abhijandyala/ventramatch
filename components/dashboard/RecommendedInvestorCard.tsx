@@ -49,6 +49,11 @@ export function RecommendedInvestorCard({ investor, className }: RecommendedInve
         <p className="mt-0.5 text-[12px] leading-4 text-[var(--color-text-muted)] truncate">
           {investor.location}
         </p>
+        {investor.description && (
+          <p className="mt-1 text-[12px] leading-4 text-[var(--color-text-muted)] line-clamp-2">
+            {investor.description}
+          </p>
+        )}
       </div>
 
       <ul className="hidden sm:flex shrink-0 items-center gap-1">
