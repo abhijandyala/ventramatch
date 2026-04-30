@@ -87,15 +87,19 @@ const orgSchema = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${serif.variable}`}>
-      <head>
+    <html
+      lang="en"
+      className={`${inter.variable} ${serif.variable}`}
+      // Extensions often inject into <head> before hydration and break a JSON-LD
+      // script there; body placement + this flag avoids noisy hydration mismatches.
+      suppressHydrationWarning
+    >
+      <body>
         <script
           type="application/ld+json"
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(orgSchema) }}
         />
-      </head>
-      <body>
         <SkipLink />
         <SmoothScroll>{children}</SmoothScroll>
       </body>
