@@ -10,7 +10,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
+import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
 import type { StartupStage, AccountLabel } from "@/types/database";
+import type { InvestorDepthView } from "@/lib/profile/visibility";
 import type {
   SubmitInvestorInput,
   DraftInvestorInput,
@@ -196,9 +198,11 @@ const REMOTE_OPTIONS = [
 export function InvestorBuilder({
   initial,
   accountLabel,
+  depthView,
 }: {
   initial: InvestorUiDraft;
   accountLabel: AccountLabel;
+  depthView?: InvestorDepthView | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -378,6 +382,12 @@ export function InvestorBuilder({
           )}
         </div>
       </footer>
+
+      {depthView ? (
+        <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+          <InvestorDepthEditor depth={depthView} />
+        </section>
+      ) : null}
     </main>
   );
 }

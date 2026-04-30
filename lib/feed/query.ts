@@ -1,5 +1,5 @@
 import { withUserRls } from "@/lib/db";
-import { scoreMatch, type MatchResult } from "@/lib/matching/score";
+import { scoreMatch, type MatchResult, type MatchDepthContext } from "@/lib/matching/score";
 import {
   projectStartupTier1,
   projectInvestorTier1,
@@ -12,6 +12,11 @@ import type {
   InteractionAction,
   StartupStage,
 } from "@/types/database";
+
+type TractionSignalRow =
+  Database["public"]["Tables"]["startup_traction_signals"]["Row"];
+type CheckBandRow =
+  Database["public"]["Tables"]["investor_check_bands"]["Row"];
 
 /**
  * Discovery feed queries. Centralised so the dashboard's "Recommended for
@@ -130,9 +135,45 @@ export async function fetchFeedForInvestor(
       limit ${prefetch}
     `;
 
+    // Load depth signals for all fetched startups in one query so we can
+    // pass structured traction + round context to scoreMatch. We do this
+    // outside the main query so the feed SQL stays readable.
+    const startupIds = startupRows.map((r) => r.id);
+    const [tractionRows, roundRows] = startupIds.length > 0
+      ? await Promise.all([
+          sql<(TractionSignalRow & { startup_id: string })[]>`
+            select startup_id, kind, value_numeric, source_kind, self_reported
+            from public.startup_traction_signals
+            where startup_id = any(${startupIds})
+          `,
+          sql<{ startup_id: string; lead_status: string }[]>`
+            select startup_id, lead_status
+            from public.startup_round_details
+            where startup_id = any(${startupIds})
+          `,
+        ])
+      : [[], []];
+
+    const tractionByStartup = new Map<string, TractionSignalRow[]>();
+    for (const t of tractionRows) {
+      const arr = tractionByStartup.get(t.startup_id) ?? [];
+      arr.push(t as TractionSignalRow);
+      tractionByStartup.set(t.startup_id, arr);
+    }
+    const leadStatusByStartup = new Map<string, string>();
+    for (const r of roundRows) {
+      leadStatusByStartup.set(r.startup_id, r.lead_status);
+    }
+
     const scored = startupRows
       .map((row) => {
-        const match = scoreMatch(row, investor);
+        const depthCtx: MatchDepthContext = {
+          tractionSignals: tractionByStartup.get(row.id),
+          wantsLead:
+            leadStatusByStartup.get(row.id) === "open" ||
+            leadStatusByStartup.get(row.id) === "soliciting_lead",
+        };
+        const match = scoreMatch(row, investor, depthCtx);
         return {
           card: projectStartupTier1(row),
           match,
@@ -240,9 +281,49 @@ export async function fetchFeedForFounder(
       limit ${prefetch}
     `;
 
+    // Load per-stage check bands for all fetched investors so scoreMatch
+    // can use the richer mandate data when available.
+    const investorIds = investorRows.map((r) => r.id);
+    const checkBandRows: CheckBandRow[] = investorIds.length > 0
+      ? await sql<CheckBandRow[]>`
+          select * from public.investor_check_bands
+          where investor_id = any(${investorIds})
+        `
+      : [];
+
+    const checkBandsByInvestor = new Map<string, CheckBandRow[]>();
+    for (const b of checkBandRows) {
+      const arr = checkBandsByInvestor.get(b.investor_id) ?? [];
+      arr.push(b);
+      checkBandsByInvestor.set(b.investor_id, arr);
+    }
+
+    // Also pull the founder startup's own traction signals for the depth context.
+    const [founderTractionRows, founderRoundRows] = await Promise.all([
+      sql<TractionSignalRow[]>`
+        select kind, value_numeric, source_kind, self_reported
+        from public.startup_traction_signals
+        where startup_id = ${startup.id}
+      `,
+      sql<{ lead_status: string }[]>`
+        select lead_status from public.startup_round_details
+        where startup_id = ${startup.id}
+        limit 1
+      `,
+    ]);
+
+    const founderLeadStatus = founderRoundRows[0]?.lead_status;
+
     const scored = investorRows
       .map((row) => {
-        const match = scoreMatch(startup, row);
+        const depthCtx: MatchDepthContext = {
+          tractionSignals: founderTractionRows,
+          checkBands: checkBandsByInvestor.get(row.id),
+          wantsLead:
+            founderLeadStatus === "open" ||
+            founderLeadStatus === "soliciting_lead",
+        };
+        const match = scoreMatch(startup, row, depthCtx);
         return {
           card: projectInvestorTier1(row),
           match,
