@@ -6,8 +6,6 @@ import { redirect } from "next/navigation";
 import {
   founderDashboardMock,
   investorFeedMock,
-  getSampleStartupById,
-  type SampleStartup,
 } from "@/lib/dashboards/mock-data";
 import { TopMatchCard } from "@/components/dashboard/TopMatchCard";
 import { TopStartupCard } from "@/components/dashboard/TopStartupCard";
@@ -19,7 +17,6 @@ import { ImproveMatchesCard } from "@/components/dashboard/ImproveMatchesCard";
 import { ProfileCompletionCard } from "@/components/dashboard/ProfileCompletionCard";
 import { CombinedActivityCard } from "@/components/dashboard/CombinedActivityCard";
 import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
-import { MatchAnalysisCard } from "@/components/dashboard/MatchAnalysisCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { cn } from "@/lib/utils";
 
@@ -152,10 +149,8 @@ function FounderDashboard({ firstName }: { firstName: string }) {
 function InvestorDashboard({ firstName }: { firstName: string }) {
   const data = investorFeedMock;
   const profileComplete = data.profileStrength.percent >= 100;
-
-  const topStartup: SampleStartup | undefined = data.topStartups[0]
-    ? getSampleStartupById(data.topStartups[0].startupId)
-    : undefined;
+  const focusedStartup = data.startups[0];
+  const remaining = data.startups.filter((s) => s.id !== focusedStartup.id);
 
   return (
     <>
@@ -176,7 +171,7 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
             Welcome back, {firstName}.
           </h1>
           <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            New startups matching your thesis this week.
+            {data.newStartupsToday} new startups matched your thesis today.
           </p>
         </div>
       </section>
@@ -184,9 +179,11 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
-            {topStartup && data.topStartups[0] && (
-              <TopStartupCard startup={topStartup} match={data.topStartups[0]} />
-            )}
+            <TopStartupCard
+              startups={data.startups}
+              focusedId={focusedStartup.id}
+              newToday={data.newStartupsToday}
+            />
             <Disclaimer />
 
             <section aria-labelledby="pipeline-title" className="flex flex-col">
@@ -201,7 +198,7 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
               </header>
 
               <ul className="mt-3 flex flex-col gap-3">
-                {data.recommended.map((startup) => (
+                {remaining.slice(0, 5).map((startup) => (
                   <li key={startup.id}>
                     <RecommendedStartupCard startup={startup} />
                   </li>
@@ -212,17 +209,14 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
 
           <aside className="lg:col-span-4 flex flex-col">
             <div className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+              <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
+                <ActionRequiredCard items={data.actionRequired} borderless />
+              </RailSection>
+              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
               <RailSection title="Profile performance" aside="(this month)">
                 <ProfilePerformanceCard
                   stats={data.profilePerformance.stats}
                   series={data.profilePerformance.series}
-                  borderless
-                />
-              </RailSection>
-              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
-              <RailSection title="Match analysis">
-                <MatchAnalysisCard
-                  dimensions={data.matchAnalysis.dimensions}
                   borderless
                 />
               </RailSection>
@@ -243,7 +237,7 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
           aria-label="Profile and activity overview"
           className={cn(
             "mt-5 grid grid-cols-1 gap-3",
-            profileComplete ? "md:grid-cols-1" : "md:grid-cols-2",
+            profileComplete ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
           )}
         >
           {!profileComplete && (
@@ -254,6 +248,7 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
               checklist={data.profileStrength.checklist}
             />
           )}
+          <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
         </section>
       </main>
     </>
