@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { withUserRls } from "@/lib/db";
 import { requireWrite } from "@/lib/auth/access";
+import { invalidate } from "@/lib/cache";
 import type { InteractionAction } from "@/types/database";
 
 /**
@@ -78,6 +79,10 @@ export async function recordInteractionAction(
   revalidatePath("/feed");
   revalidatePath("/dashboard");
   revalidatePath("/matches");
+
+  // Invalidate cached stats for both parties.
+  void invalidate(`profileStats:${access.userId}`);
+  void invalidate(`profileStats:${targetUserId}`);
 
   return { ok: true, action, alreadyExisted };
 }

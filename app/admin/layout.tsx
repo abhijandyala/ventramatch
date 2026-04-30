@@ -6,6 +6,7 @@ import { Wordmark } from "@/components/landing/wordmark";
 const NAV = [
   { label: "Users", href: "/admin/users" },
   { label: "Reports", href: "/admin/reports" },
+  { label: "Metrics", href: "/admin/metrics" },
 ] as const;
 
 export default async function AdminLayout({
