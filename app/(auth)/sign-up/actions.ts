@@ -16,8 +16,8 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     console.log(`[signUpAction] validation failed: ${parsed.error.issues[0]?.message}`);
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { name, email, password } = parsed.data;
-  console.log(`[signUpAction] attempting sign-up for email=${email}`);
+  const { name, email, password, marketingOptIn } = parsed.data;
+  console.log(`[signUpAction] attempting sign-up for email=${email} marketingOptIn=${marketingOptIn}`);
 
   try {
     const passwordHash = await hashPassword(password);
@@ -28,9 +28,17 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
       `;
       if (existing.length > 0) return null;
 
+      // tos_accepted_at + privacy_accepted_at stamped to the same instant —
+      // user accepted them via a single checkbox covering both documents.
       const rows = await sql<{ id: string }[]>`
-        insert into public.users (email, name, password_hash, onboarding_completed)
-        values (${email}, ${name}, ${passwordHash}, false)
+        insert into public.users (
+          email, name, password_hash, onboarding_completed,
+          tos_accepted_at, privacy_accepted_at, marketing_opt_in
+        )
+        values (
+          ${email}, ${name}, ${passwordHash}, false,
+          now(), now(), ${marketingOptIn}
+        )
         returning id
       `;
       return rows[0] ?? null;

@@ -2,6 +2,7 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import LinkedIn from "next-auth/providers/linkedin";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import GitHub from "next-auth/providers/github";
 
 // Edge-safe: no DB, no Node-only APIs. Imported by proxy.ts (middleware) and by
 // auth.ts (server). Credentials + adapter are added on top in auth.ts so they
@@ -16,20 +17,32 @@ function pathStartsWith(pathname: string, prefixes: readonly string[]): boolean 
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export const authConfig = {
-  pages: {
-    signIn: "/sign-in",
-    error: "/error",
-  },
-  session: { strategy: "jwt" },
-  providers: [
+// Build the providers array based on which env vars are configured.
+// GitHub is optional — only register it if creds exist so we don't crash
+// environments that haven't created the OAuth app yet.
+type ProviderEntry = NextAuthConfig["providers"][number];
+function buildProviders(): ProviderEntry[] {
+  const providers: ProviderEntry[] = [
     Google({ allowDangerousEmailAccountLinking: true }),
     LinkedIn({ allowDangerousEmailAccountLinking: true }),
     MicrosoftEntraID({
       allowDangerousEmailAccountLinking: true,
       issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
     }),
-  ],
+  ];
+  if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
+    providers.push(GitHub({ allowDangerousEmailAccountLinking: true }));
+  }
+  return providers;
+}
+
+export const authConfig = {
+  pages: {
+    signIn: "/sign-in",
+    error: "/error",
+  },
+  session: { strategy: "jwt" },
+  providers: buildProviders(),
   callbacks: {
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl;

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   profileInfoSchema,
-  goalsSchema,
   type Role,
   type InvestorType,
 } from "@/lib/validation/onboarding";
@@ -14,11 +13,13 @@ import { cn } from "@/lib/utils";
 import { saveOnboardingAction } from "../actions";
 import { RoleStep } from "./role-step";
 import { ProfileStep, type ProfileData } from "./profile-step";
-import { GoalsStep } from "./goals-step";
+import { ConnectStep } from "./connect-step";
 import { ReadyInterstitial } from "./ready-interstitial";
 
 type Step = 1 | 2 | 3;
 type FieldErrors = Partial<Record<string, string>>;
+
+const DRAFT_KEY = "vm:onboarding-draft";
 
 const PROFILE_DEFAULTS: ProfileData = {
   companyName: "",
@@ -27,23 +28,78 @@ const PROFILE_DEFAULTS: ProfileData = {
   description: "",
 };
 
-const STEP_LABELS = ["Your role", "About you", "Your goals"] as const;
+type Draft = { role: Role | null; profile: ProfileData; step: Step };
+
+function readDraft(): Draft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as Draft;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(d: Draft) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+  } catch {
+    // localStorage might be disabled (private mode) — fail silently
+  }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+const STEP_LABELS = ["Your role", "About you", "Connect"] as const;
 
 export function OnboardingWizard() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>(1);
+  const searchParams = useSearchParams();
+  const connectedProvider = searchParams.get("connected") ?? undefined;
+
+  // Lazy initial state restores any draft saved before an OAuth bounce so
+  // step state isn't lost when the user comes back from connecting LinkedIn.
+  // If they're returning with ?connected=…, prefer step 3 (the connect screen).
+  const [{ role: initialRole, profile: initialProfile, step: initialStep }] =
+    useState<Draft>(() => {
+      const draft = readDraft();
+      if (draft) {
+        return {
+          role: draft.role,
+          profile: draft.profile,
+          step: connectedProvider ? 3 : draft.step,
+        };
+      }
+      return {
+        role: null,
+        profile: PROFILE_DEFAULTS,
+        step: connectedProvider ? 3 : 1,
+      };
+    });
+
+  const [step, setStep] = useState<Step>(initialStep);
   const [direction, setDirection] = useState(1);
-  const [role, setRole] = useState<Role | null>(null);
-  const [profile, setProfile] = useState<ProfileData>(PROFILE_DEFAULTS);
-  const [goals, setGoals] = useState("");
+  const [role, setRole] = useState<Role | null>(initialRole);
+  const [profile, setProfile] = useState<ProfileData>(initialProfile);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showInterstitial, setShowInterstitial] = useState(false);
 
-  function goForward() {
-    setDirection(1);
-  }
+  // Persist a draft on every change so an OAuth bounce mid-flow doesn't
+  // wipe the user's progress.
+  useEffect(() => {
+    writeDraft({ role, profile, step });
+  }, [role, profile, step]);
 
   function goBack() {
     setFormError(null);
@@ -58,7 +114,7 @@ export function OnboardingWizard() {
       setFormError("Pick a role to continue.");
       return;
     }
-    goForward();
+    setDirection(1);
     setStep(2);
   }
 
@@ -82,20 +138,17 @@ export function OnboardingWizard() {
       setErrors(toFieldErrors(parsed.error.issues));
       return;
     }
-    goForward();
+    setDirection(1);
     setStep(3);
   }
 
-  function handleSubmit() {
+  // Step 3 has two exits: "Finish" and "Skip for now". Both call the
+  // server to mark onboarding complete; the difference is purely UX
+  // signalling.
+  function handleFinish() {
     setErrors({});
     setFormError(null);
     if (!role) return;
-
-    const goalsParsed = goalsSchema.safeParse({ goals });
-    if (!goalsParsed.success) {
-      setErrors(toFieldErrors(goalsParsed.error.issues));
-      return;
-    }
 
     startTransition(async () => {
       const result = await saveOnboardingAction({
@@ -109,12 +162,12 @@ export function OnboardingWizard() {
                 firmName: profile.investorType === "firm" ? profile.firmName : undefined,
                 description: profile.description,
               },
-        goals: { goals },
       });
       if (!result.ok) {
         setFormError(result.error);
         return;
       }
+      clearDraft();
       setShowInterstitial(true);
     });
   }
@@ -122,7 +175,7 @@ export function OnboardingWizard() {
   const questions: Record<Step, string> = {
     1: "What brings you to VentraMatch?",
     2: role === "founder" ? "Tell us about your startup." : "Tell us about your investing.",
-    3: "One last thing.",
+    3: "Add verified signal in one click.",
   };
 
   const subtitles: Record<Step, string> = {
@@ -130,7 +183,7 @@ export function OnboardingWizard() {
     2: role === "founder"
       ? "Just the basics — name and a quick description."
       : "Are you with a firm or investing independently?",
-    3: "What are you hoping to get out of VentraMatch?",
+    3: "Connect a profile so investors can trust the basics, or skip and add it later.",
   };
 
   if (showInterstitial) {
@@ -138,10 +191,13 @@ export function OnboardingWizard() {
       <ReadyInterstitial
         onComplete={() => {
           window.location.href = "/homepage";
+          router.refresh();
         }}
       />
     );
   }
+
+  const isFinalStep = step === 3;
 
   return (
     <div className="w-full max-w-[580px]">
@@ -172,7 +228,7 @@ export function OnboardingWizard() {
           ) : step === 2 && role ? (
             <ProfileStep role={role} value={profile} onChange={setProfile} errors={errors} />
           ) : step === 3 && role ? (
-            <GoalsStep role={role} value={goals} onChange={setGoals} error={errors.goals} />
+            <ConnectStep role={role} connected={connectedProvider} />
           ) : null}
         </motion.div>
       </AnimatePresence>
@@ -203,26 +259,44 @@ export function OnboardingWizard() {
           <span aria-hidden="true" />
         )}
 
-        <button
-          type="button"
-          onClick={
-            step === 1
-              ? handleStep1Continue
-              : step === 2
-                ? handleStep2Continue
-                : handleSubmit
-          }
-          disabled={isPending || (step === 1 && !role)}
-          className={cn(
-            "inline-flex h-11 min-w-[148px] items-center justify-center gap-2 rounded-[var(--radius)]",
-            "bg-[var(--color-brand-ink)] px-6 text-[15px] font-medium text-white",
-            "transition-colors duration-150 hover:bg-[var(--color-brand-ink-hov)]",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-          )}
-        >
-          {isPending ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
-          {step < 3 ? "Continue" : "Finish setup"}
-        </button>
+        <div className="flex items-center gap-3">
+          {isFinalStep ? (
+            <button
+              type="button"
+              onClick={handleFinish}
+              disabled={isPending}
+              className={cn(
+                "inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius)] px-4",
+                "text-[14px] font-medium text-[var(--color-text-muted)]",
+                "transition-colors duration-150 hover:text-[var(--color-text-strong)]",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              Skip for now
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={
+              step === 1
+                ? handleStep1Continue
+                : step === 2
+                  ? handleStep2Continue
+                  : handleFinish
+            }
+            disabled={isPending || (step === 1 && !role)}
+            className={cn(
+              "inline-flex h-11 min-w-[148px] items-center justify-center gap-2 rounded-[var(--radius)]",
+              "bg-[var(--color-brand-ink)] px-6 text-[15px] font-medium text-white",
+              "transition-colors duration-150 hover:bg-[var(--color-brand-ink-hov)]",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+            )}
+          >
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
+            {!isFinalStep ? "Continue" : connectedProvider ? "Finish" : "Finish setup"}
+          </button>
+        </div>
       </div>
 
       <p className="mt-10 text-center text-[11px] leading-5 text-[var(--color-text-faint)]">

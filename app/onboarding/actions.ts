@@ -42,8 +42,12 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
             company_name = ${companyName},
             investor_type = ${investorType},
             bio = ${data.profile.description},
-            goals = ${data.goals.goals},
-            onboarding_completed = true
+            onboarding_completed = true,
+            profile_state = case
+              when profile_state in ('partial','complete','pending_review','verified','rejected')
+                then profile_state
+              else 'basic'
+            end
         where id = ${userId}
       `;
     });
