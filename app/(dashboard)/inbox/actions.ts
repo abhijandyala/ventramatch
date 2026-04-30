@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { withUserRls } from "@/lib/db";
 import { requireWrite } from "@/lib/auth/access";
+import { createIntroCalendarEvents } from "@/lib/calendar/create-intro-event";
 import {
   sendIntroSchema,
   respondIntroSchema,
@@ -169,6 +170,51 @@ export async function respondIntroAction(
     });
 
     console.log(`[intros:respond] intro=${introId} action=${action} by=${access.userId}`);
+
+    // Sprint 13.B: create calendar events when accepted with a time.
+    // Fire-and-forget — failures don't block the intro acceptance.
+    if (action === "accept" && acceptedTime) {
+      const siteUrl = (
+        process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+      ).replace(/\/$/, "");
+
+      // Look up sender + recipient emails/names for the event.
+      void withUserRls(null, async (sql) => {
+        const intro = await sql<{
+          sender_user_id: string;
+          recipient_user_id: string;
+          sender_email: string;
+          sender_name: string;
+          recipient_email: string;
+          recipient_name: string;
+        }[]>`
+          select ir.sender_user_id, ir.recipient_user_id,
+                 su.email as sender_email, su.name as sender_name,
+                 ru.email as recipient_email, ru.name as recipient_name
+          from public.intro_requests ir
+          join public.users su on su.id = ir.sender_user_id
+          join public.users ru on ru.id = ir.recipient_user_id
+          where ir.id = ${introId} limit 1
+        `;
+        if (intro.length > 0) {
+          const i = intro[0];
+          await createIntroCalendarEvents({
+            introId,
+            senderUserId: i.sender_user_id,
+            senderEmail: i.sender_email,
+            senderName: i.sender_name ?? "VentraMatch user",
+            recipientUserId: i.recipient_user_id,
+            recipientEmail: i.recipient_email,
+            recipientName: i.recipient_name ?? "VentraMatch user",
+            acceptedTime: new Date(acceptedTime),
+            introLink: `${siteUrl}/inbox/${introId}`,
+          });
+        }
+      }).catch((err) => {
+        console.error("[intros:respond] calendar event creation failed", err);
+      });
+    }
+
     revalidatePath("/inbox");
     revalidatePath(`/inbox/${introId}`);
     revalidatePath("/matches");

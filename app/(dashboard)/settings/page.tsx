@@ -14,6 +14,7 @@ import { PauseAndDelete } from "@/components/settings/pause-and-delete";
 import { ManageCookies } from "@/components/settings/manage-cookies";
 import { DataExportButton } from "@/components/settings/data-export-button";
 import { BlockedUsersList } from "@/components/settings/blocked-users-list";
+import { CalendarSection } from "@/components/settings/calendar-section";
 import { AvatarSection } from "@/components/settings/avatar-section";
 import { fetchBlockedUsers } from "@/lib/safety/query";
 import { resolveAvatarUrl } from "@/lib/profile/avatar";
@@ -31,6 +32,7 @@ const SECTIONS = [
   { id: "account", label: "Account" },
   { id: "notifications", label: "Notifications" },
   { id: "connected", label: "Connected accounts" },
+  { id: "calendar", label: "Calendar" },
   { id: "password", label: "Password" },
   { id: "blocked", label: "Blocked users" },
   { id: "privacy", label: "Privacy & data" },
@@ -63,6 +65,7 @@ export default async function SettingsPage() {
       user: UserRow | null;
       providers: Provider[];
       pendingEmailChange: string | null;
+      calendarConnected: boolean;
     }>(userId, async (sql) => {
       const [users, accounts, pending] = await Promise.all([
         sql<UserRow[]>`
@@ -84,10 +87,17 @@ export default async function SettingsPage() {
           limit 1
         `,
       ]);
+      const calRows = await sql<{ exists: boolean }[]>`
+        select exists(
+          select 1 from public.calendar_connections
+          where user_id = ${userId} and provider = 'google'
+        ) as exists
+      `;
       return {
         user: users[0] ?? null,
         providers: accounts.map((a) => a.provider),
         pendingEmailChange: pending[0]?.new_email ?? null,
+        calendarConnected: calRows[0]?.exists ?? false,
       };
     }),
     fetchBlockedUsers(userId),
@@ -198,6 +208,14 @@ export default async function SettingsPage() {
             }
           >
             <PasswordForm hasPassword={hasPassword} />
+          </SettingsSection>
+
+          <SettingsSection
+            id="calendar"
+            title="Calendar"
+            description="Auto-create calendar events when intro requests are accepted."
+          >
+            <CalendarSection connected={data.calendarConnected} />
           </SettingsSection>
 
           <SettingsSection
