@@ -180,6 +180,60 @@ export type LastRoundAmountBand =
   | "10m_25m"
   | "over_25m";
 
+// ──────────────────────────────────────────────────────────────────────────
+//  Traction (0014_profile_depth_traction.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Structured traction signal kinds. The kind enum implies the unit of
+ * value_numeric (e.g., 'mrr' is USD, 'retention_day_30' is percent 0-100,
+ * 'nps' is -100 to 100). Zod schemas in lib/validation enforce per-kind
+ * unit semantics at submit time.
+ */
+export type TractionKind =
+  | "mrr"
+  | "arr"
+  | "gross_revenue"
+  | "paying_customers"
+  | "design_partners"
+  | "signed_lois"
+  | "waitlist_size"
+  | "dau"
+  | "mau"
+  | "retention_day_30"
+  | "retention_day_90"
+  | "nps"
+  | "gross_margin_pct"
+  | "cac_usd"
+  | "ltv_usd"
+  | "contracted_revenue"
+  | "gmv";
+
+export type TractionSourceKind =
+  | "stripe_dashboard"
+  | "bank_statement"
+  | "crm_export"
+  | "csv_upload"
+  | "self_attested"
+  | "other";
+
+export type MarketSizeBand =
+  | "under_100m"
+  | "100m_500m"
+  | "500m_1b"
+  | "1b_10b"
+  | "10b_100b"
+  | "over_100b";
+
+export const MARKET_SIZE_BAND_LABELS: Record<MarketSizeBand, string> = {
+  under_100m: "Under $100M",
+  "100m_500m": "$100M–$500M",
+  "500m_1b": "$500M–$1B",
+  "1b_10b": "$1B–$10B",
+  "10b_100b": "$10B–$100B",
+  over_100b: "Over $100B",
+};
+
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   spam: "Spam or unsolicited promotion",
   harassment: "Harassment or abusive behavior",
@@ -686,6 +740,85 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["startup_use_of_funds_lines"]["Insert"]>;
+      };
+      startup_traction_signals: {
+        Row: {
+          id: string;
+          startup_id: string;
+          kind: TractionKind;
+          value_numeric: number;
+          period_start: string | null;
+          period_end: string | null;
+          evidence_url: string | null;
+          source_kind: TractionSourceKind;
+          self_reported: boolean;
+          notes: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_traction_signals"]["Row"],
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "source_kind"
+          | "self_reported"
+          | "display_order"
+        > & {
+          id?: string;
+          source_kind?: TractionSourceKind;
+          self_reported?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_traction_signals"]["Insert"]>;
+      };
+      startup_market_analysis: {
+        Row: {
+          id: string;
+          startup_id: string;
+          tam_band: MarketSizeBand | null;
+          sam_band: MarketSizeBand | null;
+          som_band: MarketSizeBand | null;
+          methodology_summary: string | null;
+          source_links: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_market_analysis"]["Row"],
+          "id" | "created_at" | "updated_at" | "source_links"
+        > & {
+          id?: string;
+          source_links?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_market_analysis"]["Insert"]>;
+      };
+      startup_competitive_landscape: {
+        Row: {
+          id: string;
+          startup_id: string;
+          competitor_name: string;
+          differentiation: string | null;
+          link_url: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_competitive_landscape"]["Row"],
+          "id" | "created_at" | "updated_at" | "display_order"
+        > & {
+          id?: string;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_competitive_landscape"]["Insert"]>;
       };
     };
     Views: Record<string, never>;

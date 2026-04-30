@@ -70,7 +70,7 @@ Sprint A migrations:
 
 - [`0012_profile_depth_team.sql`](../db/migrations/0012_profile_depth_team.sql) — `startup_team_members`, `investor_team_members`.
 - [`0013_profile_depth_round.sql`](../db/migrations/0013_profile_depth_round.sql) — `startup_round_details` (1:1; instrument, valuation band, lead-status state machine, target raise, close date, committed amount), `startup_cap_table_summary` (1:1; founder / employee pool / outside investor pct bands), `startup_use_of_funds_lines` (1:N per category with `pct_of_raise`).
-- `0014` — structured traction signals + market analysis + competitive landscape (next).
+- [`0014_profile_depth_traction.sql`](../db/migrations/0014_profile_depth_traction.sql) — `startup_traction_signals` (1:N; structured kind enum + numeric value + period + evidence URL + source kind, replaces freeform `startups.traction` for filtering and ranking), `startup_market_analysis` (1:1; TAM/SAM/SOM bands + methodology summary), `startup_competitive_landscape` (1:N; competitor + differentiation + link).
 - `0015` — investor depth (check bands per stage, portfolio, track record, decision process, value-add tags, anti-patterns) (next).
 - `0016` — verifications + references magic-link (next).
 
