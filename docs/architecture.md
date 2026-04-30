@@ -64,10 +64,21 @@ in bands, and verifications — rather than the single freeform-string
 fields the original schema exposed. Each child table mirrors its parent's
 RLS posture (`select all`; the app layer enforces `account_label='verified'`
 plus the paused / deletion / block checks; insert/update/delete gated by
-ownership through a subquery against the parent). See
-[`db/migrations/0012_profile_depth_team.sql`](../db/migrations/0012_profile_depth_team.sql)
-onward; remaining child tables (round details, traction signals, investor
-depth, verifications) land in subsequent migrations in the same sprint.
+ownership through a subquery against the parent).
+
+Sprint A migrations:
+
+- [`0012_profile_depth_team.sql`](../db/migrations/0012_profile_depth_team.sql) — `startup_team_members`, `investor_team_members`.
+- [`0013_profile_depth_round.sql`](../db/migrations/0013_profile_depth_round.sql) — `startup_round_details` (1:1; instrument, valuation band, lead-status state machine, target raise, close date, committed amount), `startup_cap_table_summary` (1:1; founder / employee pool / outside investor pct bands), `startup_use_of_funds_lines` (1:N per category with `pct_of_raise`).
+- [`0014_profile_depth_traction.sql`](../db/migrations/0014_profile_depth_traction.sql) — `startup_traction_signals` (1:N; structured kind enum + numeric value + period + evidence URL + source kind, replaces freeform `startups.traction` for filtering and ranking), `startup_market_analysis` (1:1; TAM/SAM/SOM bands + methodology summary), `startup_competitive_landscape` (1:N; competitor + differentiation + link).
+- [`0015_profile_depth_investor.sql`](../db/migrations/0015_profile_depth_investor.sql) — `investor_check_bands` (1:N per stage+role; lead vs follow check ranges so a multi-stage VC stops collapsing into one bogus pair), `investor_portfolio` (1:N; with public/private flag — private rows weight matching but never surface to founders), `investor_track_record` (1:1; deal-count / follow-on / fund-size bands), `investor_decision_process` (1:1; time-to-term-sheet band + four boolean process flags), `investor_value_add` (1:N per kind enum + per-tag narrative), `investor_anti_patterns` (1:N; structured "won't invest if" with required narrative).
+- [`0016_verifications.sql`](../db/migrations/0016_verifications.sql) — `verifications` (1:N; generic claim verification with kind enum covering LinkedIn employment / GitHub account / domain ownership / SEC Form D / Crunchbase / self-attestation; status state machine pending → confirmed | rejected | expired; `verified_by` enum reserved without a `human_review` value until paid-tier infra exists), `references_received` (1:N; magic-link reference requests reusing the sha256-hashed token + constant-time compare pattern from `email_change_requests`; strict select-own RLS — referee email is third-party PII and never surfaces to other users).
+
+**Bands, not exact figures, for anything that could read as financial advice
+or stale data**: equity ownership, valuation, fund size, dry powder. The
+founder's stated *ask* (target raise USD) is exact because it's their
+declared intent, not a market valuation — same convention as the existing
+`startups.raise_amount` column from 0001.
 
 Verification of any claim made on a depth row (LinkedIn employment,
 domain ownership, references) lives on a separate `verifications` table

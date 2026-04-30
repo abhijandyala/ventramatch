@@ -101,6 +101,230 @@ export const EQUITY_PCT_BAND_LABELS: Record<EquityPctBand, string> = {
   over_50: "50% or more",
 };
 
+// ──────────────────────────────────────────────────────────────────────────
+//  Round details (0013_profile_depth_round.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type RoundInstrument =
+  | "safe_post_money"
+  | "safe_pre_money"
+  | "priced_round"
+  | "convertible_note";
+
+export type RoundLeadStatus =
+  | "open"
+  | "soliciting_lead"
+  | "lead_committed"
+  | "oversubscribed";
+
+export type UseOfFundsCategory =
+  | "engineering"
+  | "sales_and_marketing"
+  | "operations"
+  | "runway_extension"
+  | "hiring"
+  | "infrastructure"
+  | "research_and_dev"
+  | "other";
+
+/**
+ * Valuation buckets are deliberately finer below $20M (where pre-seed and
+ * seed live). Stored as text + CHECK; revising buckets is a follow-up
+ * migration, not a forced enum-add.
+ */
+export type ValuationBand =
+  | "under_3m"
+  | "3_5m"
+  | "5_10m"
+  | "10_20m"
+  | "20_50m"
+  | "50_100m"
+  | "over_100m";
+
+export const VALUATION_BAND_LABELS: Record<ValuationBand, string> = {
+  under_3m: "Under $3M",
+  "3_5m": "$3–5M",
+  "5_10m": "$5–10M",
+  "10_20m": "$10–20M",
+  "20_50m": "$20–50M",
+  "50_100m": "$50–100M",
+  over_100m: "Over $100M",
+};
+
+export type FoundersPctBand =
+  | "under_50"
+  | "50_70"
+  | "70_85"
+  | "85_95"
+  | "over_95";
+
+export type EmployeePoolPctBand =
+  | "none"
+  | "under_10"
+  | "10_15"
+  | "15_20"
+  | "over_20";
+
+export type OutsideInvestorsPctBand =
+  | "none_yet"
+  | "under_15"
+  | "15_25"
+  | "25_35"
+  | "over_35";
+
+export type LastRoundAmountBand =
+  | "under_500k"
+  | "500k_1m"
+  | "1m_3m"
+  | "3m_10m"
+  | "10m_25m"
+  | "over_25m";
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Traction (0014_profile_depth_traction.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Structured traction signal kinds. The kind enum implies the unit of
+ * value_numeric (e.g., 'mrr' is USD, 'retention_day_30' is percent 0-100,
+ * 'nps' is -100 to 100). Zod schemas in lib/validation enforce per-kind
+ * unit semantics at submit time.
+ */
+export type TractionKind =
+  | "mrr"
+  | "arr"
+  | "gross_revenue"
+  | "paying_customers"
+  | "design_partners"
+  | "signed_lois"
+  | "waitlist_size"
+  | "dau"
+  | "mau"
+  | "retention_day_30"
+  | "retention_day_90"
+  | "nps"
+  | "gross_margin_pct"
+  | "cac_usd"
+  | "ltv_usd"
+  | "contracted_revenue"
+  | "gmv";
+
+export type TractionSourceKind =
+  | "stripe_dashboard"
+  | "bank_statement"
+  | "crm_export"
+  | "csv_upload"
+  | "self_attested"
+  | "other";
+
+export type MarketSizeBand =
+  | "under_100m"
+  | "100m_500m"
+  | "500m_1b"
+  | "1b_10b"
+  | "10b_100b"
+  | "over_100b";
+
+export const MARKET_SIZE_BAND_LABELS: Record<MarketSizeBand, string> = {
+  under_100m: "Under $100M",
+  "100m_500m": "$100M–$500M",
+  "500m_1b": "$500M–$1B",
+  "1b_10b": "$1B–$10B",
+  "10b_100b": "$10B–$100B",
+  over_100b: "Over $100B",
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Investor depth (0015_profile_depth_investor.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type InvestorRoleEnum = "lead" | "co_lead" | "follow" | "participant";
+export type InvestorCheckRole = "lead" | "follow";
+export type InvestorExitKind = "acquired" | "ipo" | "shutdown" | "n_a";
+
+export type InvestorValueAddKind =
+  | "recruiting"
+  | "gtm_intros"
+  | "sales_intros"
+  | "customer_intros"
+  | "board_governance"
+  | "regulatory"
+  | "technical_dd"
+  | "fundraising_strategy"
+  | "international_expansion";
+
+export type InvestorAntiPatternKind =
+  | "sector"
+  | "stage"
+  | "geography"
+  | "founder_profile"
+  | "check_size"
+  | "other";
+
+export type OwnershipBand = "under_5pct" | "5_10" | "10_20" | "over_20";
+
+export type DealCountBand =
+  | "under_10"
+  | "10_25"
+  | "25_50"
+  | "50_100"
+  | "over_100";
+
+export type FollowOnRateBand = "under_25" | "25_50" | "50_75" | "over_75";
+
+export type FundSizeBand =
+  | "under_25m"
+  | "25_100m"
+  | "100_500m"
+  | "500m_1b"
+  | "over_1b";
+
+export type DryPowderBand =
+  | "depleted"
+  | "under_25m"
+  | "25_100m"
+  | "100_500m"
+  | "over_500m";
+
+export type TimeToTermSheetBand =
+  | "one_week"
+  | "two_weeks"
+  | "one_month"
+  | "two_months"
+  | "quarter_plus";
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Verifications + references (0016_verifications.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type VerificationKind =
+  | "linkedin_employment"
+  | "github_account"
+  | "domain_ownership"
+  | "sec_form_d"
+  | "crunchbase_listing"
+  | "self_attestation";
+
+export type VerificationStatus =
+  | "pending"
+  | "confirmed"
+  | "rejected"
+  | "expired";
+
+/**
+ * How a verification was confirmed. `human_review` is reserved for a
+ * future paid-tier migration (ALTER TYPE ... ADD VALUE) and is not in
+ * the v0 enum — we don't ship verification claims we can't back without
+ * paid infra.
+ */
+export type VerificationVerifiedBy =
+  | "self"
+  | "linkedin_oauth"
+  | "email_token"
+  | "sec_public";
+
+export type ReferenceStatus = "sent" | "confirmed" | "declined" | "expired";
+
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   spam: "Spam or unsolicited promotion",
   harassment: "Harassment or abusive behavior",
@@ -533,6 +757,370 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["investor_team_members"]["Insert"]>;
+      };
+      startup_round_details: {
+        Row: {
+          id: string;
+          startup_id: string;
+          instrument: RoundInstrument | null;
+          valuation_band: ValuationBand | null;
+          target_raise_usd: number | null;
+          min_check_usd: number | null;
+          lead_status: RoundLeadStatus;
+          close_by_date: string | null;
+          committed_amount_usd: number;
+          use_of_funds_summary: string | null;
+          instrument_terms_summary: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_round_details"]["Row"],
+          "id" | "created_at" | "updated_at" | "lead_status" | "committed_amount_usd"
+        > & {
+          id?: string;
+          lead_status?: RoundLeadStatus;
+          committed_amount_usd?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_round_details"]["Insert"]>;
+      };
+      startup_cap_table_summary: {
+        Row: {
+          id: string;
+          startup_id: string;
+          founders_pct_band: FoundersPctBand | null;
+          employee_pool_pct_band: EmployeePoolPctBand | null;
+          outside_investors_pct_band: OutsideInvestorsPctBand | null;
+          prior_raises_count: number;
+          last_round_amount_band: LastRoundAmountBand | null;
+          last_round_year: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_cap_table_summary"]["Row"],
+          "id" | "created_at" | "updated_at" | "prior_raises_count"
+        > & {
+          id?: string;
+          prior_raises_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_cap_table_summary"]["Insert"]>;
+      };
+      startup_use_of_funds_lines: {
+        Row: {
+          id: string;
+          startup_id: string;
+          category: UseOfFundsCategory;
+          pct_of_raise: number;
+          narrative: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_use_of_funds_lines"]["Row"],
+          "id" | "created_at" | "updated_at" | "display_order"
+        > & {
+          id?: string;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_use_of_funds_lines"]["Insert"]>;
+      };
+      startup_traction_signals: {
+        Row: {
+          id: string;
+          startup_id: string;
+          kind: TractionKind;
+          value_numeric: number;
+          period_start: string | null;
+          period_end: string | null;
+          evidence_url: string | null;
+          source_kind: TractionSourceKind;
+          self_reported: boolean;
+          notes: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_traction_signals"]["Row"],
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "source_kind"
+          | "self_reported"
+          | "display_order"
+        > & {
+          id?: string;
+          source_kind?: TractionSourceKind;
+          self_reported?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_traction_signals"]["Insert"]>;
+      };
+      startup_market_analysis: {
+        Row: {
+          id: string;
+          startup_id: string;
+          tam_band: MarketSizeBand | null;
+          sam_band: MarketSizeBand | null;
+          som_band: MarketSizeBand | null;
+          methodology_summary: string | null;
+          source_links: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_market_analysis"]["Row"],
+          "id" | "created_at" | "updated_at" | "source_links"
+        > & {
+          id?: string;
+          source_links?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_market_analysis"]["Insert"]>;
+      };
+      startup_competitive_landscape: {
+        Row: {
+          id: string;
+          startup_id: string;
+          competitor_name: string;
+          differentiation: string | null;
+          link_url: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_competitive_landscape"]["Row"],
+          "id" | "created_at" | "updated_at" | "display_order"
+        > & {
+          id?: string;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_competitive_landscape"]["Insert"]>;
+      };
+      investor_check_bands: {
+        Row: {
+          id: string;
+          investor_id: string;
+          stage: StartupStage;
+          role: InvestorCheckRole;
+          check_min_usd: number;
+          check_max_usd: number;
+          ownership_target_band: OwnershipBand | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_check_bands"]["Row"],
+          "id" | "created_at" | "updated_at"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_check_bands"]["Insert"]>;
+      };
+      investor_portfolio: {
+        Row: {
+          id: string;
+          investor_id: string;
+          company_name: string;
+          year: number | null;
+          role: InvestorRoleEnum;
+          is_public_listing: boolean;
+          sector: string | null;
+          is_exited: boolean;
+          exit_kind: InvestorExitKind | null;
+          notes: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_portfolio"]["Row"],
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "is_public_listing"
+          | "is_exited"
+          | "display_order"
+        > & {
+          id?: string;
+          is_public_listing?: boolean;
+          is_exited?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_portfolio"]["Insert"]>;
+      };
+      investor_track_record: {
+        Row: {
+          id: string;
+          investor_id: string;
+          total_deals_band: DealCountBand | null;
+          first_money_in_count_band: DealCountBand | null;
+          follow_on_rate_band: FollowOnRateBand | null;
+          avg_ownership_band: OwnershipBand | null;
+          fund_size_band: FundSizeBand | null;
+          fund_vintage_year: number | null;
+          dry_powder_band: DryPowderBand | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_track_record"]["Row"],
+          "id" | "created_at" | "updated_at"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_track_record"]["Insert"]>;
+      };
+      investor_decision_process: {
+        Row: {
+          id: string;
+          investor_id: string;
+          time_to_term_sheet_band: TimeToTermSheetBand | null;
+          ic_required: boolean;
+          references_required: boolean;
+          data_room_required: boolean;
+          partner_meeting_required: boolean;
+          process_narrative: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_decision_process"]["Row"],
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "ic_required"
+          | "references_required"
+          | "data_room_required"
+          | "partner_meeting_required"
+        > & {
+          id?: string;
+          ic_required?: boolean;
+          references_required?: boolean;
+          data_room_required?: boolean;
+          partner_meeting_required?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_decision_process"]["Insert"]>;
+      };
+      investor_value_add: {
+        Row: {
+          id: string;
+          investor_id: string;
+          kind: InvestorValueAddKind;
+          narrative: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_value_add"]["Row"],
+          "id" | "created_at" | "updated_at" | "display_order"
+        > & {
+          id?: string;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_value_add"]["Insert"]>;
+      };
+      investor_anti_patterns: {
+        Row: {
+          id: string;
+          investor_id: string;
+          kind: InvestorAntiPatternKind;
+          narrative: string;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_anti_patterns"]["Row"],
+          "id" | "created_at" | "updated_at" | "display_order"
+        > & {
+          id?: string;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_anti_patterns"]["Insert"]>;
+      };
+      verifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          kind: VerificationKind;
+          evidence_url: string | null;
+          evidence_hash: string | null;
+          claim_summary: string | null;
+          status: VerificationStatus;
+          verified_by: VerificationVerifiedBy;
+          verified_at: string | null;
+          expires_at: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["verifications"]["Row"],
+          "id" | "created_at" | "updated_at" | "status" | "verified_by"
+        > & {
+          id?: string;
+          status?: VerificationStatus;
+          verified_by?: VerificationVerifiedBy;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["verifications"]["Insert"]>;
+      };
+      references_received: {
+        Row: {
+          id: string;
+          user_id: string;
+          referee_email: string;
+          referee_name: string;
+          relationship: string;
+          status: ReferenceStatus;
+          token_hash: string;
+          expires_at: string;
+          confirmed_at: string | null;
+          declined_at: string | null;
+          endorsement: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["references_received"]["Row"],
+          "id" | "created_at" | "updated_at" | "status" | "expires_at"
+        > & {
+          id?: string;
+          status?: ReferenceStatus;
+          expires_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["references_received"]["Insert"]>;
       };
     };
     Views: Record<string, never>;
