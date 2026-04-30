@@ -11,7 +11,7 @@ import {
   type FeedInvestorCard,
 } from "@/lib/feed/query";
 import { fetchIntroBadgeCounts, type IntroBadgeCounts } from "@/lib/intros/query";
-import { parseFeedFilters, type FeedFilters } from "@/lib/feed/filters";
+import { parseFeedFilters, hasActiveFilters, type FeedFilters } from "@/lib/feed/filters";
 import { AccountStatusBanner } from "@/components/account/account-status-banner";
 import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
 import { FeedCard } from "@/components/feed/feed-card";
@@ -41,6 +41,7 @@ export default async function FeedPage({
 
   const params = await searchParams;
   const filters = parseFeedFilters(params);
+  const isExploring = hasActiveFilters(filters);
 
   console.log(
     `[feed] userId=${userId} role=${role} q=${filters.q ?? ""} sort=${filters.sort} industries=${filters.industries.length}`,
@@ -59,11 +60,12 @@ export default async function FeedPage({
       accountLabel={accountLabel}
       introCounts={introCounts}
       filters={filters}
+      isExploring={isExploring}
     >
       {role === "founder" ? (
-        <FounderFeedBody items={items as FeedInvestorCard[]} filters={filters} />
+        <FounderFeedBody items={items as FeedInvestorCard[]} filters={filters} isExploring={isExploring} />
       ) : (
-        <InvestorFeedBody items={items as FeedStartupCard[]} filters={filters} />
+        <InvestorFeedBody items={items as FeedStartupCard[]} filters={filters} isExploring={isExploring} />
       )}
     </FeedShell>
   );
@@ -78,12 +80,14 @@ function FeedShell({
   accountLabel,
   introCounts,
   filters,
+  isExploring,
   children,
 }: {
   role: "founder" | "investor";
   accountLabel: AccountLabel;
   introCounts: IntroBadgeCounts;
   filters: FeedFilters;
+  isExploring: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -92,9 +96,11 @@ function FeedShell({
         eyebrow="Discovery"
         title={role === "founder" ? "Investors who back your stage" : "Startups in your thesis"}
         subtitle={
-          filters.q
-            ? `Searching: "${filters.q}"`
-            : "Verified profiles only. Filters and search live in the URL — share or save them."
+          isExploring
+            ? filters.q
+              ? `Searching: "${filters.q}"`
+              : "Filtered results — use search and filters to refine your explore."
+            : "Personalized matches based on your profile and marketplace fit."
         }
       />
 
@@ -127,6 +133,7 @@ function FeedShell({
             <Suspense fallback={null}>
               <ActiveFiltersStrip />
             </Suspense>
+            {!isExploring && <SuggestedFeedIntro role={role} />}
             {children}
           </section>
         </div>
@@ -157,19 +164,23 @@ function FilterPanelFallback() {
 function InvestorFeedBody({
   items,
   filters,
+  isExploring,
 }: {
   items: FeedStartupCard[];
   filters: FeedFilters;
+  isExploring: boolean;
 }) {
+  const mode = isExploring ? "explore" : "suggested";
   return (
     <>
-      <ResultsHeader count={items.length} filters={filters} />
+      <ResultsHeader count={items.length} filters={filters} mode={mode} />
       {items.length === 0 ? (
         <FeedEmptyState
+          title={mode === "suggested" ? "No suggestions yet" : "Nothing matches your filters"}
           hint={
-            filters.q || filters.industries.length || filters.stages.length
-              ? "Loosen your filters or try a different search query."
-              : "Check that your sectors, stages, and check size are filled out — those drive the filter."
+            mode === "suggested"
+              ? "Complete your profile details and verification so VentraMatch can rank better recommendations."
+              : "Loosen your filters or try a different search query."
           }
         />
       ) : (
@@ -193,19 +204,23 @@ function InvestorFeedBody({
 function FounderFeedBody({
   items,
   filters,
+  isExploring,
 }: {
   items: FeedInvestorCard[];
   filters: FeedFilters;
+  isExploring: boolean;
 }) {
+  const mode = isExploring ? "explore" : "suggested";
   return (
     <>
-      <ResultsHeader count={items.length} filters={filters} />
+      <ResultsHeader count={items.length} filters={filters} mode={mode} />
       {items.length === 0 ? (
         <FeedEmptyState
+          title={mode === "suggested" ? "No suggestions yet" : "Nothing matches your filters"}
           hint={
-            filters.q || filters.industries.length || filters.stages.length
-              ? "Loosen your filters or try a different search query."
-              : "Make sure your stage and target raise are filled out — those drive the filter."
+            mode === "suggested"
+              ? "Complete your profile details and verification so VentraMatch can rank better recommendations."
+              : "Loosen your filters or try a different search query."
           }
         />
       ) : (
@@ -229,6 +244,45 @@ function FounderFeedBody({
 // ──────────────────────────────────────────────────────────────────────────
 //  Misc presentation
 // ──────────────────────────────────────────────────────────────────────────
+
+function SuggestedFeedIntro({ role }: { role: "founder" | "investor" }) {
+  const pills = ["Ranked by fit", "Verified profiles only", "Explore with filters"];
+  return (
+    <div
+      className="mb-5 border bg-[var(--color-surface)] p-4"
+      style={{ borderColor: "var(--color-border)" }}
+    >
+      <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--color-brand)]">
+        Suggested for You
+      </p>
+      <p className="mt-1 text-[14px] font-semibold tracking-tight text-[var(--color-text-strong)]">
+        {role === "founder"
+          ? "Investors most aligned with your raise"
+          : "Startups most aligned with your thesis"}
+      </p>
+      <p className="mt-1.5 text-[12.5px] leading-[1.55] text-[var(--color-text-muted)]">
+        Recommendations ranked by fit across sectors, stage, location, check or raise size, profile
+        depth, and marketplace activity. Use filters when you want to explore beyond your suggested
+        feed.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {pills.map((label) => (
+          <span
+            key={label}
+            className="inline-flex items-center px-2.5 py-1 text-[11.5px] font-medium"
+            style={{
+              background: "var(--color-brand-tint)",
+              color: "var(--color-brand-strong)",
+              border: "1px solid var(--color-brand)",
+            }}
+          >
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function FeedHeader({
   eyebrow,
@@ -262,12 +316,27 @@ function FeedHeader({
   );
 }
 
-function ResultsHeader({ count, filters }: { count: number; filters: FeedFilters }) {
+function ResultsHeader({
+  count,
+  filters,
+  mode,
+}: {
+  count: number;
+  filters: FeedFilters;
+  mode: "suggested" | "explore";
+}) {
   return (
     <header className="mb-3 flex items-baseline justify-between gap-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-text-faint)]">
-        {count} result{count === 1 ? "" : "s"} · sorted by {filters.sort === "score" ? "best match" : "most recent"}
-      </p>
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[13px] font-semibold text-[var(--color-text-strong)]">
+          {mode === "suggested" ? "Suggested for You" : "Explore Results"}
+        </p>
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--color-text-faint)]">
+          {mode === "suggested"
+            ? `${count} suggested match${count === 1 ? "" : "es"}`
+            : `${count} result${count === 1 ? "" : "s"} · sorted by ${filters.sort === "score" ? "best match" : "most recent"}`}
+        </p>
+      </div>
       <Link
         href={"/searches" as Route}
         className="text-[12px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-strong)]"
@@ -278,15 +347,13 @@ function ResultsHeader({ count, filters }: { count: number; filters: FeedFilters
   );
 }
 
-function FeedEmptyState({ hint }: { hint: string }) {
+function FeedEmptyState({ title, hint }: { title: string; hint: string }) {
   return (
     <div
       className="border border-dashed p-8 text-center"
       style={{ borderColor: "var(--color-border-strong, var(--color-border))" }}
     >
-      <p className="text-[14px] font-semibold text-[var(--color-text-strong)]">
-        Nothing matches your filters
-      </p>
+      <p className="text-[14px] font-semibold text-[var(--color-text-strong)]">{title}</p>
       <p className="mt-2 text-[13px] leading-[1.5] text-[var(--color-text-muted)]">{hint}</p>
     </div>
   );
