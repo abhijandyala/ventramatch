@@ -66,8 +66,8 @@ export function EmailForm({ mode }: Props) {
         setFormError(result.error);
         return;
       }
-      router.push("/post-auth");
-      router.refresh();
+      const target = `/verify-email?email=${encodeURIComponent(result.email)}` as Route;
+      router.push(target);
     });
   }
 

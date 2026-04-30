@@ -7,9 +7,10 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 // auth.ts (server). Credentials + adapter are added on top in auth.ts so they
 // stay out of the edge runtime.
 
-const PROTECTED_PATHS = ["/dashboard", "/settings", "/profile", "/post-auth"];
+const PROTECTED_PATHS = ["/dashboard", "/settings", "/profile", "/post-auth", "/homepage"];
 const ONBOARDING_PATHS = ["/onboarding"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
+const VERIFY_PATH = "/verify-email";
 
 function pathStartsWith(pathname: string, prefixes: readonly string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -36,9 +37,11 @@ export const authConfig = {
       const onAuthPage = pathStartsWith(pathname, AUTH_PATHS);
       const onProtected = pathStartsWith(pathname, PROTECTED_PATHS);
       const onOnboarding = pathStartsWith(pathname, ONBOARDING_PATHS);
+      const onVerify = pathname === VERIFY_PATH || pathname.startsWith(`${VERIFY_PATH}/`);
       const completed = auth?.user?.onboardingCompleted === true;
+      const verified = auth?.user?.isEmailVerified === true;
 
-      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} completed=${completed} userId=${auth?.user?.id ?? "none"}`);
+      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} verified=${verified} completed=${completed} userId=${auth?.user?.id ?? "none"}`);
 
       if (onAuthPage && isLoggedIn) {
         console.log("[auth:middleware] → redirect /post-auth (logged-in user on auth page)");
@@ -52,6 +55,17 @@ export const authConfig = {
         return Response.redirect(target);
       }
 
+      // Block unverified users from anything past auth. /verify-email and
+      // /api/auth/verify are intentionally not in PROTECTED so they remain
+      // reachable. OAuth users always have emailVerified=true via the adapter.
+      if (isLoggedIn && !verified && (onProtected || onOnboarding)) {
+        const email = auth?.user?.email ?? "";
+        console.log(`[auth:middleware] → redirect /verify-email (unverified email on ${pathname})`);
+        const target = new URL(VERIFY_PATH, request.nextUrl);
+        if (email) target.searchParams.set("email", email);
+        return Response.redirect(target);
+      }
+
       if (isLoggedIn && onOnboarding && completed) {
         console.log("[auth:middleware] → redirect /homepage (onboarding already done)");
         return Response.redirect(new URL("/homepage", request.nextUrl));
@@ -62,6 +76,13 @@ export const authConfig = {
         return Response.redirect(new URL("/onboarding", request.nextUrl));
       }
 
+      // Verified users with no business on the verify page → push them forward
+      if (isLoggedIn && verified && onVerify) {
+        const target = completed ? "/homepage" : "/onboarding";
+        console.log(`[auth:middleware] → redirect ${target} (already verified)`);
+        return Response.redirect(new URL(target, request.nextUrl));
+      }
+
       console.log(`[auth:middleware] → pass through ${pathname}`);
       return true;
     },
@@ -70,7 +91,8 @@ export const authConfig = {
         token.id = user.id;
         token.role = user.role ?? null;
         token.onboardingCompleted = user.onboardingCompleted ?? false;
-        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false}`);
+        token.isEmailVerified = Boolean(user.emailVerified);
+        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false} verified=${token.isEmailVerified}`);
       }
       return token;
     },
@@ -79,6 +101,7 @@ export const authConfig = {
         session.user.id = (token.id ?? token.sub) as string;
         session.user.role = token.role ?? null;
         session.user.onboardingCompleted = token.onboardingCompleted ?? false;
+        session.user.isEmailVerified = token.isEmailVerified ?? false;
       }
       return session;
     },
