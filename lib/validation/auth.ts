@@ -22,6 +22,12 @@ export const signUpSchema = z
     email: emailSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirm your password."),
+    // Required: must be true to create the account.
+    termsAccepted: z.literal(true, {
+      message: "You must agree to the Terms and Privacy Policy.",
+    }),
+    // Optional opt-in for marketing email — defaults false.
+    marketingOptIn: z.boolean().default(false),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match.",

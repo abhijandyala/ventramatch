@@ -2,12 +2,16 @@ import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 import LinkedIn from "next-auth/providers/linkedin";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
+import GitHub from "next-auth/providers/github";
 
 // Edge-safe: no DB, no Node-only APIs. Imported by proxy.ts (middleware) and by
 // auth.ts (server). Credentials + adapter are added on top in auth.ts so they
 // stay out of the edge runtime.
 
-const PROTECTED_PATHS = ["/dashboard", "/settings", "/profile", "/post-auth", "/homepage", "/feeds", "/feed"];
+const PROTECTED_PATHS = [
+  "/dashboard", "/settings", "/profile", "/post-auth", "/homepage",
+  "/feed", "/matches", "/p", "/build", "/inbox", "/searches",
+];
 const ONBOARDING_PATHS = ["/onboarding"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 const VERIFY_PATH = "/verify-email";
@@ -16,20 +20,32 @@ function pathStartsWith(pathname: string, prefixes: readonly string[]): boolean 
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export const authConfig = {
-  pages: {
-    signIn: "/sign-in",
-    error: "/error",
-  },
-  session: { strategy: "jwt" },
-  providers: [
+// Build the providers array based on which env vars are configured.
+// GitHub is optional — only register it if creds exist so we don't crash
+// environments that haven't created the OAuth app yet.
+type ProviderEntry = NextAuthConfig["providers"][number];
+function buildProviders(): ProviderEntry[] {
+  const providers: ProviderEntry[] = [
     Google({ allowDangerousEmailAccountLinking: true }),
     LinkedIn({ allowDangerousEmailAccountLinking: true }),
     MicrosoftEntraID({
       allowDangerousEmailAccountLinking: true,
       issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
     }),
-  ],
+  ];
+  if (process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET) {
+    providers.push(GitHub({ allowDangerousEmailAccountLinking: true }));
+  }
+  return providers;
+}
+
+export const authConfig = {
+  pages: {
+    signIn: "/sign-in",
+    error: "/error",
+  },
+  session: { strategy: "jwt" },
+  providers: buildProviders(),
   callbacks: {
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl;
@@ -40,8 +56,17 @@ export const authConfig = {
       const onVerify = pathname === VERIFY_PATH || pathname.startsWith(`${VERIFY_PATH}/`);
       const completed = auth?.user?.onboardingCompleted === true;
       const verified = auth?.user?.isEmailVerified === true;
+      const accountLabel = auth?.user?.accountLabel;
+      const isBanned = accountLabel === "banned";
 
-      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} verified=${verified} completed=${completed} userId=${auth?.user?.id ?? "none"}`);
+      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} verified=${verified} completed=${completed} label=${accountLabel ?? "?"} userId=${auth?.user?.id ?? "none"}`);
+
+      // Banned accounts: hard block. Only allow /banned page + /sign-in
+      // (so they can sign out). Everything else redirects to a banned page.
+      if (isLoggedIn && isBanned && !pathname.startsWith("/banned") && !onAuthPage) {
+        console.log("[auth:middleware] → redirect /banned (account suspended)");
+        return Response.redirect(new URL("/banned", request.nextUrl));
+      }
 
       if (onAuthPage && isLoggedIn) {
         console.log("[auth:middleware] → redirect /post-auth (logged-in user on auth page)");
@@ -92,7 +117,11 @@ export const authConfig = {
         token.role = user.role ?? null;
         token.onboardingCompleted = user.onboardingCompleted ?? false;
         token.isEmailVerified = Boolean(user.emailVerified);
-        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false} verified=${token.isEmailVerified}`);
+        // accountLabel comes from Credentials authorize OR the adapter's
+        // toAdapterUser. Defaults to 'unverified' if neither set it (e.g.
+        // an OAuth user before the trigger seeds applications).
+        token.accountLabel = user.accountLabel ?? "unverified";
+        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false} verified=${token.isEmailVerified} label=${token.accountLabel}`);
       }
       // unstable_update() from server actions only hits this path; `user` is absent.
       if (trigger === "update" && session?.user) {
@@ -104,8 +133,11 @@ export const authConfig = {
         if (typeof u.isEmailVerified === "boolean") {
           token.isEmailVerified = u.isEmailVerified;
         }
+        if (u.accountLabel) {
+          token.accountLabel = u.accountLabel;
+        }
         console.log(
-          `[auth:jwt] trigger=update userId=${token.sub ?? "none"} role=${token.role ?? "null"} onboarded=${token.onboardingCompleted ?? false} verified=${token.isEmailVerified}`,
+          `[auth:jwt] trigger=update userId=${token.sub ?? "none"} role=${token.role ?? "null"} onboarded=${token.onboardingCompleted ?? false} verified=${token.isEmailVerified} label=${token.accountLabel}`,
         );
       }
       return token;
@@ -116,6 +148,7 @@ export const authConfig = {
         session.user.role = token.role ?? null;
         session.user.onboardingCompleted = token.onboardingCompleted ?? false;
         session.user.isEmailVerified = token.isEmailVerified ?? false;
+        session.user.accountLabel = token.accountLabel ?? "unverified";
       }
       return session;
     },

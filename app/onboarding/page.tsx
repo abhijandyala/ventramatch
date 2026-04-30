@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/session";
@@ -19,5 +20,9 @@ export default async function OnboardingPage() {
     redirect("/homepage");
   }
 
-  return <OnboardingWizard />;
+  return (
+    <Suspense fallback={null}>
+      <OnboardingWizard />
+    </Suspense>
+  );
 }

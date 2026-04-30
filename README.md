@@ -200,7 +200,9 @@ ventramatch/
 -- Core entities. See db/migrations/0001_initial_schema.sql for full DDL.
 
 users               -- id = same UUID as auth provider; role + email
-  id, email, role ('founder' | 'investor'), created_at, email_verified
+  id, email, role ('founder' | 'investor'), email_verified,
+  account_label ('unverified' | 'in_review' | 'verified' | 'rejected' | 'banned'),
+  created_at, updated_at
 
 startups            -- one per founder user
   id, user_id, name, one_liner, industry, stage, raise_amount,
@@ -216,6 +218,24 @@ interactions        -- every like / pass / save event
 
 matches             -- mutual interest
   id, founder_user_id, investor_user_id, matched_at, contact_unlocked
+
+-- Auto-review pipeline (db/migrations/0005_application_review.sql)
+
+applications        -- one per user; status drives users.account_label via trigger
+  id, user_id, status, bot_recommendation, bot_confidence, bot_recommended_at,
+  decided_by, decided_at, decision_reason_codes[], decision_summary,
+  submitted_at, resubmit_count, created_at, updated_at
+  -- DB constraint: terminal status ('accepted'|'rejected'|'banned') requires
+  -- decided_by LIKE 'human:%' so the bot cannot admit/reject without sign-off.
+
+application_reviews -- append-only forensic log; one row per reviewer pass
+  id, application_id, user_id, pass_no, reviewer_kind ('rules'|'llm'|'human'),
+  reviewer_id, verdict, confidence, rule_results, llm_raw, flags[],
+  notes, cost_usd, duration_ms, created_at
+
+email_outbox        -- transactional sends with idempotency + scheduling
+  id, user_id, template, payload, send_after, cancelled_at,
+  sent_at, resend_id, attempts, last_error, created_at, updated_at
 ```
 
 Row-Level Security is **mandatory** on every table. RLS policies ship in the same migration as the table.
@@ -287,6 +307,9 @@ cp .env.example .env.local        # set DATABASE_URL (Railway or local Postgres)
 # Apply schema once (in order):
 #   psql "$DATABASE_URL" -f db/migrations/0001_initial_schema.sql
 #   psql "$DATABASE_URL" -f db/migrations/0002_auth_schema.sql
+#   psql "$DATABASE_URL" -f db/migrations/0003_onboarding_matching_info.sql
+#   psql "$DATABASE_URL" -f db/migrations/0004_onboarding_profile_goals.sql
+#   psql "$DATABASE_URL" -f db/migrations/0005_application_review.sql
 npm run dev                       # http://localhost:3000
 ```
 

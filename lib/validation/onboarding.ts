@@ -47,19 +47,13 @@ export const profileInfoSchema = z.discriminatedUnion("role", [
 ]);
 export type ProfileInfoInput = z.infer<typeof profileInfoSchema>;
 
-export const goalsSchema = z.object({
-  goals: z
-    .string()
-    .trim()
-    .min(1, "Tell us what you're looking for.")
-    .max(500, "Keep it under 500 characters."),
-});
-export type GoalsInput = z.infer<typeof goalsSchema>;
+// Step 3 of onboarding is "Connect" — purely external OAuth, nothing to
+// validate server-side at this stage. The user clicks Skip or hits a
+// provider button which triggers a separate OAuth flow.
 
 export const onboardingSchema = z.object({
   role: roleSchema,
   profile: profileInfoSchema,
-  goals: goalsSchema,
 });
 export type OnboardingInput = z.infer<typeof onboardingSchema>;
 

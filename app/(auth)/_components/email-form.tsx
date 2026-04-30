@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Loader2 } from "lucide-react";
@@ -54,6 +55,8 @@ export function EmailForm({ mode }: Props) {
       email: data.get("email"),
       password: data.get("password"),
       confirmPassword: data.get("confirmPassword"),
+      termsAccepted: data.get("termsAccepted") === "on",
+      marketingOptIn: data.get("marketingOptIn") === "on",
     });
     if (!parsed.success) {
       setErrors(toFieldErrors(parsed.error.issues));
@@ -130,6 +133,38 @@ export function EmailForm({ mode }: Props) {
         />
       ) : null}
 
+      {mode === "sign-up" ? (
+        <div className="mt-2 flex flex-col gap-2.5">
+          <Checkbox
+            id="termsAccepted"
+            name="termsAccepted"
+            error={errors.termsAccepted}
+            required
+          >
+            I agree to the{" "}
+            <Link
+              href="/legal/tos"
+              target="_blank"
+              className="font-medium text-[var(--color-text)] underline-offset-4 hover:underline"
+            >
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/legal/privacy"
+              target="_blank"
+              className="font-medium text-[var(--color-text)] underline-offset-4 hover:underline"
+            >
+              Privacy Policy
+            </Link>
+            .
+          </Checkbox>
+          <Checkbox id="marketingOptIn" name="marketingOptIn">
+            Send me product updates and matching tips. (Optional, unsubscribe anytime.)
+          </Checkbox>
+        </div>
+      ) : null}
+
       {formError ? (
         <p
           role="alert"
@@ -153,6 +188,45 @@ export function EmailForm({ mode }: Props) {
         {mode === "sign-in" ? "Sign in" : "Create account"}
       </button>
     </form>
+  );
+}
+
+type CheckboxProps = {
+  id: string;
+  name: string;
+  required?: boolean;
+  error?: string;
+  children: React.ReactNode;
+};
+
+function Checkbox({ id, name, required, error, children }: CheckboxProps) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label
+        htmlFor={id}
+        className="flex cursor-pointer items-start gap-2.5 text-[13px] leading-[1.5] text-[var(--color-text-muted)]"
+      >
+        <input
+          id={id}
+          name={name}
+          type="checkbox"
+          required={required}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className={cn(
+            "mt-0.5 h-4 w-4 shrink-0 cursor-pointer",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-ink)]/30",
+          )}
+          style={{ accentColor: "var(--color-brand-ink)" }}
+        />
+        <span>{children}</span>
+      </label>
+      {error ? (
+        <p id={`${id}-error`} className="ml-[26px] text-[12px] text-[var(--color-danger)]">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

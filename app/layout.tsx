@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { SkipLink } from "@/components/landing/skip-link";
 import { SmoothScroll } from "@/components/landing/smooth-scroll";
+import { CookieBanner } from "@/components/legal/cookie-banner";
 import "./globals.css";
 
 const inter = Inter({
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <SkipLink />
         <SmoothScroll>{children}</SmoothScroll>
+        <CookieBanner />
       </body>
     </html>
   );

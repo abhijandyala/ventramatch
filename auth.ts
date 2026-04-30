@@ -5,7 +5,7 @@ import { ventramatchAdapter } from "@/lib/auth/adapter";
 import { verifyPassword } from "@/lib/auth/password";
 import { signInSchema } from "@/lib/validation/auth";
 import { withUserRls } from "@/lib/db";
-import type { UserRole } from "@/types/database";
+import type { UserRole, AccountLabel } from "@/types/database";
 
 type CredentialsRow = {
   id: string;
@@ -15,6 +15,7 @@ type CredentialsRow = {
   onboarding_completed: boolean;
   password_hash: string | null;
   email_verified_at: Date | string | null;
+  account_label: AccountLabel | null;
 };
 
 export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
@@ -35,7 +36,8 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
 
         const user = await withUserRls<CredentialsRow | null>(null, async (sql) => {
           const rows = await sql<CredentialsRow[]>`
-            select id, email, name, role, onboarding_completed, password_hash, email_verified_at
+            select id, email, name, role, onboarding_completed, password_hash,
+                   email_verified_at, account_label
             from public.users
             where email = ${email}
             limit 1
@@ -55,6 +57,7 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
           role: user.role,
           onboardingCompleted: user.onboarding_completed,
           emailVerified: user.email_verified_at ? new Date(user.email_verified_at) : null,
+          accountLabel: user.account_label ?? "unverified",
         };
       },
     }),
