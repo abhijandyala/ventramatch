@@ -293,6 +293,38 @@ export type TimeToTermSheetBand =
   | "two_months"
   | "quarter_plus";
 
+// ──────────────────────────────────────────────────────────────────────────
+//  Verifications + references (0016_verifications.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type VerificationKind =
+  | "linkedin_employment"
+  | "github_account"
+  | "domain_ownership"
+  | "sec_form_d"
+  | "crunchbase_listing"
+  | "self_attestation";
+
+export type VerificationStatus =
+  | "pending"
+  | "confirmed"
+  | "rejected"
+  | "expired";
+
+/**
+ * How a verification was confirmed. `human_review` is reserved for a
+ * future paid-tier migration (ALTER TYPE ... ADD VALUE) and is not in
+ * the v0 enum — we don't ship verification claims we can't back without
+ * paid infra.
+ */
+export type VerificationVerifiedBy =
+  | "self"
+  | "linkedin_oauth"
+  | "email_token"
+  | "sec_public";
+
+export type ReferenceStatus = "sent" | "confirmed" | "declined" | "expired";
+
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   spam: "Spam or unsolicited promotion",
   harassment: "Harassment or abusive behavior",
@@ -1033,6 +1065,62 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["investor_anti_patterns"]["Insert"]>;
+      };
+      verifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          kind: VerificationKind;
+          evidence_url: string | null;
+          evidence_hash: string | null;
+          claim_summary: string | null;
+          status: VerificationStatus;
+          verified_by: VerificationVerifiedBy;
+          verified_at: string | null;
+          expires_at: string | null;
+          rejection_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["verifications"]["Row"],
+          "id" | "created_at" | "updated_at" | "status" | "verified_by"
+        > & {
+          id?: string;
+          status?: VerificationStatus;
+          verified_by?: VerificationVerifiedBy;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["verifications"]["Insert"]>;
+      };
+      references_received: {
+        Row: {
+          id: string;
+          user_id: string;
+          referee_email: string;
+          referee_name: string;
+          relationship: string;
+          status: ReferenceStatus;
+          token_hash: string;
+          expires_at: string;
+          confirmed_at: string | null;
+          declined_at: string | null;
+          endorsement: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["references_received"]["Row"],
+          "id" | "created_at" | "updated_at" | "status" | "expires_at"
+        > & {
+          id?: string;
+          status?: ReferenceStatus;
+          expires_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["references_received"]["Insert"]>;
       };
     };
     Views: Record<string, never>;
