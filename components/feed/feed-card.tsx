@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Loader2 } from "lucide-react";
+import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
 import type { MatchResult } from "@/lib/matching/score";
 import type {
   StartupPublic,
@@ -87,14 +87,19 @@ export function FeedCard(props: Props) {
           <MatchScorePill score={match.score} />
           <button
             type="button"
-            onClick={() => act(saved ? "save" : "save")}
+            onClick={() => act("save")}
             aria-label={saved ? "Saved" : "Save"}
             aria-pressed={saved}
             disabled={isPending}
-            className="grid h-7 w-7 place-items-center text-[13px] text-[var(--color-text-faint)] transition-colors hover:text-[var(--color-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="grid h-7 w-7 place-items-center transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ color: saved ? "var(--color-brand)" : "var(--color-text-faint)" }}
             title={saved ? "Saved to bookmarks" : "Save for later"}
           >
-            <span aria-hidden>{saved ? "★" : "☆"}</span>
+            {saved ? (
+              <BookmarkCheck aria-hidden size={16} strokeWidth={1.75} />
+            ) : (
+              <Bookmark aria-hidden size={16} strokeWidth={1.75} />
+            )}
           </button>
         </div>
       </div>
@@ -109,15 +114,15 @@ export function FeedCard(props: Props) {
         {kind === "startup" ? (
           <>
             <Chip>{data.industry}</Chip>
-            <Chip>{labelStage(data.stage)}</Chip>
-            {data.raiseBucket ? <Chip green>{labelRaiseBucket(data.raiseBucket)}</Chip> : null}
+            <Chip variant="stage">{labelStage(data.stage)}</Chip>
+            {data.raiseBucket ? <Chip variant="brand">{labelRaiseBucket(data.raiseBucket)}</Chip> : null}
             {data.location ? <Chip>{data.location}</Chip> : null}
           </>
         ) : (
           <>
             {data.sectors.slice(0, 3).map((s) => <Chip key={s}>{s}</Chip>)}
-            {data.stages.slice(0, 2).map((s) => <Chip key={s}>{labelStage(s)}</Chip>)}
-            {data.checkBand ? <Chip green>{labelCheckBand(data.checkBand)}</Chip> : null}
+            {data.stages.slice(0, 2).map((s) => <Chip key={s} variant="stage">{labelStage(s)}</Chip>)}
+            {data.checkBand ? <Chip variant="brand">{labelCheckBand(data.checkBand)}</Chip> : null}
           </>
         )}
       </div>
@@ -175,16 +180,23 @@ function MatchScorePill({ score }: { score: number }) {
     score >= 80 ? "high" :
     score >= 60 ? "med" :
     "low";
-  const styles: Record<typeof tone, { bg: string; color: string }> = {
-    high: { bg: "var(--color-brand-tint)", color: "var(--color-brand-strong)" },
-    med: { bg: "var(--color-surface)", color: "var(--color-text-strong)" },
-    low: { bg: "var(--color-surface)", color: "var(--color-text-muted)" },
+
+  // High scores get a clean filled pill (no border). Mid/low keep the
+  // border for definition against the calmer surface background.
+  const styles: Record<typeof tone, { bg: string; color: string; border: string | undefined }> = {
+    high: { bg: "var(--color-brand)", color: "#ffffff", border: undefined },
+    med: { bg: "var(--color-surface)", color: "var(--color-text-strong)", border: "var(--color-border)" },
+    low: { bg: "var(--color-surface)", color: "var(--color-text-muted)", border: "var(--color-border)" },
   };
   const s = styles[tone];
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 font-mono text-[12px] font-semibold tabular-nums"
-      style={{ background: s.bg, color: s.color, border: `1px solid ${s.color}` }}
+      style={{
+        background: s.bg,
+        color: s.color,
+        border: s.border ? `1px solid ${s.border}` : undefined,
+      }}
       title={`${score}% match score — heuristic, informational only.`}
     >
       {score}%
@@ -192,15 +204,41 @@ function MatchScorePill({ score }: { score: number }) {
   );
 }
 
-function Chip({ children, green = false }: { children: React.ReactNode; green?: boolean }) {
+type ChipVariant = "neutral" | "stage" | "brand";
+
+function Chip({
+  children,
+  variant = "neutral",
+}: {
+  children: React.ReactNode;
+  variant?: ChipVariant;
+}) {
+  const styles: Record<ChipVariant, { bg: string; color: string; border: string }> = {
+    // Sectors / location: low-emphasis bordered chip.
+    neutral: {
+      bg: "var(--color-surface)",
+      color: "var(--color-text-muted)",
+      border: "var(--color-border)",
+    },
+    // Stage: tinted neutral so the funding lifecycle reads at a glance
+    // without competing with the brand-tinted raise/check chip.
+    stage: {
+      bg: "var(--color-surface-2)",
+      color: "var(--color-text-strong)",
+      border: "var(--color-border)",
+    },
+    // Raise/check size: brand-tinted, strongest visual weight.
+    brand: {
+      bg: "var(--color-brand-tint)",
+      color: "var(--color-brand-strong)",
+      border: "var(--color-brand)",
+    },
+  };
+  const s = styles[variant];
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium"
-      style={{
-        background: green ? "var(--color-brand-tint)" : "var(--color-surface)",
-        color: green ? "var(--color-brand-strong)" : "var(--color-text-muted)",
-        border: `1px solid ${green ? "var(--color-brand)" : "var(--color-border)"}`,
-      }}
+      style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}
     >
       {children}
     </span>
