@@ -39,7 +39,61 @@ export type EmailTemplate =
   | "review.rejected"
   | "review.needs_changes"
   | "review.appeal_received"
-  | "reminder.complete_profile";
+  | "reminder.complete_profile"
+  | "match.created"
+  | "intro.requested"
+  | "intro.accepted"
+  | "intro.declined"
+  | "intro.withdrawn"
+  | "intro.expired";
+
+export type IntroRequestStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "withdrawn"
+  | "expired";
+
+/**
+ * Per-user opt in/out for transactional email families. Stored as JSONB on
+ * users.notification_prefs. The DB function should_send_email() reads this.
+ */
+export type NotificationPrefs = {
+  matches: boolean;
+  intros: boolean;
+  reviewUpdates: boolean;
+  weeklyDigest: boolean;
+  productUpdates: boolean;
+};
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  matches: true,
+  intros: true,
+  reviewUpdates: true,
+  weeklyDigest: false,
+  productUpdates: false,
+};
+
+export type ReportReason =
+  | "spam"
+  | "harassment"
+  | "misrepresentation"
+  | "fraud_or_scam"
+  | "inappropriate_content"
+  | "impersonation"
+  | "other";
+
+export type ReportStatus = "open" | "reviewing" | "actioned" | "dismissed";
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  spam: "Spam or unsolicited promotion",
+  harassment: "Harassment or abusive behavior",
+  misrepresentation: "Misrepresentation or false claims",
+  fraud_or_scam: "Fraud or scam attempt",
+  inappropriate_content: "Inappropriate content",
+  impersonation: "Impersonation of someone else",
+  other: "Other (please describe)",
+};
 
 export interface Database {
   public: {
@@ -138,6 +192,139 @@ export interface Database {
           matched_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["matches"]["Insert"]>;
+      };
+      saved_searches: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          /** Filter snapshot, see lib/feed/filters.ts. */
+          filters: Json;
+          notify_email: boolean;
+          last_notified_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["saved_searches"]["Row"],
+          "id" | "created_at" | "updated_at" | "last_notified_at" | "notify_email"
+        > & {
+          id?: string;
+          notify_email?: boolean;
+          last_notified_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["saved_searches"]["Insert"]>;
+      };
+      profile_views: {
+        Row: {
+          id: string;
+          viewer_user_id: string;
+          target_user_id: string;
+          viewed_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["profile_views"]["Row"], "id" | "viewed_at"> & {
+          id?: string;
+          viewed_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["profile_views"]["Insert"]>;
+      };
+      blocks: {
+        Row: {
+          id: string;
+          blocker_user_id: string;
+          blocked_user_id: string;
+          reason: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["blocks"]["Row"], "id" | "created_at" | "reason"> & {
+          id?: string;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["blocks"]["Insert"]>;
+      };
+      reports: {
+        Row: {
+          id: string;
+          reporter_user_id: string;
+          reported_user_id: string;
+          reason: ReportReason;
+          details: string;
+          status: ReportStatus;
+          resolved_by: string | null;
+          resolved_at: string | null;
+          resolution_notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["reports"]["Row"],
+          "id" | "created_at" | "updated_at" | "status" | "resolved_by" | "resolved_at" | "resolution_notes"
+        > & {
+          id?: string;
+          status?: ReportStatus;
+          resolved_by?: string | null;
+          resolved_at?: string | null;
+          resolution_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reports"]["Insert"]>;
+      };
+      email_change_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          new_email: string;
+          token_hash: string;
+          expires_at: string;
+          consumed_at: string | null;
+          created_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["email_change_requests"]["Row"],
+          "id" | "created_at" | "consumed_at"
+        > & {
+          id?: string;
+          consumed_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_change_requests"]["Insert"]>;
+      };
+      intro_requests: {
+        Row: {
+          id: string;
+          match_id: string;
+          sender_user_id: string;
+          recipient_user_id: string;
+          status: IntroRequestStatus;
+          message: string;
+          /** ISO 8601 strings, UTC. */
+          proposed_times: string[];
+          link_url: string | null;
+          accepted_time: string | null;
+          response_message: string | null;
+          responded_at: string | null;
+          expires_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["intro_requests"]["Row"],
+          "id" | "created_at" | "updated_at" | "responded_at" | "accepted_time" | "response_message" | "status" | "expires_at"
+        > & {
+          id?: string;
+          status?: IntroRequestStatus;
+          accepted_time?: string | null;
+          response_message?: string | null;
+          responded_at?: string | null;
+          expires_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["intro_requests"]["Insert"]>;
       };
       founder_matching_preferences: {
         Row: {

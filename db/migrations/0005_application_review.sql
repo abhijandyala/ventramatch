@@ -100,6 +100,7 @@ create table if not exists public.applications (
   )
 );
 
+drop trigger if exists applications_set_updated_at on public.applications;
 create trigger applications_set_updated_at
   before update on public.applications
   for each row execute function public.set_updated_at();
@@ -114,6 +115,7 @@ create index if not exists applications_under_review_idx
 
 alter table public.applications enable row level security;
 
+drop policy if exists "applications select own" on public.applications;
 create policy "applications select own"
   on public.applications for select
   using (user_id = public.app_user_id());
@@ -121,15 +123,18 @@ create policy "applications select own"
 -- Server boundary for writes — same pattern as public.accounts in 0002. The
 -- app code controls what gets inserted/updated; the constraint above is the
 -- safety net for the most dangerous transitions.
+drop policy if exists "applications service insert" on public.applications;
 create policy "applications service insert"
   on public.applications for insert
   with check (true);
 
+drop policy if exists "applications service update" on public.applications;
 create policy "applications service update"
   on public.applications for update
   using (true)
   with check (true);
 
+drop policy if exists "applications service delete" on public.applications;
 create policy "applications service delete"
   on public.applications for delete
   using (true);
@@ -168,6 +173,7 @@ alter table public.application_reviews enable row level security;
 
 -- Strictly server-only. Users see decision_summary on applications and the
 -- email; the per-rule trace, raw LLM output, and human notes never leak.
+drop policy if exists "application_reviews service all" on public.application_reviews;
 create policy "application_reviews service all"
   on public.application_reviews for all
   using (true)
@@ -193,6 +199,7 @@ create table if not exists public.email_outbox (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists email_outbox_set_updated_at on public.email_outbox;
 create trigger email_outbox_set_updated_at
   before update on public.email_outbox
   for each row execute function public.set_updated_at();
@@ -207,6 +214,7 @@ create index if not exists email_outbox_user_template_idx
 
 alter table public.email_outbox enable row level security;
 
+drop policy if exists "email_outbox service all" on public.email_outbox;
 create policy "email_outbox service all"
   on public.email_outbox for all
   using (true)

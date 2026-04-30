@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { withUserRls } from "@/lib/db";
 import {
   founderDashboardMock,
   investorFeedMock,
@@ -18,7 +19,35 @@ import { ProfileCompletionCard } from "@/components/dashboard/ProfileCompletionC
 import { CombinedActivityCard } from "@/components/dashboard/CombinedActivityCard";
 import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
+import { AccountStatusBanner } from "@/components/account/account-status-banner";
+import { ProfileCompletionPrompt } from "@/components/account/profile-completion-prompt";
+import { RealRecommendedRail } from "@/components/dashboard/RealRecommendedRail";
+import { RecentViewersRail } from "@/components/dashboard/RecentViewersRail";
+import {
+  founderCompletion,
+  investorCompletion,
+  type CompletionResult,
+} from "@/lib/profile/completion";
+import {
+  fetchFeedForFounder,
+  fetchFeedForInvestor,
+  fetchProfileStats,
+  fetchRecentViewers,
+  type FeedStartupCard,
+  type FeedInvestorCard,
+  type ProfileStats,
+  type RecentViewer,
+} from "@/lib/feed/query";
+import {
+  fetchIntroBadgeCounts,
+  type IntroBadgeCounts,
+} from "@/lib/intros/query";
+import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
+import type { AccountLabel, Database } from "@/types/database";
 import { cn } from "@/lib/utils";
+
+type StartupRow = Database["public"]["Tables"]["startups"]["Row"];
+type InvestorRow = Database["public"]["Tables"]["investors"]["Row"];
 
 export const dynamic = "force-dynamic";
 
@@ -27,19 +56,80 @@ export default async function DashboardPage() {
   if (!session?.user) redirect("/sign-in");
   if (!session.user.onboardingCompleted) redirect("/onboarding");
 
+  const userId = session.user.id;
   const role = session.user.role as "founder" | "investor" | null;
   const firstName = session.user.name?.split(" ")[0] ?? "there";
+  const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
 
-  console.log(`[dashboard] userId=${session.user.id} role=${role}`);
+  console.log(`[dashboard] userId=${userId} role=${role} label=${accountLabel}`);
+
+  // Parallel fetch: completion (own row), live feed top-3, profile stats,
+  // pending intro counts (inbox banner), recent viewers (who-viewed-me rail).
+  const [completion, stats, feedItems, introCounts, recentViewers] = await Promise.all([
+    withUserRls<CompletionResult>(userId, async (sql) => {
+      if (role === "investor") {
+        const rows = await sql<InvestorRow[]>`
+          select * from public.investors where user_id = ${userId} limit 1
+        `;
+        return investorCompletion(rows[0] ?? null);
+      }
+      const rows = await sql<StartupRow[]>`
+        select * from public.startups where user_id = ${userId} limit 1
+      `;
+      return founderCompletion(rows[0] ?? null);
+    }),
+    fetchProfileStats(userId),
+    role === "investor"
+      ? fetchFeedForInvestor(userId, { limit: 3 })
+      : fetchFeedForFounder(userId, { limit: 3 }),
+    fetchIntroBadgeCounts(userId),
+    fetchRecentViewers(userId, { limit: 8 }),
+  ]);
 
   if (role === "investor") {
-    return <InvestorDashboard firstName={firstName} />;
+    return (
+      <InvestorDashboard
+        firstName={firstName}
+        accountLabel={accountLabel}
+        completion={completion}
+        stats={stats}
+        feedItems={feedItems as FeedStartupCard[]}
+        introCounts={introCounts}
+        recentViewers={recentViewers}
+      />
+    );
   }
 
-  return <FounderDashboard firstName={firstName} />;
+  return (
+    <FounderDashboard
+      firstName={firstName}
+      accountLabel={accountLabel}
+      completion={completion}
+      stats={stats}
+      feedItems={feedItems as FeedInvestorCard[]}
+      introCounts={introCounts}
+      recentViewers={recentViewers}
+    />
+  );
 }
 
-function FounderDashboard({ firstName }: { firstName: string }) {
+function FounderDashboard({
+  firstName,
+  accountLabel,
+  completion,
+  stats,
+  feedItems,
+  introCounts,
+  recentViewers,
+}: {
+  firstName: string;
+  accountLabel: AccountLabel;
+  completion: CompletionResult;
+  stats: ProfileStats;
+  feedItems: FeedInvestorCard[];
+  introCounts: IntroBadgeCounts;
+  recentViewers: RecentViewer[];
+}) {
   const data = founderDashboardMock;
   const profileComplete = data.profileStrength.percent >= 100;
 
@@ -68,6 +158,15 @@ function FounderDashboard({ firstName }: { firstName: string }) {
       </section>
 
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
+        <IntroInboxBanner counts={introCounts} />
+        <AccountStatusBanner label={accountLabel} />
+        <ProfileCompletionPrompt
+          completion={completion}
+          accountLabel={accountLabel}
+          ctaHref="/build"
+        />
+        <RealRecommendedRail kind="founder" items={feedItems} stats={stats} />
+        <RecentViewersRail viewers={recentViewers} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
             <TopMatchCard matches={data.topMatches} newToday={data.newInvestorsToday} />
@@ -146,7 +245,23 @@ function FounderDashboard({ firstName }: { firstName: string }) {
   );
 }
 
-function InvestorDashboard({ firstName }: { firstName: string }) {
+function InvestorDashboard({
+  firstName,
+  accountLabel,
+  completion,
+  stats,
+  feedItems,
+  introCounts,
+  recentViewers,
+}: {
+  firstName: string;
+  accountLabel: AccountLabel;
+  completion: CompletionResult;
+  stats: ProfileStats;
+  feedItems: FeedStartupCard[];
+  introCounts: IntroBadgeCounts;
+  recentViewers: RecentViewer[];
+}) {
   const data = investorFeedMock;
   const profileComplete = data.profileStrength.percent >= 100;
   const focusedStartup = data.startups[0];
@@ -177,6 +292,15 @@ function InvestorDashboard({ firstName }: { firstName: string }) {
       </section>
 
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
+        <IntroInboxBanner counts={introCounts} />
+        <AccountStatusBanner label={accountLabel} />
+        <ProfileCompletionPrompt
+          completion={completion}
+          accountLabel={accountLabel}
+          ctaHref="/build/investor"
+        />
+        <RealRecommendedRail kind="investor" items={feedItems} stats={stats} />
+        <RecentViewersRail viewers={recentViewers} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
             <TopStartupCard

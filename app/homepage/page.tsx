@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { AccountStatusBanner } from "@/components/account/account-status-banner";
+import type { AccountLabel } from "@/types/database";
 import HomePageClient from "./client";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +11,12 @@ export default async function PostAuthHomePage() {
   if (!session?.user) redirect("/sign-in");
 
   const role = (session.user.role as "founder" | "investor") ?? "founder";
+  const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
 
-  return <HomePageClient role={role} />;
+  return (
+    <>
+      <AccountStatusBanner label={accountLabel} />
+      <HomePageClient role={role} />
+    </>
+  );
 }

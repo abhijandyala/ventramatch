@@ -5,6 +5,7 @@ import type {
   VerificationToken,
 } from "@auth/core/adapters";
 import { withUserRls } from "@/lib/db";
+import type { AccountLabel, UserRole } from "@/types/database";
 
 // Custom Auth.js adapter on top of postgres-js (lib/db.ts) so we keep one
 // PG driver across the codebase and snake_case schemas across migrations.
@@ -16,6 +17,18 @@ type DbUserRow = {
   name: string | null;
   image: string | null;
   email_verified_at: Date | string | null;
+  account_label: AccountLabel | null;
+  role: UserRole | null;
+  onboarding_completed: boolean | null;
+};
+
+// Extra fields we tack onto AdapterUser results so the OAuth path carries
+// app-specific state (account_label, role, onboarding_completed) into the
+// JWT callback without an extra DB hit. Augmented in `types/auth.ts`.
+type EnrichedAdapterUser = AdapterUser & {
+  accountLabel?: AccountLabel;
+  role?: UserRole | null;
+  onboardingCompleted?: boolean;
 };
 
 type DbAccountRow = {
@@ -33,7 +46,7 @@ type DbAccountRow = {
   session_state: string | null;
 };
 
-function toAdapterUser(row: DbUserRow | undefined): AdapterUser | null {
+function toAdapterUser(row: DbUserRow | undefined): EnrichedAdapterUser | null {
   if (!row) return null;
   return {
     id: row.id,
@@ -41,6 +54,9 @@ function toAdapterUser(row: DbUserRow | undefined): AdapterUser | null {
     name: row.name,
     image: row.image,
     emailVerified: row.email_verified_at ? new Date(row.email_verified_at) : null,
+    accountLabel: row.account_label ?? "unverified",
+    role: row.role ?? null,
+    onboardingCompleted: row.onboarding_completed ?? false,
   };
 }
 
@@ -81,7 +97,8 @@ export function ventramatchAdapter(): Adapter {
             ${user.image ?? null},
             ${verifiedAt}
           )
-          returning id, email, name, image, email_verified_at
+          returning id, email, name, image, email_verified_at,
+                   account_label, role, onboarding_completed
         `;
         return [...result];
       });
@@ -94,7 +111,8 @@ export function ventramatchAdapter(): Adapter {
     async getUser(id) {
       const rows = await withUserRls<DbUserRow[]>(null, async (sql) => {
         const result = await sql<DbUserRow[]>`
-          select id, email, name, image, email_verified_at
+          select id, email, name, image, email_verified_at,
+                 account_label, role, onboarding_completed
           from public.users
           where id = ${id}
           limit 1
@@ -107,7 +125,8 @@ export function ventramatchAdapter(): Adapter {
     async getUserByEmail(email) {
       const rows = await withUserRls<DbUserRow[]>(null, async (sql) => {
         const result = await sql<DbUserRow[]>`
-          select id, email, name, image, email_verified_at
+          select id, email, name, image, email_verified_at,
+                 account_label, role, onboarding_completed
           from public.users
           where email = ${email}
           limit 1
@@ -121,7 +140,8 @@ export function ventramatchAdapter(): Adapter {
       console.log(`[auth:adapter:getUserByAccount] provider=${provider}`);
       const rows = await withUserRls<DbUserRow[]>(null, async (sql) => {
         const result = await sql<DbUserRow[]>`
-          select u.id, u.email, u.name, u.image, u.email_verified_at
+          select u.id, u.email, u.name, u.image, u.email_verified_at,
+                 u.account_label, u.role, u.onboarding_completed
           from public.users u
           join public.accounts a on a.user_id = u.id
           where a.provider = ${provider}
@@ -145,7 +165,8 @@ export function ventramatchAdapter(): Adapter {
             image = coalesce(${user.image ?? null}, image),
             email_verified_at = coalesce(${user.emailVerified ?? null}, email_verified_at)
           where id = ${user.id}
-          returning id, email, name, image, email_verified_at
+          returning id, email, name, image, email_verified_at,
+                   account_label, role, onboarding_completed
         `;
         return [...result];
       });
