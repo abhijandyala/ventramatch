@@ -3,11 +3,12 @@ import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import { FounderBuilder, type FounderUiDraft, EMPTY_FOUNDER_DRAFT } from "./builder";
-import { fetchStartupDepth } from "@/lib/profile/depth";
+import { fetchStartupDepth, fetchOwnVerifications, fetchOwnReferences } from "@/lib/profile/depth";
 import {
   projectStartupDepth,
   type StartupDepthView,
 } from "@/lib/profile/visibility";
+import type { OwnVerification, OwnReference } from "@/components/profile/verification-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,32 @@ export default async function BuildPage() {
     );
   }
 
+  // Load verifications + references for the panel (own-only reads).
+  const [rawVerifications, rawReferences] = await Promise.all([
+    fetchOwnVerifications(userId),
+    fetchOwnReferences(userId),
+  ]);
+
+  const ownVerifications: OwnVerification[] = rawVerifications.map((v) => ({
+    id: v.id,
+    kind: v.kind,
+    status: v.status,
+    claim_summary: v.claim_summary,
+    evidence_url: v.evidence_url,
+    created_at: v.created_at,
+  }));
+
+  const ownReferences: OwnReference[] = rawReferences.map((r) => ({
+    id: r.id,
+    referee_name: r.referee_name,
+    referee_email: r.referee_email,
+    relationship: r.relationship,
+    status: r.status,
+    endorsement: r.endorsement,
+    expires_at: r.expires_at,
+    created_at: r.created_at,
+  }));
+
   const initial: FounderUiDraft = {
     ...EMPTY_FOUNDER_DRAFT,
     company: {
@@ -110,6 +137,8 @@ export default async function BuildPage() {
       initial={initial}
       accountLabel={accountLabel}
       depthView={depthView}
+      ownVerifications={ownVerifications}
+      ownReferences={ownReferences}
     />
   );
 }

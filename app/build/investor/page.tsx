@@ -3,11 +3,12 @@ import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import { InvestorBuilder, type InvestorUiDraft, EMPTY_INVESTOR_DRAFT } from "./builder";
-import { fetchInvestorDepth } from "@/lib/profile/depth";
+import { fetchInvestorDepth, fetchOwnVerifications, fetchOwnReferences } from "@/lib/profile/depth";
 import {
   projectInvestorDepth,
   type InvestorDepthView,
 } from "@/lib/profile/visibility";
+import type { OwnVerification, OwnReference } from "@/components/profile/verification-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,31 @@ export default async function InvestorBuildPage() {
     depthView = projectInvestorDepth(rawDepth, "match");
   }
 
+  const [rawVerifications, rawReferences] = await Promise.all([
+    fetchOwnVerifications(userId),
+    fetchOwnReferences(userId),
+  ]);
+
+  const ownVerifications: OwnVerification[] = rawVerifications.map((v) => ({
+    id: v.id,
+    kind: v.kind,
+    status: v.status,
+    claim_summary: v.claim_summary,
+    evidence_url: v.evidence_url,
+    created_at: v.created_at,
+  }));
+
+  const ownReferences: OwnReference[] = rawReferences.map((r) => ({
+    id: r.id,
+    referee_name: r.referee_name,
+    referee_email: r.referee_email,
+    relationship: r.relationship,
+    status: r.status,
+    endorsement: r.endorsement,
+    expires_at: r.expires_at,
+    created_at: r.created_at,
+  }));
+
   const initialType: InvestorUiDraft["type"] =
     both.user?.investor_type === "angel" ? "angel" :
     both.user?.investor_type === "firm" ? "early" : null;
@@ -101,6 +127,8 @@ export default async function InvestorBuildPage() {
       initial={initial}
       accountLabel={accountLabel}
       depthView={depthView}
+      ownVerifications={ownVerifications}
+      ownReferences={ownReferences}
     />
   );
 }

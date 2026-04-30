@@ -208,6 +208,22 @@ export async function fetchInvestorDepth(
 }
 
 /**
+ * Owner-only: all verifications for the signed-in user (every status).
+ * Used on /build to show pending claims and confirmed badges.
+ */
+export async function fetchOwnVerifications(
+  userId: string,
+): Promise<Verification[]> {
+  return withUserRls<Verification[]>(userId, async (sql) => {
+    return sql<Verification[]>`
+      select * from public.verifications
+      where user_id = ${userId}
+      order by created_at desc
+    `;
+  });
+}
+
+/**
  * Confirmed verifications for a target user. RLS is `select all`, but the
  * caller decides whether to render the badges based on the resolved viewing
  * tier (badges are shown at every tier — they're a trust signal, not
