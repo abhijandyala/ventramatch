@@ -74,7 +74,11 @@ export function scoreMatch(
   investor: Investor,
   depth?: MatchDepthContext,
 ): MatchResult {
-  const sector = sectorScore(startup.industry, investor.sectors);
+  // Sprint 9.5.D: use the full sectors array when available; fall back to
+  // the legacy single `industry` column for pre-migration rows.
+  const startupSectors =
+    startup.startup_sectors?.length > 0 ? startup.startup_sectors : [startup.industry];
+  const sector = sectorScore(startupSectors, investor.sectors);
   const stage = stageScore(startup.stage, investor.stages);
   const check = checkScore(
     startup.raise_amount,
@@ -109,11 +113,11 @@ export function scoreMatch(
   };
 }
 
-function sectorScore(startupIndustry: string, investorSectors: string[]): number {
-  if (investorSectors.length === 0 || !startupIndustry) return 0;
-  // Use canonical normalisation so legacy aliases ("Healthcare") match
-  // canonical labels ("Healthtech") and vice versa. See lib/profile/sectors.ts.
-  return sectorMatches(startupIndustry, investorSectors) ? 1 : 0;
+function sectorScore(startupSectors: string[], investorSectors: string[]): number {
+  if (investorSectors.length === 0 || startupSectors.length === 0) return 0;
+  // Any overlap counts as a match. Canonical normalisation so legacy
+  // aliases ("Healthcare") match canonical labels ("Healthtech").
+  return startupSectors.some((s) => sectorMatches(s, investorSectors)) ? 1 : 0;
 }
 
 function stageScore(

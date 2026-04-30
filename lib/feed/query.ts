@@ -117,7 +117,7 @@ export async function fetchFeedForInvestor(
           where (bl.blocker_user_id = ${investorUserId} and bl.blocked_user_id = s.user_id)
              or (bl.blocker_user_id = s.user_id and bl.blocked_user_id = ${investorUserId})
         )
-        and (${industries.length === 0} or lower(s.industry) = any(${industries.map((i) => i.toLowerCase())}))
+        and (${industries.length === 0} or s.startup_sectors && ${industries}::text[])
         and (${stages.length === 0} or s.stage::text = any(${stages.map((s) => String(s))}))
         and (${geographies.length === 0} or exists (
           select 1 from unnest(${geographies}::text[]) as geo(g)

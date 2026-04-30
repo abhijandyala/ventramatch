@@ -393,6 +393,8 @@ export interface Database {
           deck_filename: string | null;
           deck_uploaded_at: string | null;
           website: string | null;
+          /** Sprint 9.5.D: all sectors the founder selected (up to 3). */
+          startup_sectors: string[];
           created_at: string;
           updated_at: string;
         };

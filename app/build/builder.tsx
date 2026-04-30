@@ -13,6 +13,8 @@ import { Wordmark } from "@/components/landing/wordmark";
 import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
 import { DeckUploader } from "@/components/profile/deck-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
+import { BuilderNav } from "@/components/profile/builder-nav";
+import { founderCompletion } from "@/lib/profile/completion";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import type { StartupDepthView } from "@/lib/profile/visibility";
 import type {
@@ -47,12 +49,6 @@ export type FounderUiDraft = {
   stage: StartupStage | null;
   round: {
     targetRaise: number | null;
-    minCheck: number | null;
-    maxCheck: number | null;
-    leadStatus: "looking" | "committed" | "filling" | null;
-    closeTarget: string;
-    valuationCap: number | null;
-    useOfFunds: string;
   };
   traction: {
     mrr: number | null;
@@ -82,7 +78,7 @@ export const EMPTY_FOUNDER_DRAFT: FounderUiDraft = {
   company: { name: "", website: "", description: "", city: "", foundedYear: null },
   sectors: [],
   stage: null,
-  round: { targetRaise: null, minCheck: null, maxCheck: null, leadStatus: null, closeTarget: "", valuationCap: null, useOfFunds: "" },
+  round: { targetRaise: null },
   traction: { mrr: null, customers: null, growthPct: null, notableSignals: "", other: "" },
   deck: { url: "", fileName: "", uploadedAt: null },
   founder: { fullName: "", role: "", workEmail: "", linkedinUrl: "" },
@@ -114,6 +110,7 @@ function toSubmitInput(d: FounderUiDraft): SubmitFounderInput {
     companyName: d.company.name.trim(),
     oneLiner: d.company.description.trim(),
     industry: d.sectors[0] ?? "",
+    startupSectors: d.sectors.length > 0 ? d.sectors : undefined,
     stage: (d.stage ?? "idea") as StartupStage,
     raiseAmount: d.round.targetRaise ?? undefined,
     traction: buildTractionString(d.traction),
@@ -128,6 +125,7 @@ function toDraftInput(d: FounderUiDraft): DraftFounderInput {
     companyName: d.company.name.trim() || undefined,
     oneLiner: d.company.description.trim() || undefined,
     industry: d.sectors[0]?.trim() || undefined,
+    startupSectors: d.sectors.length > 0 ? d.sectors : undefined,
     stage: d.stage ?? undefined,
     raiseAmount: d.round.targetRaise ?? undefined,
     traction: buildTractionString(d.traction),
@@ -184,11 +182,6 @@ const STAGE_LABEL: Record<StartupStage, string> = {
   series_b_plus: "Series B+",
 };
 
-const LEAD_STATUSES = [
-  { key: "looking", label: "Looking for lead" },
-  { key: "committed", label: "Lead committed" },
-  { key: "filling", label: "Filling allocation" },
-] as const;
 
 // ──────────────────────────────────────────────────────────────────────────
 //  Top-level component
@@ -270,7 +263,7 @@ export function FounderBuilder({
         if (result.field) setErrors({ [result.field]: result.error });
         return;
       }
-      router.push("/dashboard");
+      router.push("/dashboard?published=1");
       router.refresh();
     });
   }
@@ -309,6 +302,25 @@ export function FounderBuilder({
           <Stepper step={step} setStep={setStep} />
         </div>
       </div>
+
+      <BuilderNav
+        completion={founderCompletion(
+          // We derive a lightweight completion from the draft state so the
+          // nav bar updates live as the user fills fields — no server trip.
+          {
+            id: "", user_id: "", name: draft.company.name, one_liner: draft.company.description,
+            industry: draft.sectors[0] ?? "", stage: draft.stage ?? "idea",
+            raise_amount: draft.round.targetRaise, traction: draft.traction.notableSignals || null,
+            location: draft.company.city || null, deck_url: draft.deck.url || null,
+            deck_storage_key: draft.deck.fileName ? "present" : null,
+            deck_filename: draft.deck.fileName || null, deck_uploaded_at: null,
+            website: draft.company.website || null, startup_sectors: draft.sectors,
+            created_at: "", updated_at: "",
+          },
+        )}
+        wizardStep={step}
+        totalWizardSteps={total}
+      />
 
       <BuilderBanner accountLabel={accountLabel} />
 
@@ -350,12 +362,12 @@ export function FounderBuilder({
       </section>
 
       {depthView ? (
-        <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+        <section id="depth-editor" className="scroll-mt-16 mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
           <FounderDepthEditor depth={depthView} />
         </section>
       ) : null}
 
-      <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+      <section id="verification-panel" className="scroll-mt-16 mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
         <VerificationPanel
           ownVerifications={ownVerifications}
           ownReferences={ownReferences}
@@ -633,70 +645,14 @@ function RoundStep({
           onChange={(v) => patch({ targetRaise: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
         />
       </Field>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <Field label="Min check (optional)">
-          <Input
-            prefix="$"
-            placeholder="50,000"
-            value={draft.round.minCheck?.toString() ?? ""}
-            onChange={(v) => patch({ minCheck: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
-          />
-        </Field>
-        <Field label="Max check (optional)">
-          <Input
-            prefix="$"
-            placeholder="500,000"
-            value={draft.round.maxCheck?.toString() ?? ""}
-            onChange={(v) => patch({ maxCheck: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
-          />
-        </Field>
+      <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 py-3">
+        <p className="text-[12.5px] leading-snug text-[color:var(--color-text-muted)]">
+          <strong className="text-[color:var(--color-text-strong)]">Round mechanics</strong> — instrument,
+          valuation band, lead status, close date, use of funds, and key terms live in the{" "}
+          <span className="font-medium">Round details</span> section below the wizard.
+          Fill them after you finish the basics; they&apos;re saved independently.
+        </p>
       </div>
-      <Field label="Lead status">
-        <div className="flex flex-wrap gap-2">
-          {LEAD_STATUSES.map((opt) => {
-            const on = draft.round.leadStatus === opt.key;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => patch({ leadStatus: opt.key })}
-                className={[
-                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
-                  on
-                    ? "border-[color:var(--color-text-strong)] bg-[color:var(--color-text-strong)] text-white"
-                    : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] hover:border-[color:var(--color-text-strong)] hover:text-[color:var(--color-text-strong)]",
-                ].join(" ")}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </Field>
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <Field label="Round close target">
-          <Input
-            placeholder="May 30, 2026"
-            value={draft.round.closeTarget}
-            onChange={(v) => patch({ closeTarget: v })}
-          />
-        </Field>
-        <Field label="Valuation cap (optional)">
-          <Input
-            prefix="$"
-            placeholder="0"
-            value={draft.round.valuationCap?.toString() ?? ""}
-            onChange={(v) => patch({ valuationCap: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
-          />
-        </Field>
-      </div>
-      <Field label="Use of funds (optional, will appear in your traction summary)">
-        <Textarea
-          placeholder="What this round buys you in three short bullets."
-          value={draft.round.useOfFunds}
-          onChange={(v) => patch({ useOfFunds: v })}
-        />
-      </Field>
     </div>
   );
 }

@@ -105,6 +105,7 @@ export function projectStartupTier2(row: StartupRow): StartupFull {
     deck_filename: row.deck_filename,
     deck_uploaded_at: row.deck_uploaded_at,
     website: row.website,
+    startup_sectors: row.startup_sectors,
   };
 }
 

@@ -41,6 +41,7 @@ import {
   type IntroBadgeCounts,
 } from "@/lib/intros/query";
 import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
+import { PublishedBanner } from "@/components/account/published-banner";
 import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
 
@@ -151,6 +152,7 @@ function FounderDashboard({
 
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <IntroInboxBanner counts={introCounts} />
+        <PublishedBanner />
         <AccountStatusBanner label={accountLabel} />
         <ProfileCompletionPrompt
           completion={completion}
@@ -269,6 +271,7 @@ function InvestorDashboard({
 
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <IntroInboxBanner counts={introCounts} />
+        <PublishedBanner />
         <AccountStatusBanner label={accountLabel} />
         <ProfileCompletionPrompt
           completion={completion}

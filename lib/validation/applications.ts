@@ -42,6 +42,10 @@ export const submitFounderSchema = z.object({
     .min(10, "One-liner must be at least 10 characters.")
     .max(240, "One-liner must be 240 characters or fewer."),
   industry: z.string().trim().min(2, "Pick an industry.").max(80, "Too long."),
+  // Sprint 9.5.D: all sectors the founder selected. `industry` stays as the
+  // primary (first element); `startupSectors` carries the full list for
+  // array-overlap matching and FTS.
+  startupSectors: z.array(z.string().trim().min(1).max(80)).max(5).optional(),
   stage: stageSchema,
   raiseAmount: positiveBigInt.optional(),
   traction: z.string().trim().max(2000, "Keep traction under 2000 characters.").optional(),
