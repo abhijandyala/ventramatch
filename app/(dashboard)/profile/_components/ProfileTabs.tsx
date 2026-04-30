@@ -3,6 +3,7 @@
 import { useState, useRef, type ReactNode } from "react";
 import type { Route } from "next";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   ArrowRight,
   Check,
@@ -229,6 +230,7 @@ export function ProfileTabs({ role, name, email }: ProfileTabsProps) {
 // ---------------------------------------------------------------------------
 
 function AppNav({ role, name }: { role: Role; name: string }) {
+  const pathname = usePathname();
   const initials = name
     ? name
         .split(" ")
@@ -259,7 +261,7 @@ function AppNav({ role, name }: { role: Role; name: string }) {
                 href={link.href as Route}
                 className={cn(
                   "text-[14px] transition-colors duration-[120ms]",
-                  link.href === "/profile"
+                  pathname === link.href || pathname.startsWith(`${link.href}/`)
                     ? "font-semibold text-[var(--color-text)]"
                     : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                 )}
