@@ -4,18 +4,35 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import {
-  hasContactUnlocked,
-  projectStartupTier1,
-  projectStartupTier2,
+  projectInvestorDepth,
   projectInvestorTier1,
   projectInvestorTier2,
+  projectStartupDepth,
+  projectStartupTier1,
+  projectStartupTier2,
+  projectVerifications,
+  resolveTier,
+  type InvestorDepthView,
+  type StartupDepthView,
+  type VerificationBadge,
+  type ViewingTier,
 } from "@/lib/profile/visibility";
+import {
+  fetchConfirmedVerifications,
+  fetchInvestorDepth,
+  fetchStartupDepth,
+} from "@/lib/profile/depth";
 import { scoreMatch } from "@/lib/matching/score";
 import { fetchPendingIntroForMatch } from "@/lib/intros/query";
 import { recordProfileView } from "@/lib/profile/views";
 import { isBlockedEitherWay } from "@/lib/safety/query";
 import { ProfileMenu } from "@/components/safety/profile-menu";
 import { VerificationBadges } from "@/components/account/verification-badges";
+import { DepthVerificationBadges } from "@/components/account/depth-verification-badges";
+import {
+  InvestorDepthSections,
+  StartupDepthSections,
+} from "@/components/profile/depth-sections";
 import { IntroCta } from "@/components/intros/intro-cta";
 import { Wordmark } from "@/components/landing/wordmark";
 import type {
@@ -109,9 +126,46 @@ export default async function PublicProfilePage({
     void recordProfileView(viewerId, targetUserId);
   }
 
-  // Decide tier: viewer sees Tier 2 only after a mutual match, OR if they're
-  // looking at their own profile.
-  const tier2 = isSelf || (await hasContactUnlocked(viewerId, targetUserId));
+  // Resolve viewing tier — public / verified / match. Self-view always
+  // resolves to "match" so the user can preview their own full profile.
+  const tier: ViewingTier = await resolveTier(
+    viewerId,
+    targetUserId,
+    viewerLabel,
+    data.user.account_label,
+  );
+  const tier2 = tier === "match";
+
+  // Pull child rows + confirmed verifications. Each runs through `withUserRls`
+  // independently so a stale read of one doesn't block the other.
+  const [startupDepthRaw, investorDepthRaw, verificationRows] = await Promise.all([
+    data.startup
+      ? fetchStartupDepth(viewerId, data.startup.id)
+      : Promise.resolve(null),
+    data.investor
+      ? fetchInvestorDepth(viewerId, data.investor.id)
+      : Promise.resolve(null),
+    fetchConfirmedVerifications(viewerId, targetUserId),
+  ]);
+
+  const startupDepth: StartupDepthView | null =
+    data.startup && startupDepthRaw
+      ? projectStartupDepth(
+          {
+            ...startupDepthRaw,
+            parent: {
+              deck_url: data.startup.deck_url,
+              traction: data.startup.traction,
+            },
+          },
+          tier,
+        )
+      : null;
+  const investorDepth: InvestorDepthView | null =
+    data.investor && investorDepthRaw
+      ? projectInvestorDepth(investorDepthRaw, tier)
+      : null;
+  const verifications: VerificationBadge[] = projectVerifications(verificationRows);
 
   // If matched, also resolve the matchId + any pending intro so the CTA
   // can render the right state (send / view-pending / respond).
@@ -139,7 +193,7 @@ export default async function PublicProfilePage({
   }
 
   console.log(
-    `[profile:view] viewer=${viewerId} target=${targetUserId} tier=${tier2 ? 2 : 1} self=${isSelf} matchId=${matchId} pending=${pendingIntroId}`,
+    `[profile:view] viewer=${viewerId} target=${targetUserId} tier=${tier} self=${isSelf} matchId=${matchId} pending=${pendingIntroId} verifications=${verifications.length}`,
   );
 
   // Compute match score if cross-role and both rows exist
@@ -183,7 +237,9 @@ export default async function PublicProfilePage({
           <FounderProfile
             user={data.user}
             row={data.startup}
-            tier2={tier2}
+            tier={tier}
+            depth={startupDepth}
+            verifications={verifications}
             isSelf={isSelf}
             matchScore={matchScore}
           />
@@ -191,7 +247,9 @@ export default async function PublicProfilePage({
           <InvestorProfile
             user={data.user}
             row={data.investor}
-            tier2={tier2}
+            tier={tier}
+            depth={investorDepth}
+            verifications={verifications}
             isSelf={isSelf}
             matchScore={matchScore}
           />
@@ -217,8 +275,8 @@ export default async function PublicProfilePage({
           </section>
         ) : null}
 
-        {!isSelf && !tier2 ? (
-          <LockedFooter />
+        {!isSelf && tier !== "match" ? (
+          <LockedFooter tier={tier} />
         ) : null}
       </main>
     </div>
@@ -250,16 +308,21 @@ async function loadOwnInvestor(userId: string): Promise<InvestorRow | null> {
 function FounderProfile({
   user,
   row,
-  tier2,
+  tier,
+  depth,
+  verifications,
   isSelf,
   matchScore,
 }: {
   user: TargetUser;
   row: StartupRow;
-  tier2: boolean;
+  tier: ViewingTier;
+  depth: StartupDepthView | null;
+  verifications: VerificationBadge[];
   isSelf: boolean;
   matchScore: { score: number; reason: string } | null;
 }) {
+  const tier2 = tier === "match";
   const tier1 = projectStartupTier1(row);
   const tier2Data = tier2 ? projectStartupTier2(row) : null;
 
@@ -276,7 +339,7 @@ function FounderProfile({
           {tier1.oneLiner}
         </p>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
           <VerificationBadges
             inputs={{
               accountLabel: user.account_label,
@@ -286,6 +349,7 @@ function FounderProfile({
               websiteUrl: tier1.website,
             }}
           />
+          <DepthVerificationBadges badges={verifications} />
         </div>
       </header>
 
@@ -365,6 +429,8 @@ function FounderProfile({
         )}
       </Section>
 
+      {depth ? <StartupDepthSections depth={depth} tier={tier} /> : null}
+
       {isSelf ? <SelfFooter href={"/build" as Route} /> : null}
     </article>
   );
@@ -377,16 +443,21 @@ function FounderProfile({
 function InvestorProfile({
   user,
   row,
-  tier2,
+  tier,
+  depth,
+  verifications,
   isSelf,
   matchScore,
 }: {
   user: TargetUser;
   row: InvestorRow;
-  tier2: boolean;
+  tier: ViewingTier;
+  depth: InvestorDepthView | null;
+  verifications: VerificationBadge[];
   isSelf: boolean;
   matchScore: { score: number; reason: string } | null;
 }) {
+  const tier2 = tier === "match";
   const tier1 = projectInvestorTier1(row);
   const tier2Data = tier2 ? projectInvestorTier2(row) : null;
 
@@ -403,7 +474,7 @@ function InvestorProfile({
           <p className="mt-1 text-[15px] text-[var(--color-text-muted)]">{tier1.firm}</p>
         ) : null}
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-2">
           <VerificationBadges
             inputs={{
               accountLabel: user.account_label,
@@ -413,6 +484,7 @@ function InvestorProfile({
               websiteUrl: null,
             }}
           />
+          <DepthVerificationBadges badges={verifications} />
         </div>
       </header>
 
@@ -476,6 +548,8 @@ function InvestorProfile({
         )}
       </Section>
 
+      {depth ? <InvestorDepthSections depth={depth} tier={tier} /> : null}
+
       {isSelf ? <SelfFooter href={"/build/investor" as Route} /> : null}
     </article>
   );
@@ -533,12 +607,14 @@ function Field({
   );
 }
 
-function LockedFooter() {
+function LockedFooter({ tier }: { tier: ViewingTier }) {
+  const copy =
+    tier === "verified"
+      ? "Some details — deck, traction evidence URLs, dry-powder band, private portfolio — unlock only when both sides express interest. No contact information is shared until then."
+      : "Sign up and complete review to see depth: team, structured round details, traction signals, investor track record, decision process. Verified investors get a real diligence kit before contact unlocks.";
   return (
     <p className="mt-10 border-t border-[var(--color-border)] pt-5 text-center text-[12px] leading-[1.6] text-[var(--color-text-faint)]">
-      Some details — exact raise / check, full traction, deck — unlock only
-      when both sides express interest. No contact information is shared
-      until then.
+      {copy}
     </p>
   );
 }
