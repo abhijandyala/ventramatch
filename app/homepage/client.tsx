@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "@/components/landing/wordmark";
 import { PixelReveal } from "@/components/ui/pixel-reveal";
+import { ProfileDropdown } from "@/components/layout/ProfileDropdown";
 
 type Role = "founder" | "investor";
 
@@ -44,7 +45,7 @@ const COPY: Record<Role, { headline: string }> = {
   investor: { headline: "Startups in your thesis." },
 };
 
-export default function HomePageClient({ role }: { role: Role }) {
+export default function HomePageClient({ role, name }: { role: Role; name: string }) {
   const copy = COPY[role];
 
   return (
@@ -53,7 +54,7 @@ export default function HomePageClient({ role }: { role: Role }) {
       className="flex min-h-screen flex-col bg-[color:var(--color-bg)] text-[color:var(--color-text)]"
     >
       <PixelReveal />
-      <ProductNav role={role} />
+      <ProductNav role={role} name={name} />
 
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
         <OrbBackdrop />
@@ -194,7 +195,7 @@ const NAV_LINKS: Array<{ label: string; href: string }> = [
   { label: "Dashboard", href: "/dashboard" },
 ];
 
-function ProductNav({ role }: { role: Role }) {
+function ProductNav({ role, name }: { role: Role; name: string }) {
   const pathname = usePathname();
 
   return (
@@ -220,32 +221,7 @@ function ProductNav({ role }: { role: Role }) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span
-            className="hidden rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-0.5 text-[12px] font-medium capitalize text-[var(--color-text-muted)] sm:inline-flex"
-          >
-            {role}
-          </span>
-          <a
-            href="/api/auth/signout"
-            className="text-[12px] font-medium transition-colors duration-[120ms] hover:text-[var(--color-text-muted)]"
-            style={{ color: "var(--color-text-faint)" }}
-          >
-            Sign out
-          </a>
-          <div
-            aria-hidden
-            className="grid h-9 w-9 shrink-0 place-items-center font-mono text-[11px] font-semibold uppercase tracking-tight"
-            style={{
-              background: "var(--color-brand-tint)",
-              color: "var(--color-brand-strong)",
-              borderRadius: "8px",
-              boxShadow: "0 0 0 1px var(--color-border)",
-            }}
-          >
-            VM
-          </div>
-        </div>
+        <ProfileDropdown role={role} name={name} />
       </div>
     </header>
   );

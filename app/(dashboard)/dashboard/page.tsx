@@ -7,11 +7,10 @@ import { withUserRls } from "@/lib/db";
 import {
   founderDashboardMock,
   investorFeedMock,
+  type InvestorFeed,
+  type ProfileChecklistItem,
 } from "@/lib/dashboards/mock-data";
-import { TopMatchCard } from "@/components/dashboard/TopMatchCard";
-import { TopStartupCard } from "@/components/dashboard/TopStartupCard";
-import { RecommendedInvestorCard } from "@/components/dashboard/RecommendedInvestorCard";
-import { RecommendedStartupCard } from "@/components/dashboard/RecommendedStartupCard";
+import { StatBlock } from "@/components/dashboard/StatBlock";
 import { ActionRequiredCard } from "@/components/dashboard/ActionRequiredCard";
 import { ProfilePerformanceCard } from "@/components/dashboard/ProfilePerformanceCard";
 import { ImproveMatchesCard } from "@/components/dashboard/ImproveMatchesCard";
@@ -63,8 +62,6 @@ export default async function DashboardPage() {
 
   console.log(`[dashboard] userId=${userId} role=${role} label=${accountLabel}`);
 
-  // Parallel fetch: completion (own row), live feed top-3, profile stats,
-  // pending intro counts (inbox banner), recent viewers (who-viewed-me rail).
   const [completion, stats, feedItems, introCounts, recentViewers] = await Promise.all([
     withUserRls<CompletionResult>(userId, async (sql) => {
       if (role === "investor") {
@@ -131,7 +128,8 @@ function FounderDashboard({
   recentViewers: RecentViewer[];
 }) {
   const data = founderDashboardMock;
-  const profileComplete = data.profileStrength.percent >= 100;
+  const profileComplete = completion.pct >= 100;
+  const checklist = completionToChecklist(completion);
 
   return (
     <>
@@ -152,7 +150,8 @@ function FounderDashboard({
             Welcome back, {firstName}.
           </h1>
           <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            Three investors fit your raise this week. Two are active.
+            {stats.likes} likes · {stats.saves} saves received · {recentViewers.length} unique profile viewers
+            (30 days).
           </p>
         </div>
       </section>
@@ -169,28 +168,12 @@ function FounderDashboard({
         <RecentViewersRail viewers={recentViewers} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
-            <TopMatchCard matches={data.topMatches} newToday={data.newInvestorsToday} />
             <Disclaimer />
-
-            <section aria-labelledby="recommended-title" className="flex flex-col">
-              <header className="flex items-baseline justify-between gap-4">
-                <h2
-                  id="recommended-title"
-                  className="text-[15px] leading-5 font-semibold tracking-tight text-[var(--color-text)]"
-                >
-                  Recommended for you
-                </h2>
-                <ViewAllLink href="/matches" label="View all" />
-              </header>
-
-              <ul className="mt-3 flex flex-col gap-3">
-                {data.recommended.map((investor) => (
-                  <li key={investor.id}>
-                    <RecommendedInvestorCard investor={investor} />
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <FeedCtaStrip
+              href="/feed"
+              message="Open the full investor discovery feed"
+              sub="Filters, saved searches, and URL-shareable results"
+            />
           </section>
 
           <aside className="lg:col-span-4 flex flex-col">
@@ -198,7 +181,7 @@ function FounderDashboard({
               <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
                 <ActionRequiredCard items={data.actionRequired} borderless />
               </RailSection>
-              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
+              <SectionDivider />
               <RailSection title="Profile performance" aside="(this month)">
                 <ProfilePerformanceCard
                   stats={data.profilePerformance.stats}
@@ -206,12 +189,12 @@ function FounderDashboard({
                   borderless
                 />
               </RailSection>
-              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
-              <RailSection title="How to improve your matches" aside={undefined}>
+              <SectionDivider />
+              <RailSection title="How to improve your matches">
                 <ImproveMatchesCard
                   items={data.improveMatches}
-                  completionPct={data.profileStrength.percent}
-                  completeHref="/profile"
+                  completionPct={completion.pct}
+                  completeHref="/build"
                   borderless
                 />
               </RailSection>
@@ -228,10 +211,10 @@ function FounderDashboard({
         >
           {!profileComplete && (
             <ProfileCompletionCard
-              percent={data.profileStrength.percent}
-              band={data.profileStrength.band}
-              upliftPct={data.profileStrength.completionUpliftPct}
-              checklist={data.profileStrength.checklist}
+              percent={completion.pct}
+              band={bandFromPct(completion.pct)}
+              upliftPct={completionUpliftEstimate(completion)}
+              checklist={checklist}
             />
           )}
           <CombinedActivityCard
@@ -263,9 +246,8 @@ function InvestorDashboard({
   recentViewers: RecentViewer[];
 }) {
   const data = investorFeedMock;
-  const profileComplete = data.profileStrength.percent >= 100;
-  const focusedStartup = data.startups[0];
-  const remaining = data.startups.filter((s) => s.id !== focusedStartup.id);
+  const profileComplete = completion.pct >= 100;
+  const checklist = completionToChecklist(completion);
 
   return (
     <>
@@ -286,7 +268,8 @@ function InvestorDashboard({
             Welcome back, {firstName}.
           </h1>
           <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            {data.newStartupsToday} new startups matched your thesis today.
+            {feedItems.length} startups in your live top picks · {stats.matches} mutual matches ·{" "}
+            {recentViewers.length} thesis profile views (30 days).
           </p>
         </div>
       </section>
@@ -303,32 +286,13 @@ function InvestorDashboard({
         <RecentViewersRail viewers={recentViewers} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
           <section className="lg:col-span-8 flex flex-col gap-5">
-            <TopStartupCard
-              startups={data.startups}
-              focusedId={focusedStartup.id}
-              newToday={data.newStartupsToday}
-            />
+            <PipelineFunnelSection activity={data.activity} />
             <Disclaimer />
-
-            <section aria-labelledby="pipeline-title" className="flex flex-col">
-              <header className="flex items-baseline justify-between gap-4">
-                <h2
-                  id="pipeline-title"
-                  className="text-[15px] leading-5 font-semibold tracking-tight text-[var(--color-text)]"
-                >
-                  Your pipeline
-                </h2>
-                <ViewAllLink href="/feed" label="View all" />
-              </header>
-
-              <ul className="mt-3 flex flex-col gap-3">
-                {remaining.slice(0, 5).map((startup) => (
-                  <li key={startup.id}>
-                    <RecommendedStartupCard startup={startup} />
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <FeedCtaStrip
+              href="/feed"
+              message="Open the full startup discovery feed"
+              sub="Filters, saved searches, and URL-shareable results"
+            />
           </section>
 
           <aside className="lg:col-span-4 flex flex-col">
@@ -336,7 +300,7 @@ function InvestorDashboard({
               <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
                 <ActionRequiredCard items={data.actionRequired} borderless />
               </RailSection>
-              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
+              <SectionDivider />
               <RailSection title="Profile performance" aside="(this month)">
                 <ProfilePerformanceCard
                   stats={data.profilePerformance.stats}
@@ -344,12 +308,12 @@ function InvestorDashboard({
                   borderless
                 />
               </RailSection>
-              <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />
-              <RailSection title="How to improve your matches" aside={undefined}>
+              <SectionDivider />
+              <RailSection title="How to improve your matches">
                 <ImproveMatchesCard
                   items={data.improveMatches}
-                  completionPct={data.profileStrength.percent}
-                  completeHref="/profile"
+                  completionPct={completion.pct}
+                  completeHref="/build/investor"
                   borderless
                 />
               </RailSection>
@@ -358,7 +322,7 @@ function InvestorDashboard({
         </div>
 
         <section
-          aria-label="Profile and activity overview"
+          aria-label="Pipeline and activity overview"
           className={cn(
             "mt-5 grid grid-cols-1 gap-3",
             profileComplete ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
@@ -366,16 +330,138 @@ function InvestorDashboard({
         >
           {!profileComplete && (
             <ProfileCompletionCard
-              percent={data.profileStrength.percent}
-              band={data.profileStrength.band}
-              upliftPct={data.profileStrength.completionUpliftPct}
-              checklist={data.profileStrength.checklist}
+              percent={completion.pct}
+              band={bandFromPct(completion.pct)}
+              upliftPct={completionUpliftEstimate(completion)}
+              checklist={checklist}
             />
           )}
+          <CombinedActivityCard
+            actions={data.actionRequired}
+            activity={data.startupActivity}
+          />
           <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
         </section>
       </main>
     </>
+  );
+}
+
+function completionToChecklist(completion: CompletionResult): ProfileChecklistItem[] {
+  return [...completion.done, ...completion.missing].map((c) => ({
+    id: c.id,
+    label: c.label,
+    href: c.href,
+    done: c.done,
+  }));
+}
+
+function bandFromPct(pct: number): "Weak" | "Improving" | "Strong" | "Excellent" {
+  if (pct >= 95) return "Excellent";
+  if (pct >= 75) return "Strong";
+  if (pct >= 45) return "Improving";
+  return "Weak";
+}
+
+/** Rough signal from remaining checklist weight; capped for honest framing. */
+function completionUpliftEstimate(completion: CompletionResult): number {
+  const raw = completion.missing.reduce((s, m) => s + m.weight, 0);
+  return Math.min(35, Math.max(6, Math.round(raw * 0.25)));
+}
+
+function PipelineFunnelSection({
+  activity,
+}: {
+  activity: InvestorFeed["activity"];
+}) {
+  const [viewed, saved, messages, meetings] = activity;
+  const saveRate = viewed.value > 0 ? Math.round((saved.value / viewed.value) * 100) : 0;
+  const msgRate = saved.value > 0 ? Math.round((messages.value / saved.value) * 100) : 0;
+  const meetRate = messages.value > 0 ? Math.round((meetings.value / messages.value) * 100) : 0;
+
+  const stages = [
+    { stat: viewed, rate: null },
+    { stat: saved, rate: saveRate },
+    { stat: messages, rate: msgRate },
+    { stat: meetings, rate: meetRate },
+  ];
+
+  return (
+    <section aria-labelledby="funnel-title">
+      <header className="flex items-baseline justify-between gap-4 mb-3">
+        <h2
+          id="funnel-title"
+          className="text-[15px] leading-5 font-semibold tracking-tight text-[var(--color-text)]"
+        >
+          Deal flow this month
+        </h2>
+        <ViewAllLink href="/feed" label="Open feed" />
+      </header>
+      <div className="border border-[var(--color-border)] bg-[var(--color-surface)] overflow-x-auto">
+        <div className="flex min-w-max items-stretch">
+          {stages.map(({ stat, rate }, i) => (
+            <div key={stat.label} className="flex items-stretch">
+              {i > 0 && (
+                <div className="flex shrink-0 flex-col items-center justify-center gap-0.5 border-l border-[var(--color-border)] px-3">
+                  <ArrowRight
+                    aria-hidden
+                    size={13}
+                    strokeWidth={1.5}
+                    className="text-[var(--color-text-faint)]"
+                  />
+                  <span className="text-[11px] font-medium tabular-nums text-[var(--color-text-faint)]">
+                    {rate}%
+                  </span>
+                </div>
+              )}
+              <div className="flex min-w-[120px] flex-col gap-0.5 p-5">
+                <StatBlock label={stat.label} value={stat.value} delta={stat.delta} size="sm" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeedCtaStrip({
+  href,
+  message,
+  sub,
+}: {
+  href: string;
+  message: string;
+  sub: string;
+}) {
+  return (
+    <Link
+      href={href as Route}
+      className={cn(
+        "group flex items-center justify-between gap-4",
+        "border border-[var(--color-border)] bg-[var(--color-surface)]",
+        "px-5 py-4",
+        "transition-colors duration-[120ms] ease-out",
+        "hover:border-[var(--color-text-faint)] hover:bg-[var(--color-surface-2)]",
+      )}
+    >
+      <div>
+        <p className="text-[14px] font-semibold tracking-tight text-[var(--color-text)]">
+          {message}
+        </p>
+        <p className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">{sub}</p>
+      </div>
+      <ArrowRight
+        aria-hidden
+        size={16}
+        strokeWidth={1.75}
+        className={cn(
+          "shrink-0 text-[var(--color-text-faint)]",
+          "transition-transform duration-[120ms] ease-out",
+          "group-hover:translate-x-0.5 group-hover:text-[var(--color-text-muted)]",
+        )}
+      />
+    </Link>
   );
 }
 
@@ -407,17 +493,19 @@ function RailSection({
 }) {
   return (
     <div className="p-5">
-      <header className="flex items-baseline justify-between gap-2 mb-4">
-        <h3 className="text-[14px] leading-5 font-semibold tracking-tight text-[var(--color-text)]">
+      <header className="mb-4 flex items-baseline justify-between gap-2">
+        <h3 className="text-[14px] font-semibold leading-5 tracking-tight text-[var(--color-text)]">
           {title}
         </h3>
         {aside && (
-          <span className="text-[12px] leading-4 text-[var(--color-text-faint)]">
-            {aside}
-          </span>
+          <span className="text-[12px] leading-4 text-[var(--color-text-faint)]">{aside}</span>
         )}
       </header>
       {children}
     </div>
   );
+}
+
+function SectionDivider() {
+  return <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />;
 }

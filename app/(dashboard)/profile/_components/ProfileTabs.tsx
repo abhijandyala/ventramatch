@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "@/components/landing/wordmark";
+import { ProfileDropdown } from "@/components/layout/ProfileDropdown";
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -82,12 +83,15 @@ type ProfileTabsProps = {
   role: Role;
   name: string;
   email: string;
+  initialTab?: TabId;
 };
 
-export function ProfileTabs({ role, name, email }: ProfileTabsProps) {
+export function ProfileTabs({ role, name, email, initialTab }: ProfileTabsProps) {
   const tabs = tabsForRole(role);
   const defaultTab: TabId = role === "investor" ? "investor" : "founder";
-  const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
+  const resolvedInitial: TabId =
+    initialTab && tabs.some((t) => t.id === initialTab) ? initialTab : defaultTab;
+  const [activeTab, setActiveTab] = useState<TabId>(resolvedInitial);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
@@ -231,14 +235,6 @@ export function ProfileTabs({ role, name, email }: ProfileTabsProps) {
 
 function AppNav({ role, name }: { role: Role; name: string }) {
   const pathname = usePathname();
-  const initials = name
-    ? name
-        .split(" ")
-        .slice(0, 2)
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-    : "VM";
 
   return (
     <header
@@ -272,39 +268,7 @@ function AppNav({ role, name }: { role: Role; name: string }) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
-          {role && (
-            <span
-              className="hidden rounded-full border px-2.5 py-0.5 text-[12px] font-medium capitalize sm:inline-flex"
-              style={{
-                borderColor: "var(--color-border)",
-                background: "var(--color-surface)",
-                color: "var(--color-text-muted)",
-              }}
-            >
-              {role}
-            </span>
-          )}
-          <a
-            href="/api/auth/signout"
-            className="text-[12px] font-medium transition-colors duration-[120ms] hover:text-[var(--color-text-muted)]"
-            style={{ color: "var(--color-text-faint)" }}
-          >
-            Sign out
-          </a>
-          <div
-            aria-hidden
-            className="grid h-9 w-9 shrink-0 place-items-center font-mono text-[11px] font-semibold uppercase tracking-tight"
-            style={{
-              background: "var(--color-brand-tint)",
-              color: "var(--color-brand-strong)",
-              borderRadius: "8px",
-              boxShadow: "0 0 0 1px var(--color-border)",
-            }}
-          >
-            {initials}
-          </div>
-        </div>
+        <ProfileDropdown role={role} name={name} />
       </div>
     </header>
   );
