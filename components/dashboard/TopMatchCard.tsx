@@ -73,9 +73,6 @@ export function TopMatchCard({ matches, newToday }: TopMatchCardProps) {
           )}
         />
 
-        <CarouselArrow side="left" onClick={() => go(-1)} disabled={matches.length < 2} />
-        <CarouselArrow side="right" onClick={() => go(1)} disabled={matches.length < 2} />
-
         <div className="relative px-6 pt-7 pb-6 sm:px-10 sm:pt-9 sm:pb-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
             <div className="flex flex-1 min-w-0 flex-col">
@@ -191,22 +188,26 @@ export function TopMatchCard({ matches, newToday }: TopMatchCardProps) {
           </div>
 
           {matches.length > 1 && (
-            <div className="mt-8 flex items-center justify-center gap-1.5">
-              {matches.map((m, i) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setIndex(i)}
-                  aria-label={`Show match ${i + 1} of ${matches.length}`}
-                  aria-current={i === safeIndex ? "true" : undefined}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-[180ms] ease-out",
-                    i === safeIndex
-                      ? "w-6 bg-[var(--color-brand-ink)]"
-                      : "w-1.5 bg-[var(--color-border)] hover:bg-[var(--color-text-faint)]",
-                  )}
-                />
-              ))}
+            <div className="mt-7 flex items-center justify-center gap-3 pt-5 border-t border-[var(--color-border)]">
+              <PaginationArrow side="left" onClick={() => go(-1)} />
+              <div className="flex items-center gap-1.5">
+                {matches.map((m, i) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setIndex(i)}
+                    aria-label={`Show match ${i + 1} of ${matches.length}`}
+                    aria-current={i === safeIndex ? "true" : undefined}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-[180ms] ease-out",
+                      i === safeIndex
+                        ? "w-6 bg-[var(--color-brand-ink)]"
+                        : "w-1.5 bg-[var(--color-border)] hover:bg-[var(--color-text-faint)]",
+                    )}
+                  />
+                ))}
+              </div>
+              <PaginationArrow side="right" onClick={() => go(1)} />
             </div>
           )}
         </div>
@@ -224,35 +225,30 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CarouselArrow({
+function PaginationArrow({
   side,
   onClick,
-  disabled,
 }: {
   side: "left" | "right";
   onClick: () => void;
-  disabled?: boolean;
 }) {
   const Icon = side === "left" ? ChevronLeft : ChevronRight;
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
       aria-label={side === "left" ? "Previous match" : "Next match"}
       className={cn(
-        "absolute top-1/2 z-10 -translate-y-1/2",
-        side === "left" ? "left-3" : "right-3",
-        "hidden sm:inline-flex items-center justify-center",
-        "h-9 w-9 rounded-full",
+        "inline-flex items-center justify-center",
+        "h-7 w-7 rounded-full",
         "border border-[var(--color-border)]",
-        "bg-[var(--color-bg)] text-[var(--color-text-muted)]",
+        "bg-[var(--color-surface)] text-[var(--color-text-muted)]",
         "transition-colors duration-[120ms] ease-out",
-        "hover:bg-[var(--color-surface)] hover:text-[var(--color-text)] hover:border-[var(--color-text-faint)]",
-        "disabled:opacity-40 disabled:pointer-events-none",
+        "hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)] hover:border-[var(--color-text-faint)]",
+        "focus-visible:outline-none",
       )}
     >
-      <Icon aria-hidden size={16} strokeWidth={1.75} />
+      <Icon aria-hidden size={14} strokeWidth={1.75} />
     </button>
   );
 }
