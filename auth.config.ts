@@ -99,13 +99,27 @@ export const authConfig = {
       console.log(`[auth:middleware] → pass through ${pathname}`);
       return true;
     },
-    jwt({ token, user, trigger }) {
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = user.role ?? null;
         token.onboardingCompleted = user.onboardingCompleted ?? false;
         token.isEmailVerified = Boolean(user.emailVerified);
         console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false} verified=${token.isEmailVerified}`);
+      }
+      // unstable_update() from server actions only hits this path; `user` is absent.
+      if (trigger === "update" && session?.user) {
+        const u = session.user;
+        if (u.role !== undefined) token.role = u.role ?? null;
+        if (typeof u.onboardingCompleted === "boolean") {
+          token.onboardingCompleted = u.onboardingCompleted;
+        }
+        if (typeof u.isEmailVerified === "boolean") {
+          token.isEmailVerified = u.isEmailVerified;
+        }
+        console.log(
+          `[auth:jwt] trigger=update userId=${token.sub ?? "none"} role=${token.role ?? "null"} onboarded=${token.onboardingCompleted ?? false} verified=${token.isEmailVerified}`,
+        );
       }
       return token;
     },
