@@ -2,6 +2,8 @@
 
 import { Bookmark, ExternalLink, MessageSquare, ThumbsDown, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Chip } from "@/components/common/Chip";
+import { MatchScore } from "@/components/common/MatchScore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,6 +19,7 @@ export type InvestorFeedItem = {
   geography: string;
   investingStatus: "actively investing" | "paused" | "selectively investing";
   matchScore: number;
+  matchReason: string;
   reasons: string[];
   flag?: string;
 };
@@ -32,6 +35,7 @@ export type StartupFeedItem = {
   pitch: string;
   traction: string;
   matchScore: number;
+  matchReason: string;
   reasons: string[];
   flag?: string;
   trustBadge?: string;
@@ -54,6 +58,7 @@ export const MOCK_INVESTORS: InvestorFeedItem[] = [
     geography: "US · Europe",
     investingStatus: "actively investing",
     matchScore: 92,
+    matchReason: "Stage and sector match. Check size fits.",
     reasons: [
       "Actively writing checks at Pre-seed — your current stage",
       "AI/ML thesis aligns with your core product vertical",
@@ -71,6 +76,7 @@ export const MOCK_INVESTORS: InvestorFeedItem[] = [
     geography: "US · Global",
     investingStatus: "selectively investing",
     matchScore: 85,
+    matchReason: "Sector aligns. Stage near your range.",
     reasons: [
       "Deep focus on AI infrastructure — relevant to your stack",
       "Portfolio includes two direct comparables",
@@ -88,6 +94,7 @@ export const MOCK_INVESTORS: InvestorFeedItem[] = [
     geography: "Global",
     investingStatus: "actively investing",
     matchScore: 78,
+    matchReason: "Impact mandate matches your angle.",
     reasons: [
       "Impact-focused mandate matches your sustainability angle",
       "Has backed solo founders at pre-revenue stage",
@@ -104,6 +111,7 @@ export const MOCK_INVESTORS: InvestorFeedItem[] = [
     geography: "US",
     investingStatus: "actively investing",
     matchScore: 71,
+    matchReason: "Stage match. Consumer playbook fits.",
     reasons: [
       "Consumer marketplace playbook matches your GTM",
       "Check size range covers your target raise",
@@ -120,6 +128,7 @@ export const MOCK_INVESTORS: InvestorFeedItem[] = [
     geography: "US",
     investingStatus: "paused",
     matchScore: 64,
+    matchReason: "Sector overlap. Currently paused.",
     reasons: [
       "Sector overlap with your fintech components",
       "Strong value-add in regulatory navigation",
@@ -140,6 +149,7 @@ export const MOCK_STARTUPS: StartupFeedItem[] = [
     pitch: "AI copilot for enterprise procurement teams that cuts sourcing time by 60%.",
     traction: "$12K MRR · +18% m/m",
     matchScore: 88,
+    matchReason: "AI/ML thesis. Traction above pre-seed median.",
     reasons: [
       "AI/ML thesis — direct product-market fit with your focus",
       "Traction above your typical pre-seed threshold",
@@ -159,6 +169,7 @@ export const MOCK_STARTUPS: StartupFeedItem[] = [
     pitch: "Remote patient monitoring platform reducing hospital readmissions by 40% for post-surgical patients.",
     traction: "$45K MRR · 3 hospital pilots signed",
     matchScore: 82,
+    matchReason: "Proven clinical outcomes. Strong founding team.",
     reasons: [
       "Healthtech with proven clinical outcomes — rare at Seed",
       "Revenue quality and contract type reduce risk",
@@ -177,6 +188,7 @@ export const MOCK_STARTUPS: StartupFeedItem[] = [
     pitch: "Adaptive learning paths for community college students, reducing drop-out rates by 35%.",
     traction: "2 college partnerships · 1,200 active students",
     matchScore: 74,
+    matchReason: "Impact metrics strong. Institutional validation.",
     reasons: [
       "Impact metrics are strong relative to raise size",
       "Early institutional validation de-risks the deal",
@@ -194,6 +206,7 @@ export const MOCK_STARTUPS: StartupFeedItem[] = [
     pitch: "Carbon accounting API for mid-market manufacturing companies to automate Scope 3 reporting.",
     traction: "$8K MRR · LOI from Fortune 500 supplier",
     matchScore: 76,
+    matchReason: "Regulatory tailwind. API moat. Check fits.",
     reasons: [
       "Regulatory tailwind makes this a timely bet",
       "API-first model creates high switching costs",
@@ -212,6 +225,7 @@ export const MOCK_STARTUPS: StartupFeedItem[] = [
     pitch: "Earned wage access platform for hourly workers at restaurant chains — no employer integration required.",
     traction: "$28K MRR · 4 franchise groups · +22% m/m",
     matchScore: 69,
+    matchReason: "Fintech overlap. Strong moat and growth rate.",
     reasons: [
       "Fintech vertical aligns with sector interest",
       "No-employer-integration moat is a strong differentiator",
@@ -235,25 +249,11 @@ type FeedCardProps = {
 };
 
 export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCardProps) {
-  const matchScore = item.matchScore;
-  const matchColor =
-    matchScore >= 80
-      ? "var(--color-brand-strong)"
-      : matchScore >= 65
-        ? "var(--color-warn)"
-        : "var(--color-text-muted)";
-  const matchBg =
-    matchScore >= 80
-      ? "var(--color-brand-tint)"
-      : matchScore >= 65
-        ? "#fef3c7"
-        : "var(--color-surface-2)";
-
   return (
     <article
       className={cn(
-        "relative overflow-hidden rounded-2xl border transition-all duration-200",
-        "hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)]",
+        "overflow-hidden border transition-all duration-200",
+        "hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)] hover:border-[var(--color-text-faint)]",
         passed && "opacity-50 saturate-50",
       )}
       style={{
@@ -261,15 +261,7 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
         background: "var(--color-surface)",
       }}
     >
-      {/* Match badge */}
-      <div
-        className="absolute right-4 top-4 flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums"
-        style={{ background: matchBg, color: matchColor }}
-      >
-        {matchScore}% match
-      </div>
-
-      <div className="p-5 pr-28">
+      <div className="p-5">
         {item.type === "investor" ? (
           <InvestorHeader item={item} />
         ) : (
@@ -279,11 +271,11 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
 
       {/* Why this matches */}
       <div
-        className="mx-5 mb-5 rounded-xl p-4"
+        className="mx-5 mb-4 p-4"
         style={{ background: "var(--color-surface-2)" }}
       >
         <p
-          className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em]"
+          className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.08em]"
           style={{ color: "var(--color-text-faint)" }}
         >
           Why this matches
@@ -308,7 +300,7 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
       {/* Flag */}
       {item.flag && (
         <div
-          className="mx-5 mb-4 flex items-center gap-1.5 text-[12px]"
+          className="mx-5 mb-4 flex items-center gap-1.5 text-[12px] font-medium"
           style={{ color: "var(--color-brand-strong)" }}
         >
           <span
@@ -328,11 +320,12 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
           <button
             type="button"
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border px-3",
+              "inline-flex h-8 items-center gap-1.5 border px-3",
               "text-[13px] font-medium transition-colors duration-[120ms]",
               "hover:border-[var(--color-text-faint)] hover:text-[var(--color-text)]",
             )}
             style={{
+              borderRadius: "var(--radius-sm)",
               borderColor: "var(--color-border)",
               color: "var(--color-text-muted)",
               background: "var(--color-surface)",
@@ -346,11 +339,12 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
             <button
               type="button"
               className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border px-3",
+                "inline-flex h-8 items-center gap-1.5 border px-3",
                 "text-[13px] font-medium transition-colors duration-[120ms]",
                 "hover:border-[var(--color-text-faint)] hover:text-[var(--color-text)]",
               )}
               style={{
+                borderRadius: "var(--radius-sm)",
                 borderColor: "var(--color-border)",
                 color: "var(--color-text-muted)",
                 background: "var(--color-surface)",
@@ -363,11 +357,12 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
             <button
               type="button"
               className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border px-3",
+                "inline-flex h-8 items-center gap-1.5 border px-3",
                 "text-[13px] font-medium transition-colors duration-[120ms]",
                 "hover:border-[var(--color-text-faint)] hover:text-[var(--color-text)]",
               )}
               style={{
+                borderRadius: "var(--radius-sm)",
                 borderColor: "var(--color-border)",
                 color: "var(--color-text-muted)",
                 background: "var(--color-surface)",
@@ -385,12 +380,15 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
             aria-label={saved ? "Unsave" : "Save"}
             onClick={() => onSave(item.id)}
             className={cn(
-              "grid h-8 w-8 place-items-center rounded-[var(--radius-sm)] border transition-colors duration-[120ms]",
+              "grid h-8 w-8 place-items-center border transition-colors duration-[120ms]",
               saved
                 ? "border-[var(--color-brand)] text-[var(--color-brand)]"
                 : "border-[var(--color-border)] text-[var(--color-text-faint)] hover:border-[var(--color-text-faint)] hover:text-[var(--color-text-muted)]",
             )}
-            style={{ background: saved ? "var(--color-brand-tint)" : "var(--color-surface)" }}
+            style={{
+              borderRadius: "var(--radius-sm)",
+              background: saved ? "var(--color-brand-tint)" : "var(--color-surface)",
+            }}
           >
             <Bookmark size={13} strokeWidth={1.75} aria-hidden fill={saved ? "currentColor" : "none"} />
           </button>
@@ -399,12 +397,15 @@ export function FeedCard({ item, role, onSave, onPass, saved, passed }: FeedCard
             aria-label="Pass"
             onClick={() => onPass(item.id)}
             className={cn(
-              "grid h-8 w-8 place-items-center rounded-[var(--radius-sm)] border transition-colors duration-[120ms]",
+              "grid h-8 w-8 place-items-center border transition-colors duration-[120ms]",
               passed
                 ? "border-[var(--color-danger)] text-[var(--color-danger)]"
                 : "border-[var(--color-border)] text-[var(--color-text-faint)] hover:border-[var(--color-text-faint)] hover:text-[var(--color-text-muted)]",
             )}
-            style={{ background: passed ? "#fef2f2" : "var(--color-surface)" }}
+            style={{
+              borderRadius: "var(--radius-sm)",
+              background: passed ? "#fef2f2" : "var(--color-surface)",
+            }}
           >
             <ThumbsDown size={13} strokeWidth={1.75} aria-hidden />
           </button>
@@ -427,8 +428,8 @@ function InvestorHeader({ item }: { item: InvestorFeedItem }) {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <h3
             className="text-[16px] font-semibold leading-6 tracking-tight"
             style={{ color: "var(--color-text)" }}
@@ -437,19 +438,24 @@ function InvestorHeader({ item }: { item: InvestorFeedItem }) {
           </h3>
           <p className="mt-0.5 flex items-center gap-1.5 text-[12px]" style={{ color: "var(--color-text-faint)" }}>
             <span
-              className="h-1.5 w-1.5 rounded-full"
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ background: statusColor[item.investingStatus] }}
             />
             <span className="capitalize">{item.investingStatus}</span>
           </p>
         </div>
+        <MatchScore score={item.matchScore} reason={item.matchReason} size="md" className="shrink-0" />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Chip label={item.stage} />
-        <Chip label={item.sector} />
-        <Chip label={item.checkSize} />
-        <Chip label={item.geography} />
+        {item.stage.split(" · ").map((s) => (
+          <Chip key={s} variant="outline">{s}</Chip>
+        ))}
+        {item.sector.split(" · ").map((s) => (
+          <Chip key={s} variant="tint">{s}</Chip>
+        ))}
+        <Chip variant="outline">{item.checkSize}</Chip>
+        <Chip variant="outline">{item.geography}</Chip>
       </div>
     </div>
   );
@@ -458,8 +464,8 @@ function InvestorHeader({ item }: { item: InvestorFeedItem }) {
 function StartupHeader({ item }: { item: StartupFeedItem }) {
   return (
     <div>
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3
               className="text-[16px] font-semibold leading-6 tracking-tight"
@@ -486,13 +492,14 @@ function StartupHeader({ item }: { item: StartupFeedItem }) {
             {item.pitch}
           </p>
         </div>
+        <MatchScore score={item.matchScore} reason={item.matchReason} size="md" className="shrink-0" />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <Chip label={item.industry} />
-        <Chip label={item.stage} />
-        <Chip label={item.location} />
-        <Chip label={`Raising ${item.amountRaising}`} accent />
+        <Chip variant="tint">{item.industry}</Chip>
+        <Chip variant="outline">{item.stage}</Chip>
+        <Chip variant="outline">{item.location}</Chip>
+        <Chip variant="tint">Raising {item.amountRaising}</Chip>
       </div>
 
       {item.traction && (
@@ -504,19 +511,5 @@ function StartupHeader({ item }: { item: StartupFeedItem }) {
         </p>
       )}
     </div>
-  );
-}
-
-function Chip({ label, accent = false }: { label: string; accent?: boolean }) {
-  return (
-    <span
-      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[12px] font-medium"
-      style={{
-        background: accent ? "var(--color-brand-tint)" : "var(--color-surface-2)",
-        color: accent ? "var(--color-brand-strong)" : "var(--color-text-muted)",
-      }}
-    >
-      {label}
-    </span>
   );
 }

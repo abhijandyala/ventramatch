@@ -4,15 +4,14 @@ import { useState, useMemo } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BarChart2,
-  Lightbulb,
-  Clock,
-  Search,
-  ChevronDown,
-} from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "@/components/landing/wordmark";
+import { Disclaimer } from "@/components/common/Disclaimer";
+import { ProfilePerformanceCard } from "@/components/dashboard/ProfilePerformanceCard";
+import { ImproveMatchesCard } from "@/components/dashboard/ImproveMatchesCard";
+import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
+import { founderDashboardMock, investorFeedMock } from "@/lib/dashboards/mock-data";
 import {
   FeedCard,
   MOCK_INVESTORS,
@@ -68,6 +67,9 @@ export function FeedsClient({ role, name }: FeedsClientProps) {
 
   const allItems: FeedItem[] = role === "investor" ? MOCK_STARTUPS : MOCK_INVESTORS;
 
+  // Pick the right sidebar data from whichever mock matches the role
+  const sidebarData = role === "investor" ? investorFeedMock : founderDashboardMock;
+
   function handleSave(id: string) {
     setSavedIds((prev) => {
       const next = new Set(prev);
@@ -92,12 +94,10 @@ export function FeedsClient({ role, name }: FeedsClientProps) {
     if (activeTab === "saved") return items.filter((i) => savedIds.has(i.id));
     if (activeTab === "passed") return items.filter((i) => passedIds.has(i.id));
 
-    // For recently-active tab, show all but re-order (mock: reverse)
     if (activeTab === "recently-active") {
       items = [...items].reverse();
     }
 
-    // Search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       items = items.filter((item) => {
@@ -111,7 +111,6 @@ export function FeedsClient({ role, name }: FeedsClientProps) {
       });
     }
 
-    // Industry / sector filter
     if (industryFilter !== "All") {
       items = items.filter((item) => {
         const sector = item.type === "investor" ? item.sector : item.industry;
@@ -119,14 +118,12 @@ export function FeedsClient({ role, name }: FeedsClientProps) {
       });
     }
 
-    // Stage filter
     if (stageFilter !== "All") {
       items = items.filter((item) =>
         item.stage.toLowerCase().includes(stageFilter.toLowerCase()),
       );
     }
 
-    // Location filter (only for startups)
     if (locationFilter !== "All" && role === "investor") {
       items = items.filter((item) => {
         if (item.type !== "startup") return true;
@@ -134,20 +131,12 @@ export function FeedsClient({ role, name }: FeedsClientProps) {
       });
     }
 
-    // Sort
     if (sortBy === "Best match") {
       items = [...items].sort((a, b) => b.matchScore - a.matchScore);
     }
 
     return items;
   }, [allItems, activeTab, savedIds, passedIds, searchQuery, industryFilter, stageFilter, locationFilter, sortBy, role]);
-
-  const avgMatchScore = useMemo(() => {
-    if (allItems.length === 0) return 0;
-    return Math.round(allItems.reduce((sum, i) => sum + i.matchScore, 0) / allItems.length);
-  }, [allItems]);
-
-  const recentlyViewed = useMemo(() => allItems.slice(0, 3), [allItems]);
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
@@ -284,9 +273,46 @@ export function FeedsClient({ role, name }: FeedsClientProps) {
               className="flex flex-col gap-4 lg:sticky"
               style={{ top: "calc(64px + 1px)" }}
             >
-              <MatchQualityCard avgScore={avgMatchScore} totalItems={allItems.length} />
-              <ProfileTipsCard role={role} />
-              <RecentlyViewedCard items={recentlyViewed} role={role} />
+              {/* Profile performance — same component as /feed */}
+              <div className="border overflow-hidden" style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
+                <div className="px-5 pt-5 pb-1 border-b" style={{ borderColor: "var(--color-border)" }}>
+                  <h2 className="text-[14px] font-semibold tracking-tight" style={{ color: "var(--color-text)" }}>
+                    Profile performance
+                    <span className="ml-2 text-[12px] font-normal" style={{ color: "var(--color-text-faint)" }}>
+                      (this month)
+                    </span>
+                  </h2>
+                </div>
+                <div className="px-5 py-5">
+                  <ProfilePerformanceCard
+                    stats={sidebarData.profilePerformance.stats}
+                    series={sidebarData.profilePerformance.series}
+                    borderless
+                  />
+                </div>
+              </div>
+
+              {/* Improve matches — same component as /feed */}
+              <div className="border overflow-hidden" style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
+                <div className="px-5 pt-5 pb-1 border-b" style={{ borderColor: "var(--color-border)" }}>
+                  <h2 className="text-[14px] font-semibold tracking-tight" style={{ color: "var(--color-text)" }}>
+                    How to improve your matches
+                  </h2>
+                </div>
+                <div className="px-5 py-5">
+                  <ImproveMatchesCard
+                    items={sidebarData.improveMatches}
+                    completionPct={sidebarData.profileStrength.percent}
+                    completeHref="/profile"
+                    borderless
+                  />
+                </div>
+              </div>
+
+              {/* Why you're a great fit — same component as dashboard */}
+              {"greatFitBullets" in sidebarData && (
+                <WhyYouAreAGreatFitCard bullets={sidebarData.greatFitBullets} />
+              )}
             </div>
           </aside>
         </div>
@@ -391,7 +417,7 @@ function ProfileBanner({ role }: { role: Role }) {
 
   return (
     <div
-      className="mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between"
+      className="mb-5 flex flex-col gap-3 border p-4 sm:flex-row sm:items-center sm:justify-between"
       style={{
         borderColor: "var(--color-brand)",
         background: "var(--color-brand-tint)",
@@ -403,11 +429,8 @@ function ProfileBanner({ role }: { role: Role }) {
       <div className="flex shrink-0 items-center gap-2">
         <Link
           href="/profile"
-          className={cn(
-            "inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] px-3",
-            "text-[13px] font-semibold text-white transition-opacity duration-[120ms] hover:opacity-90",
-          )}
-          style={{ background: "var(--color-brand-ink)" }}
+          className="inline-flex h-8 items-center gap-1.5 px-3 text-[13px] font-semibold text-white transition-opacity duration-[120ms] hover:opacity-90"
+          style={{ background: "var(--color-brand-ink)", borderRadius: "var(--radius-sm)" }}
         >
           {primaryLabel}
         </Link>
@@ -457,7 +480,6 @@ function FiltersRow({
 }: FiltersRowProps) {
   return (
     <div className="mb-5 flex flex-wrap items-center gap-2">
-      {/* Search */}
       <div className="relative min-w-[200px] flex-1">
         <Search
           size={13}
@@ -549,8 +571,7 @@ function FilterSelect({
           borderColor: isDefault || isSort ? "var(--color-border)" : "var(--color-brand)",
           background: isDefault || isSort ? "var(--color-surface)" : "var(--color-brand-tint)",
           borderRadius: "var(--radius-sm)",
-          color:
-            isDefault || isSort ? "var(--color-text-muted)" : "var(--color-brand-strong)",
+          color: isDefault || isSort ? "var(--color-text-muted)" : "var(--color-brand-strong)",
           minWidth: 120,
         }}
       >
@@ -584,7 +605,7 @@ function FeedList({ items, role, savedIds, passedIds, onSave, onPass, activeTab 
   if (items.length === 0) {
     return (
       <div
-        className="flex flex-col items-center justify-center rounded-2xl border py-16 text-center"
+        className="flex flex-col items-center justify-center border py-16 text-center"
         style={{
           borderColor: "var(--color-border)",
           background: "var(--color-surface)",
@@ -607,8 +628,8 @@ function FeedList({ items, role, savedIds, passedIds, onSave, onPass, activeTab 
         {activeTab === "recommended" && (
           <Link
             href="/profile"
-            className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: "var(--color-brand-ink)" }}
+            className="mt-4 inline-flex h-9 items-center gap-1.5 px-4 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: "var(--color-brand-ink)", borderRadius: "var(--radius-sm)" }}
           >
             Complete your profile
           </Link>
@@ -618,190 +639,23 @@ function FeedList({ items, role, savedIds, passedIds, onSave, onPass, activeTab 
   }
 
   return (
-    <ul className="flex flex-col gap-4">
-      {items.map((item) => (
-        <li key={item.id}>
-          <FeedCard
-            item={item}
-            role={effectiveRole}
-            onSave={onSave}
-            onPass={onPass}
-            saved={savedIds.has(item.id)}
-            passed={passedIds.has(item.id)}
-          />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sidebar cards
-// ---------------------------------------------------------------------------
-
-function MatchQualityCard({ avgScore, totalItems }: { avgScore: number; totalItems: number }) {
-  const scoreColor =
-    avgScore >= 80
-      ? "var(--color-brand-strong)"
-      : avgScore >= 65
-        ? "var(--color-warn)"
-        : "var(--color-text-muted)";
-
-  return (
-    <section
-      aria-labelledby="match-quality-heading"
-      className="border"
-      style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
-    >
-      <div
-        className="flex items-center gap-2 border-b px-5 py-4"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        <BarChart2 size={14} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} aria-hidden />
-        <h2
-          id="match-quality-heading"
-          className="text-[14px] font-semibold tracking-tight"
-          style={{ color: "var(--color-text)" }}
-        >
-          Match Quality
-        </h2>
-      </div>
-      <div className="px-5 py-4">
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className="font-mono text-[32px] font-bold tabular-nums leading-none"
-            style={{ color: scoreColor }}
-          >
-            {avgScore}%
-          </span>
-          <span className="text-[13px]" style={{ color: "var(--color-text-faint)" }}>
-            avg match
-          </span>
-        </div>
-        <p className="mt-2 text-[12px] leading-4" style={{ color: "var(--color-text-muted)" }}>
-          Across {totalItems} curated matches based on your profile.
-        </p>
-        <div
-          className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: "var(--color-surface-2)" }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${avgScore}%`, background: scoreColor }}
-          />
-        </div>
-        <p className="mt-2 text-[11px]" style={{ color: "var(--color-text-faint)" }}>
-          Complete your profile to improve this score.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-const FOUNDER_TIPS = [
-  "Add traction metrics — investors filter by MRR or user count first.",
-  "Upload a pitch deck to unlock higher-quality investor introductions.",
-  "Set a specific funding ask — vague ranges reduce match quality.",
-];
-
-const INVESTOR_TIPS = [
-  "Set a precise check size to surface better-fit startups.",
-  "Add your thesis — founders filter for cultural alignment.",
-  "Mark yourself as actively investing to rise in search results.",
-];
-
-function ProfileTipsCard({ role }: { role: Role }) {
-  const tips = role === "investor" ? INVESTOR_TIPS : FOUNDER_TIPS;
-
-  return (
-    <section
-      aria-labelledby="profile-tips-heading"
-      className="border"
-      style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
-    >
-      <div
-        className="flex items-center gap-2 border-b px-5 py-4"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        <Lightbulb size={14} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} aria-hidden />
-        <h2
-          id="profile-tips-heading"
-          className="text-[14px] font-semibold tracking-tight"
-          style={{ color: "var(--color-text)" }}
-        >
-          Profile Tips
-        </h2>
-      </div>
-      <ul className="divide-y px-5" style={{ borderColor: "var(--color-border)" }}>
-        {tips.map((tip, i) => (
-          <li key={i} className="flex items-start gap-2.5 py-3 first:pt-4 last:pb-4">
-            <span
-              className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
-              style={{ background: "var(--color-brand)" }}
+    <div className="flex flex-col gap-4">
+      <ul className="flex flex-col gap-4">
+        {items.map((item) => (
+          <li key={item.id}>
+            <FeedCard
+              item={item}
+              role={effectiveRole}
+              onSave={onSave}
+              onPass={onPass}
+              saved={savedIds.has(item.id)}
+              passed={passedIds.has(item.id)}
             />
-            <p className="text-[12px] leading-4" style={{ color: "var(--color-text-muted)" }}>
-              {tip}
-            </p>
           </li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-function RecentlyViewedCard({ items, role }: { items: FeedItem[]; role: Role }) {
-  return (
-    <section
-      aria-labelledby="recently-viewed-heading"
-      className="border"
-      style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}
-    >
-      <div
-        className="flex items-center gap-2 border-b px-5 py-4"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        <Clock size={14} strokeWidth={1.75} style={{ color: "var(--color-brand)" }} aria-hidden />
-        <h2
-          id="recently-viewed-heading"
-          className="text-[14px] font-semibold tracking-tight"
-          style={{ color: "var(--color-text)" }}
-        >
-          Recently Viewed
-        </h2>
-      </div>
-      <ul className="divide-y px-5" style={{ borderColor: "var(--color-border)" }}>
-        {items.map((item) => {
-          const displayName = item.type === "investor" ? item.fundName : item.name;
-          const displayMeta =
-            item.type === "investor"
-              ? item.sector
-              : item.industry;
-          return (
-            <li key={item.id} className="flex items-center justify-between gap-3 py-3 first:pt-4 last:pb-4">
-              <div className="min-w-0 flex-1">
-                <p
-                  className="truncate text-[13px] font-medium"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  {displayName}
-                </p>
-                <p className="mt-0.5 truncate text-[12px]" style={{ color: "var(--color-text-faint)" }}>
-                  {displayMeta}
-                </p>
-              </div>
-              <span
-                className="shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] font-bold tabular-nums"
-                style={{
-                  background: "var(--color-brand-tint)",
-                  color: "var(--color-brand-strong)",
-                }}
-              >
-                {item.matchScore}%
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+      {/* Legally required on every surface that shows match scores */}
+      <Disclaimer className="mt-1" />
+    </div>
   );
 }
