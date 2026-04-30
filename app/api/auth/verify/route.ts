@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 import { encode } from "next-auth/jwt";
 import { withUserRls } from "@/lib/db";
 import type { UserRole } from "@/types/database";
@@ -7,6 +8,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30 days, matches NextAuth default
+
+const verifyParams = z.object({
+  token: z.string().trim().min(1).max(256),
+  identifier: z.string().trim().toLowerCase().email(),
+});
 
 function siteUrl(req: NextRequest): URL {
   const forwardedHost = req.headers.get("x-forwarded-host");
@@ -31,8 +37,13 @@ function isHttps(req: NextRequest): boolean {
   return req.nextUrl.protocol === "https:";
 }
 
-function redirectTo(req: NextRequest, path: string): NextResponse {
+function redirectGet(req: NextRequest, path: string): NextResponse {
   return NextResponse.redirect(new URL(path, siteUrl(req)));
+}
+
+// 303 forces the browser to follow with GET so the form POST isn't replayed.
+function redirectAfterPost(req: NextRequest, path: string): NextResponse {
+  return NextResponse.redirect(new URL(path, siteUrl(req)), { status: 303 });
 }
 
 type UserRow = {
@@ -44,44 +55,111 @@ type UserRow = {
   onboarding_completed: boolean;
 };
 
+type TokenRow = { expires: Date | string };
+
+/**
+ * Read-only on purpose. Microsoft Defender, Mimecast, Proofpoint, Gmail link
+ * checkers and friends prefetch every URL in incoming mail. The previous
+ * destructive GET burned the one-time token before the human ever clicked,
+ * so the real click then 302'd to "expired". We now only validate the link
+ * here and hand the user off to a confirm page that POSTs back to consume
+ * the token. Scanners don't submit forms.
+ */
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get("token");
-  const identifier = req.nextUrl.searchParams.get("identifier")?.toLowerCase();
+  const tokenRaw = req.nextUrl.searchParams.get("token") ?? "";
+  const identifierRaw = req.nextUrl.searchParams.get("identifier") ?? "";
+  const parsed = verifyParams.safeParse({ token: tokenRaw, identifier: identifierRaw });
 
-  console.log(`[verify] hit identifier=${identifier ?? "none"} hasToken=${Boolean(token)}`);
+  console.log(`[verify] GET hit identifier=${identifierRaw || "none"} hasToken=${Boolean(tokenRaw)}`);
 
-  if (!token || !identifier) {
-    return redirectTo(req, "/verify-email?error=invalid");
+  if (!parsed.success) {
+    return redirectGet(req, "/verify-email?error=invalid");
   }
 
-  type TokenRow = { expires: Date | string };
+  const { token, identifier } = parsed.data;
+
+  let row: TokenRow | null = null;
+  try {
+    row = await withUserRls<TokenRow | null>(null, async (sql) => {
+      const rows = await sql<TokenRow[]>`
+        select expires
+        from public.verification_token
+        where identifier = ${identifier} and token = ${token}
+        limit 1
+      `;
+      return rows[0] ?? null;
+    });
+  } catch (error) {
+    console.error("[verify] GET DB read failed", error);
+    return redirectGet(req, "/verify-email?error=invalid");
+  }
+
+  if (!row) {
+    console.log(`[verify] GET token not found for ${identifier}`);
+    return redirectGet(req, `/verify-email?error=expired&email=${encodeURIComponent(identifier)}`);
+  }
+
+  if (new Date(row.expires).getTime() < Date.now()) {
+    console.log(`[verify] GET token expired for ${identifier}`);
+    return redirectGet(req, `/verify-email?error=expired&email=${encodeURIComponent(identifier)}`);
+  }
+
+  const target = new URL("/verify-email/confirm", siteUrl(req));
+  target.searchParams.set("token", token);
+  target.searchParams.set("identifier", identifier);
+  return NextResponse.redirect(target);
+}
+
+/**
+ * Consume the token, mark the user verified, and mint a session cookie so the
+ * user lands on /post-auth already signed in. Reached only via the confirm
+ * page form submit, so a scanner's automated GET can't trigger this path.
+ */
+export async function POST(req: NextRequest) {
+  let token = "";
+  let identifierRaw = "";
+  try {
+    const form = await req.formData();
+    token = String(form.get("token") ?? "");
+    identifierRaw = String(form.get("identifier") ?? "");
+  } catch {
+    return redirectAfterPost(req, "/verify-email?error=invalid");
+  }
+
+  const parsed = verifyParams.safeParse({ token, identifier: identifierRaw });
+  console.log(`[verify] POST hit identifier=${identifierRaw || "none"} hasToken=${Boolean(token)}`);
+
+  if (!parsed.success) {
+    return redirectAfterPost(req, "/verify-email?error=invalid");
+  }
+
+  const { token: validatedToken, identifier } = parsed.data;
+
   let consumed: TokenRow | null = null;
   try {
     consumed = await withUserRls<TokenRow | null>(null, async (sql) => {
       const rows = await sql<TokenRow[]>`
         delete from public.verification_token
-        where identifier = ${identifier} and token = ${token}
+        where identifier = ${identifier} and token = ${validatedToken}
         returning expires
       `;
       return rows[0] ?? null;
     });
   } catch (error) {
-    console.error("[verify] DB delete failed", error);
-    return redirectTo(req, "/verify-email?error=invalid");
+    console.error("[verify] POST DB delete failed", error);
+    return redirectAfterPost(req, "/verify-email?error=invalid");
   }
 
   if (!consumed) {
-    console.log(`[verify] token not found for ${identifier}`);
-    return redirectTo(req, `/verify-email?error=expired&email=${encodeURIComponent(identifier)}`);
+    console.log(`[verify] POST token not found for ${identifier}`);
+    return redirectAfterPost(req, `/verify-email?error=expired&email=${encodeURIComponent(identifier)}`);
   }
 
-  const expiresAt = new Date(consumed.expires);
-  if (expiresAt.getTime() < Date.now()) {
-    console.log(`[verify] token expired for ${identifier}`);
-    return redirectTo(req, `/verify-email?error=expired&email=${encodeURIComponent(identifier)}`);
+  if (new Date(consumed.expires).getTime() < Date.now()) {
+    console.log(`[verify] POST token expired for ${identifier}`);
+    return redirectAfterPost(req, `/verify-email?error=expired&email=${encodeURIComponent(identifier)}`);
   }
 
-  // Mark verified AND fetch the row we'll need to mint the session JWT.
   let user: UserRow | null = null;
   try {
     user = await withUserRls<UserRow | null>(null, async (sql) => {
@@ -95,22 +173,21 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("[verify] could not mark email verified", error);
-    return redirectTo(req, "/verify-email?error=invalid");
+    return redirectAfterPost(req, "/verify-email?error=invalid");
   }
 
   if (!user) {
     console.error(`[verify] no user row for ${identifier}`);
-    return redirectTo(req, "/verify-email?error=invalid");
+    return redirectAfterPost(req, "/verify-email?error=invalid");
   }
 
   const secret = process.env.AUTH_SECRET;
   if (!secret) {
-    // Misconfig — fall back to the safe (sign-in) flow rather than 500
+    // Misconfig — fall back to the safe (sign-in) flow rather than 500.
     console.error("[verify] AUTH_SECRET not set, cannot mint session");
-    return redirectTo(req, `/sign-in?verified=1&email=${encodeURIComponent(identifier)}`);
+    return redirectAfterPost(req, `/sign-in?verified=1&email=${encodeURIComponent(identifier)}`);
   }
 
-  // Match what NextAuth would produce in the jwt callback for a fresh sign-in
   const now = Math.floor(Date.now() / 1000);
   const sessionPayload = {
     sub: user.id,
@@ -126,7 +203,6 @@ export async function GET(req: NextRequest) {
     jti: crypto.randomUUID(),
   };
 
-  // Cookie name must match what NextAuth's middleware reads.
   const useSecureCookie = isHttps(req);
   const cookieName = useSecureCookie
     ? "__Secure-authjs.session-token"
@@ -142,10 +218,10 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("[verify] JWT encode failed", error);
-    return redirectTo(req, `/sign-in?verified=1&email=${encodeURIComponent(identifier)}`);
+    return redirectAfterPost(req, `/sign-in?verified=1&email=${encodeURIComponent(identifier)}`);
   }
 
-  const response = redirectTo(req, "/post-auth");
+  const response = redirectAfterPost(req, "/post-auth");
   response.cookies.set(cookieName, jwt, {
     httpOnly: true,
     sameSite: "lax",

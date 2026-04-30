@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { signIn } from "next-auth/react";
 import { GoogleMark, LinkedInMark, MicrosoftMark } from "./provider-marks";
 import { cn } from "@/lib/utils";
@@ -28,11 +28,26 @@ type Props = {
 export function ProviderButtons({ compact = false }: Props) {
   const [pendingProvider, setPendingProvider] = useState<ProviderId | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Synchronous lock so a rapid second click can't fire before React state
+  // commits. Two parallel /api/auth/callback/<provider> hits make the second
+  // one fail with `unexpected "iss" response parameter value` because the
+  // OAuth state cookie is one-shot per flow.
+  const clickLockRef = useRef(false);
 
   function handleClick(id: ProviderId) {
+    if (clickLockRef.current || isPending) return;
+    clickLockRef.current = true;
     setPendingProvider(id);
     startTransition(async () => {
-      await signIn(id, { callbackUrl: POST_AUTH_PATH });
+      try {
+        await signIn(id, { callbackUrl: POST_AUTH_PATH });
+      } catch {
+        // signIn() in Auth.js v5 normally redirects rather than throwing.
+        // If something goes wrong before the redirect, release so the user
+        // isn't permanently stuck on a disabled button.
+        clickLockRef.current = false;
+        setPendingProvider(null);
+      }
     });
   }
 
