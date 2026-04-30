@@ -189,7 +189,6 @@ function GlassBand({ top, height, blur, opacity }: { top: string; height: number
 
 const NAV_LINKS: Array<{ label: string; href: string }> = [
   { label: "Feed", href: "/feed" },
-  { label: "Feeds", href: "/feeds" },
   { label: "Matches", href: "/matches" },
   { label: "Profiles", href: "/profile" },
   { label: "Dashboard", href: "/dashboard" },

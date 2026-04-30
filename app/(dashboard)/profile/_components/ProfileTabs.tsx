@@ -27,7 +27,6 @@ type Role = "founder" | "investor" | null;
 
 const NAV_LINKS: Array<{ label: string; href: string }> = [
   { label: "Feed", href: "/feed" },
-  { label: "Feeds", href: "/feeds" },
   { label: "Matches", href: "/matches" },
   { label: "Profiles", href: "/profile" },
   { label: "Dashboard", href: "/dashboard" },
