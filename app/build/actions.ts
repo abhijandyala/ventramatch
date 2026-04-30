@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth, unstable_update } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import { nextSubmit, nextSaveDraft } from "@/lib/applications/lifecycle";
 import {
@@ -11,7 +11,7 @@ import {
   type DraftFounderInput,
 } from "@/lib/validation/applications";
 import { founderCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
-import type { ApplicationStatus, Database } from "@/types/database";
+import type { ApplicationStatus, Database, ProfileState } from "@/types/database";
 
 type StartupRow = Database["public"]["Tables"]["startups"]["Row"];
 
@@ -172,6 +172,20 @@ export async function submitFounderApplicationAction(
          where id = ${current.id}
       `;
 
+      // Profile is now complete enough to publish (we just gated on
+      // canPublish above). Bump profile_state so middleware/post-auth
+      // stop redirecting the user back into /build, and record the
+      // completion percentage we computed.
+      await sql`
+        update public.users
+           set profile_state = case
+                 when profile_state in ('verified','rejected') then profile_state
+                 else 'complete'
+               end,
+               profile_completion_pct = ${completion.pct}
+         where id = ${userId}
+      `;
+
       // Cancel pending day-3 reminder; user is engaged and submitted.
       await sql`
         update public.email_outbox
@@ -185,6 +199,16 @@ export async function submitFounderApplicationAction(
   } catch (error) {
     console.error("[submitFounder] DB write failed", error);
     return { ok: false, error: "Could not publish your profile. Try again." };
+  }
+
+  // Refresh the JWT so the next request sees profile_state=complete and the
+  // user isn't bounced back to /build by middleware.
+  try {
+    await unstable_update({
+      user: { profileState: "complete" satisfies ProfileState },
+    });
+  } catch (error) {
+    console.error("[submitFounder] session refresh failed", error);
   }
 
   revalidatePath("/account/application");
@@ -305,10 +329,37 @@ export async function saveFounderDraftAction(
            set status = ${transition.nextStatus}::public.application_status
          where id = ${current.id}
       `;
+
+      // Once the user has put real content into /build, escalate
+      // profile_state out of 'basic' so we stop pushing them back. We don't
+      // downgrade users who are already at higher states (e.g. complete
+      // /verified) — those flow through submit, not draft saves.
+      if (hasDraftFields) {
+        await sql`
+          update public.users
+             set profile_state = case
+                   when profile_state in ('none','basic') then 'partial'
+                   else profile_state
+                 end
+           where id = ${userId}
+        `;
+      }
     });
   } catch (error) {
     console.error("[saveFounderDraft] DB write failed", error);
     return { ok: false, error: "Could not save your draft. Try again." };
+  }
+
+  // Reflect the bump in the JWT so middleware sees `partial` and lets the
+  // user out to /dashboard etc. without bouncing back to /build.
+  if (hasDraftFields) {
+    try {
+      await unstable_update({
+        user: { profileState: "partial" satisfies ProfileState },
+      });
+    } catch (error) {
+      console.error("[saveFounderDraft] session refresh failed", error);
+    }
   }
 
   revalidatePath("/account/application");

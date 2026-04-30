@@ -14,8 +14,9 @@ import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
 import { DeckUploader } from "@/components/profile/deck-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
 import { BuilderNav } from "@/components/profile/builder-nav";
+import { ProfileWelcomeCard } from "@/components/profile/welcome-card";
 import { founderCompletion } from "@/lib/profile/completion";
-import type { StartupStage, AccountLabel } from "@/types/database";
+import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import type { StartupDepthView } from "@/lib/profile/visibility";
 import type {
   SubmitFounderInput,
@@ -190,12 +191,14 @@ const STAGE_LABEL: Record<StartupStage, string> = {
 export function FounderBuilder({
   initial,
   accountLabel,
+  profileState,
   depthView,
   ownVerifications = [],
   ownReferences = [],
 }: {
   initial: FounderUiDraft;
   accountLabel: AccountLabel;
+  profileState: ProfileState;
   depthView?: StartupDepthView | null;
   ownVerifications?: OwnVerification[];
   ownReferences?: OwnReference[];
@@ -323,6 +326,8 @@ export function FounderBuilder({
       />
 
       <BuilderBanner accountLabel={accountLabel} />
+
+      <ProfileWelcomeCard profileState={profileState} />
 
       <section className="mx-auto w-full max-w-[760px] px-5 py-12 md:px-8 md:py-16">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">

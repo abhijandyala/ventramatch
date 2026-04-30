@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
-import type { StartupStage, AccountLabel } from "@/types/database";
+import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import { InvestorBuilder, type InvestorUiDraft, EMPTY_INVESTOR_DRAFT } from "./builder";
 import { fetchInvestorDepth, fetchOwnVerifications, fetchOwnReferences } from "@/lib/profile/depth";
 import {
   projectInvestorDepth,
+  emptyInvestorDepth,
   type InvestorDepthView,
 } from "@/lib/profile/visibility";
 import type { OwnVerification, OwnReference } from "@/components/profile/verification-panel";
@@ -31,6 +32,7 @@ type UserRow = {
   name: string | null;
   email: string | null;
   investor_type: string | null;
+  profile_state: ProfileState | null;
 };
 
 export default async function InvestorBuildPage() {
@@ -51,7 +53,7 @@ export default async function InvestorBuildPage() {
         limit 1
       `,
       sql<UserRow[]>`
-        select company_name, bio, name, email, investor_type
+        select company_name, bio, name, email, investor_type, profile_state
         from public.users
         where id = ${userId}
         limit 1
@@ -60,10 +62,15 @@ export default async function InvestorBuildPage() {
     return { investor: i[0] ?? null, user: u[0] ?? null };
   });
 
-  let depthView: InvestorDepthView | null = null;
+  // Always provide a depth view so the editor scaffold renders from first
+  // visit (mirrors app/build/page.tsx). Save attempts before the wizard
+  // creates an investors row return "Create your investor profile first."
+  let depthView: InvestorDepthView;
   if (both.investor?.id) {
     const rawDepth = await fetchInvestorDepth(userId, both.investor.id);
     depthView = projectInvestorDepth(rawDepth, "match");
+  } else {
+    depthView = emptyInvestorDepth();
   }
 
   const [rawVerifications, rawReferences] = await Promise.all([
@@ -122,10 +129,13 @@ export default async function InvestorBuildPage() {
   };
 
   const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
+  const profileState: ProfileState =
+    both.user?.profile_state ?? session.user.profileState ?? "none";
   return (
     <InvestorBuilder
       initial={initial}
       accountLabel={accountLabel}
+      profileState={profileState}
       depthView={depthView}
       ownVerifications={ownVerifications}
       ownReferences={ownReferences}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth, unstable_update } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import { onboardingSchema, type OnboardingInput } from "@/lib/validation/onboarding";
+import type { ProfileState } from "@/types/database";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -24,6 +25,7 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
   }
   const data = parsed.data;
 
+  let nextProfileState: ProfileState = "basic";
   try {
     await withUserRls(userId, async (sql) => {
       const companyName =
@@ -36,7 +38,7 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
       const investorType =
         data.profile.role === "investor" ? data.profile.investorType : null;
 
-      await sql`
+      const rows = await sql<{ profile_state: ProfileState }[]>`
         update public.users
         set role = ${data.role}::public.user_role,
             company_name = ${companyName},
@@ -49,7 +51,9 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
               else 'basic'
             end
         where id = ${userId}
+        returning profile_state
       `;
+      if (rows[0]) nextProfileState = rows[0].profile_state;
     });
   } catch (error) {
     console.error("[saveOnboarding] save failed", error);
@@ -61,6 +65,7 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
       user: {
         role: data.role,
         onboardingCompleted: true,
+        profileState: nextProfileState,
       },
     });
   } catch (error) {
