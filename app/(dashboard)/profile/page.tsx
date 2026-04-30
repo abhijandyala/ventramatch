@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   title: "Profiles",
 };
 
-export default async function ProfilePage() {
+type PageProps = {
+  searchParams: Promise<{ tab?: string }>;
+};
+
+export default async function ProfilePage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/sign-in");
   if (!session.user.onboardingCompleted) redirect("/onboarding");
@@ -18,5 +22,10 @@ export default async function ProfilePage() {
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
 
-  return <ProfileTabs role={role} name={name} email={email} />;
+  const { tab } = await searchParams;
+  const validTabs = ["personal", "founder", "investor", "settings"] as const;
+  type TabId = (typeof validTabs)[number];
+  const initialTab = validTabs.includes(tab as TabId) ? (tab as TabId) : undefined;
+
+  return <ProfileTabs role={role} name={name} email={email} initialTab={initialTab} />;
 }
