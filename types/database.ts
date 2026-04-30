@@ -8,6 +8,39 @@ export type StartupStage = "idea" | "pre_seed" | "seed" | "series_a" | "series_b
 export type InteractionAction = "like" | "pass" | "save";
 export type LeadFollowPreference = "lead" | "follow" | "either";
 
+export type ApplicationStatus =
+  | "unverified"
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "needs_changes"
+  | "accepted"
+  | "rejected"
+  | "banned";
+
+export type AccountLabel =
+  | "unverified"
+  | "in_review"
+  | "verified"
+  | "rejected"
+  | "banned";
+
+export type ReviewerKind = "rules" | "llm" | "human";
+
+export type ReviewVerdict =
+  | "accept"
+  | "needs_changes"
+  | "decline"
+  | "flag"
+  | "ban";
+
+export type EmailTemplate =
+  | "review.accepted"
+  | "review.rejected"
+  | "review.needs_changes"
+  | "review.appeal_received"
+  | "reminder.complete_profile";
+
 export interface Database {
   public: {
     Tables: {
@@ -17,6 +50,7 @@ export interface Database {
           email: string;
           role: UserRole;
           email_verified: boolean;
+          account_label: AccountLabel;
           created_at: string;
           updated_at: string;
         };
@@ -25,6 +59,7 @@ export interface Database {
           email: string;
           role: UserRole;
           email_verified?: boolean;
+          account_label?: AccountLabel;
           created_at?: string;
           updated_at?: string;
         };
@@ -147,6 +182,92 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["investor_matching_preferences"]["Insert"]>;
       };
+      applications: {
+        Row: {
+          id: string;
+          user_id: string;
+          status: ApplicationStatus;
+          bot_recommendation: ReviewVerdict | null;
+          bot_confidence: number | null;
+          bot_recommended_at: string | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          decision_reason_codes: string[];
+          decision_summary: string | null;
+          submitted_at: string | null;
+          resubmit_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["applications"]["Row"],
+          "id" | "created_at" | "updated_at" | "decision_reason_codes" | "resubmit_count"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          decision_reason_codes?: string[];
+          resubmit_count?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["applications"]["Insert"]>;
+      };
+      application_reviews: {
+        Row: {
+          id: string;
+          application_id: string;
+          user_id: string;
+          pass_no: number;
+          reviewer_kind: ReviewerKind;
+          reviewer_id: string | null;
+          verdict: ReviewVerdict;
+          confidence: number | null;
+          rule_results: Json | null;
+          llm_raw: Json | null;
+          flags: string[];
+          notes: string | null;
+          cost_usd: number;
+          duration_ms: number | null;
+          created_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["application_reviews"]["Row"],
+          "id" | "created_at" | "flags" | "cost_usd"
+        > & {
+          id?: string;
+          created_at?: string;
+          flags?: string[];
+          cost_usd?: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["application_reviews"]["Insert"]>;
+      };
+      email_outbox: {
+        Row: {
+          id: string;
+          user_id: string;
+          template: EmailTemplate;
+          payload: Json;
+          send_after: string;
+          cancelled_at: string | null;
+          sent_at: string | null;
+          resend_id: string | null;
+          attempts: number;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["email_outbox"]["Row"],
+          "id" | "created_at" | "updated_at" | "attempts" | "payload" | "send_after"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          attempts?: number;
+          payload?: Json;
+          send_after?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_outbox"]["Insert"]>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -155,6 +276,10 @@ export interface Database {
       startup_stage: StartupStage;
       interaction_action: InteractionAction;
       lead_follow_preference: LeadFollowPreference;
+      application_status: ApplicationStatus;
+      account_label: AccountLabel;
+      reviewer_kind: ReviewerKind;
+      review_verdict: ReviewVerdict;
     };
   };
 }

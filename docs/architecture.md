@@ -73,6 +73,31 @@ We use **Railway-managed PostgreSQL** only. Policies use `public.app_user_id()`,
    - Auth'd request to `/sign-in` or `/sign-up` → redirect to `/post-auth`.
 5. Server Actions and RSC that touch user-scoped data call `withUserRls(userId, …)` and use the returned `sql` for queries.
 
+## Auto-review pipeline (Phase 1 schema landed; orchestrator pending)
+
+```
+User submits /build
+  └─ Server Action: upsert startups/investors + applications.status='submitted'
+       └─ Enqueue review job (pg-boss, future Phase 5)
+
+Bot worker picks up job
+  └─ rules pass → application_reviews row (kind='rules')
+  └─ llm pass   → application_reviews row (kind='llm', cost_usd tracked)
+  └─ Stamp applications.bot_recommendation + status='under_review'
+     (NEVER flips status to a terminal state)
+
+Human reviewer signs off in /admin/review-queue (future Phase 8)
+  └─ application_reviews row (kind='human')
+  └─ applications.status → 'accepted' | 'needs_changes' | 'rejected' | 'banned'
+       └─ Trigger updates users.account_label
+       └─ email_outbox row inserted; worker sends via Resend
+```
+
+The DB enforces the human-sign-off invariant via a CHECK constraint on
+`applications`: any row with `status IN ('accepted', 'rejected', 'banned')`
+must have `decided_by LIKE 'human:%'`, `decided_at`, and `decision_summary`
+set. This is the safety net behind the orchestrator code.
+
 ## Discovery feed flow (investor side)
 
 ```
