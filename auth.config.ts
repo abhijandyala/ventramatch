@@ -7,7 +7,7 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 // auth.ts (server). Credentials + adapter are added on top in auth.ts so they
 // stay out of the edge runtime.
 
-const PROTECTED_PATHS = ["/dashboard", "/settings", "/profile", "/post-auth", "/homepage"];
+const PROTECTED_PATHS = ["/dashboard", "/settings", "/profile", "/post-auth", "/homepage", "/feeds", "/feed"];
 const ONBOARDING_PATHS = ["/onboarding"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 const VERIFY_PATH = "/verify-email";
