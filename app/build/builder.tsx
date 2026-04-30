@@ -10,7 +10,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
+import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
 import type { StartupStage, AccountLabel } from "@/types/database";
+import type { StartupDepthView } from "@/lib/profile/visibility";
 import type {
   SubmitFounderInput,
   DraftFounderInput,
@@ -186,9 +188,11 @@ const LEAD_STATUSES = [
 export function FounderBuilder({
   initial,
   accountLabel,
+  depthView,
 }: {
   initial: FounderUiDraft;
   accountLabel: AccountLabel;
+  depthView?: StartupDepthView | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -331,6 +335,12 @@ export function FounderBuilder({
           </p>
         ) : null}
       </section>
+
+      {depthView ? (
+        <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+          <FounderDepthEditor depth={depthView} />
+        </section>
+      ) : null}
 
       <footer className="sticky bottom-0 border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[760px] items-center justify-between px-5 py-4 md:px-8 md:py-5">

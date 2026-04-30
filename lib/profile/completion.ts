@@ -7,15 +7,29 @@ import type { Database } from "@/types/database";
  *   - The completion ring on the build wizard
  *
  * Pure functions, no I/O. Operates on the canonical `public.startups` and
- * `public.investors` row shapes. Weights are intentionally NOT equal —
- * deck and check-size carry more weight because they're the highest-signal
- * fields for the matching algorithm and for human reviewers.
+ * `public.investors` row shapes plus optional depth-table counts.
+ * Weights are intentionally NOT equal — deck and check-size carry more
+ * weight because they're the highest-signal fields for the matching
+ * algorithm and for human reviewers.
  *
  * Tweak the weights table when re-balancing. Don't change the formula.
  */
 
 type StartupRow = Database["public"]["Tables"]["startups"]["Row"];
 type InvestorRow = Database["public"]["Tables"]["investors"]["Row"];
+
+export type StartupDepthCounts = {
+  teamMembers: number;
+  tractionSignals: number;
+  hasRoundDetails: boolean;
+};
+
+export type InvestorDepthCounts = {
+  teamMembers: number;
+  checkBands: number;
+  portfolioEntries: number;
+  hasTrackRecord: boolean;
+};
 
 export const MIN_PUBLISH_PCT = 80;
 
@@ -50,7 +64,10 @@ const filledArr = (v: unknown[] | null | undefined, min = 1) =>
 //  Founder
 // ──────────────────────────────────────────────────────────────────────────
 
-export function founderCompletion(row: StartupRow | null): CompletionResult {
+export function founderCompletion(
+  row: StartupRow | null,
+  depth?: StartupDepthCounts,
+): CompletionResult {
   // No startup row at all = 0%, everything missing.
   const items: ChecklistItem[] = [
     {
@@ -93,7 +110,7 @@ export function founderCompletion(row: StartupRow | null): CompletionResult {
       label: "Add your target raise",
       href: "/build",
       done: row ? filledNum(row.raise_amount) : false,
-      weight: 12,
+      weight: 10,
     },
     {
       id: "location",
@@ -106,7 +123,12 @@ export function founderCompletion(row: StartupRow | null): CompletionResult {
       id: "traction",
       label: "Add at least one traction signal",
       href: "/build",
-      done: row ? filledStr(row.traction, 5) : false,
+      // Prefer structured traction signals; fall back to freeform string.
+      done: depth
+        ? depth.tractionSignals > 0
+        : row
+          ? filledStr(row.traction, 5)
+          : false,
       weight: 15,
     },
     {
@@ -114,7 +136,22 @@ export function founderCompletion(row: StartupRow | null): CompletionResult {
       label: "Link your pitch deck",
       href: "/build",
       done: row ? filledStr(row.deck_url) : false,
-      weight: 25,
+      weight: 20,
+    },
+    // Depth-table items (bonus — lower weight so base profile still unlocks at 80%).
+    {
+      id: "team",
+      label: "Add at least one team member",
+      href: "/build",
+      done: depth ? depth.teamMembers > 0 : false,
+      weight: 5,
+    },
+    {
+      id: "roundDetails",
+      label: "Fill in round details",
+      href: "/build",
+      done: depth ? depth.hasRoundDetails : false,
+      weight: 2,
     },
   ];
 
@@ -125,7 +162,10 @@ export function founderCompletion(row: StartupRow | null): CompletionResult {
 //  Investor
 // ──────────────────────────────────────────────────────────────────────────
 
-export function investorCompletion(row: InvestorRow | null): CompletionResult {
+export function investorCompletion(
+  row: InvestorRow | null,
+  depth?: InvestorDepthCounts,
+): CompletionResult {
   const items: ChecklistItem[] = [
     {
       id: "name",
@@ -145,7 +185,12 @@ export function investorCompletion(row: InvestorRow | null): CompletionResult {
       id: "checkSize",
       label: "Set your check size range",
       href: "/build/investor",
-      done: row ? filledNum(row.check_min) && filledNum(row.check_max) : false,
+      // Prefer per-stage check bands; fall back to legacy scalar.
+      done: depth
+        ? depth.checkBands > 0
+        : row
+          ? filledNum(row.check_min) && filledNum(row.check_max)
+          : false,
       weight: 18,
     },
     {
@@ -174,7 +219,7 @@ export function investorCompletion(row: InvestorRow | null): CompletionResult {
       label: "Write your investment thesis",
       href: "/build/investor",
       done: row ? filledStr(row.thesis, 20) : false,
-      weight: 18,
+      weight: 15,
     },
     {
       id: "active",
@@ -185,13 +230,23 @@ export function investorCompletion(row: InvestorRow | null): CompletionResult {
     },
     {
       id: "trackRecord",
-      label: "Add at least one recent investment",
+      label: "Add at least one portfolio entry",
       href: "/build/investor",
-      // Recent investments aren't on the canonical investors row — this
-      // is folded into thesis for now. Wired up properly when we add
-      // a `portfolio` table.
-      done: row ? filledStr(row.thesis, 80) : false,
+      // Now wired to the investor_portfolio child table.
+      done: depth
+        ? depth.portfolioEntries > 0
+        : row
+          ? filledStr(row.thesis, 80)
+          : false,
       weight: 8,
+    },
+    // Depth-table bonus items.
+    {
+      id: "team",
+      label: "Add at least one team member",
+      href: "/build/investor",
+      done: depth ? depth.teamMembers > 0 : false,
+      weight: 3,
     },
   ];
 

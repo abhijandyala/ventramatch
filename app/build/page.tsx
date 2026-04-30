@@ -3,10 +3,16 @@ import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import { FounderBuilder, type FounderUiDraft, EMPTY_FOUNDER_DRAFT } from "./builder";
+import { fetchStartupDepth } from "@/lib/profile/depth";
+import {
+  projectStartupDepth,
+  type StartupDepthView,
+} from "@/lib/profile/visibility";
 
 export const dynamic = "force-dynamic";
 
 type StartupRow = {
+  id: string;
   name: string | null;
   one_liner: string | null;
   industry: string | null;
@@ -36,7 +42,7 @@ export default async function BuildPage() {
   const both = await withUserRls<Both>(userId, async (sql) => {
     const [s, u] = await Promise.all([
       sql<StartupRow[]>`
-        select name, one_liner, industry, stage, raise_amount,
+        select id, name, one_liner, industry, stage, raise_amount,
                traction, location, deck_url, website
         from public.startups
         where user_id = ${userId}
@@ -51,6 +57,22 @@ export default async function BuildPage() {
     ]);
     return { startup: s[0] ?? null, user: u[0] ?? null };
   });
+
+  // Load depth tables for the editor initial state (empty if not yet filled).
+  let depthView: StartupDepthView | null = null;
+  if (both.startup?.id) {
+    const rawDepth = await fetchStartupDepth(userId, both.startup.id);
+    depthView = projectStartupDepth(
+      {
+        ...rawDepth,
+        parent: {
+          deck_url: both.startup.deck_url,
+          traction: both.startup.traction,
+        },
+      },
+      "match",
+    );
+  }
 
   const initial: FounderUiDraft = {
     ...EMPTY_FOUNDER_DRAFT,
@@ -69,9 +91,6 @@ export default async function BuildPage() {
     },
     traction: {
       ...EMPTY_FOUNDER_DRAFT.traction,
-      // Round-trips poorly because we collapsed multiple fields into one
-      // string at submit. We just dump it back into the freeform field so
-      // nothing is lost on edit.
       notableSignals: both.startup?.traction ?? "",
     },
     deck: {
@@ -86,5 +105,11 @@ export default async function BuildPage() {
   };
 
   const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
-  return <FounderBuilder initial={initial} accountLabel={accountLabel} />;
+  return (
+    <FounderBuilder
+      initial={initial}
+      accountLabel={accountLabel}
+      depthView={depthView}
+    />
+  );
 }

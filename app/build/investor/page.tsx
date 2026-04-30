@@ -3,10 +3,16 @@ import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import { InvestorBuilder, type InvestorUiDraft, EMPTY_INVESTOR_DRAFT } from "./builder";
+import { fetchInvestorDepth } from "@/lib/profile/depth";
+import {
+  projectInvestorDepth,
+  type InvestorDepthView,
+} from "@/lib/profile/visibility";
 
 export const dynamic = "force-dynamic";
 
 type InvestorRow = {
+  id: string;
   name: string | null;
   firm: string | null;
   check_min: number | null;
@@ -37,7 +43,7 @@ export default async function InvestorBuildPage() {
   const both = await withUserRls<Both>(userId, async (sql) => {
     const [i, u] = await Promise.all([
       sql<InvestorRow[]>`
-        select name, firm, check_min, check_max, stages, sectors,
+        select id, name, firm, check_min, check_max, stages, sectors,
                geographies, is_active, thesis
         from public.investors
         where user_id = ${userId}
@@ -53,7 +59,12 @@ export default async function InvestorBuildPage() {
     return { investor: i[0] ?? null, user: u[0] ?? null };
   });
 
-  // Map onboarding's "firm"/"angel" to our richer type set
+  let depthView: InvestorDepthView | null = null;
+  if (both.investor?.id) {
+    const rawDepth = await fetchInvestorDepth(userId, both.investor.id);
+    depthView = projectInvestorDepth(rawDepth, "match");
+  }
+
   const initialType: InvestorUiDraft["type"] =
     both.user?.investor_type === "angel" ? "angel" :
     both.user?.investor_type === "firm" ? "early" : null;
@@ -85,5 +96,11 @@ export default async function InvestorBuildPage() {
   };
 
   const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
-  return <InvestorBuilder initial={initial} accountLabel={accountLabel} />;
+  return (
+    <InvestorBuilder
+      initial={initial}
+      accountLabel={accountLabel}
+      depthView={depthView}
+    />
+  );
 }
