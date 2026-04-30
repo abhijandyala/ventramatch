@@ -737,7 +737,13 @@ export function projectVerifications(
   }));
 }
 
-function emptyStartupDepth(): StartupDepthView {
+/**
+ * Empty bundle — used both internally for the "public" tier projection AND
+ * exported for the `/build` page so the depth editor scaffold can render
+ * before the user has saved a startup row. Keeps the editor visible from
+ * the first page load instead of materialising only after first draft save.
+ */
+export function emptyStartupDepth(): StartupDepthView {
   return {
     team: [],
     round: null,
@@ -750,7 +756,7 @@ function emptyStartupDepth(): StartupDepthView {
   };
 }
 
-function emptyInvestorDepth(): Omit<InvestorDepthView, "counts"> {
+export function emptyInvestorDepth(): InvestorDepthView {
   return {
     team: [],
     checkBands: [],
@@ -759,5 +765,6 @@ function emptyInvestorDepth(): Omit<InvestorDepthView, "counts"> {
     decisionProcess: null,
     valueAdd: [],
     antiPatterns: [],
+    counts: { portfolioPublic: 0, portfolioPrivate: 0, team: 0 },
   };
 }

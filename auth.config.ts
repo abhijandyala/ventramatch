@@ -3,6 +3,7 @@ import Google from "next-auth/providers/google";
 import LinkedIn from "next-auth/providers/linkedin";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import GitHub from "next-auth/providers/github";
+import { NEEDS_BUILD_STATES } from "@/types/database";
 
 // Edge-safe: no DB, no Node-only APIs. Imported by proxy.ts (middleware) and by
 // auth.ts (server). Credentials + adapter are added on top in auth.ts so they
@@ -15,6 +16,13 @@ const PROTECTED_PATHS = [
 const ONBOARDING_PATHS = ["/onboarding"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];
 const VERIFY_PATH = "/verify-email";
+
+// Pages that only make sense once the user has at least started building their
+// real profile. If profile_state is still 'none'/'basic' (initial 3-step
+// onboarding done, but the /build wizard never opened), middleware bounces the
+// user back to /build so they don't get dropped onto an empty product surface
+// with no guidance.
+const REQUIRES_BUILT_PROFILE_PATHS = ["/homepage"];
 
 function pathStartsWith(pathname: string, prefixes: readonly string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -58,8 +66,12 @@ export const authConfig = {
       const verified = auth?.user?.isEmailVerified === true;
       const accountLabel = auth?.user?.accountLabel;
       const isBanned = accountLabel === "banned";
+      const profileState = auth?.user?.profileState ?? "none";
+      const role = auth?.user?.role ?? null;
+      const needsBuild = NEEDS_BUILD_STATES.includes(profileState);
+      const buildPath = role === "investor" ? "/build/investor" : "/build";
 
-      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} verified=${verified} completed=${completed} label=${accountLabel ?? "?"} userId=${auth?.user?.id ?? "none"}`);
+      console.log(`[auth:middleware] path=${pathname} loggedIn=${isLoggedIn} verified=${verified} completed=${completed} label=${accountLabel ?? "?"} state=${profileState} userId=${auth?.user?.id ?? "none"}`);
 
       // Banned accounts: hard block. Only allow /banned page + /sign-in
       // (so they can sign out). Everything else redirects to a banned page.
@@ -92,8 +104,12 @@ export const authConfig = {
       }
 
       if (isLoggedIn && onOnboarding && completed) {
-        console.log("[auth:middleware] → redirect /homepage (onboarding already done)");
-        return Response.redirect(new URL("/homepage", request.nextUrl));
+        // Onboarding's "done" state is just step 3 of the wizard. If the
+        // user hasn't yet started /build, send them there instead of dropping
+        // them on /homepage with no signal that their profile isn't live.
+        const target = needsBuild ? buildPath : "/homepage";
+        console.log(`[auth:middleware] → redirect ${target} (onboarding already done, state=${profileState})`);
+        return Response.redirect(new URL(target, request.nextUrl));
       }
 
       if (isLoggedIn && onProtected && !completed) {
@@ -101,9 +117,26 @@ export const authConfig = {
         return Response.redirect(new URL("/onboarding", request.nextUrl));
       }
 
+      // Onboarding is finished but the /build wizard hasn't been started
+      // yet. /homepage is the marketing-style product landing page that
+      // assumes a built profile, so push these users back to /build.
+      if (
+        isLoggedIn &&
+        completed &&
+        needsBuild &&
+        pathStartsWith(pathname, REQUIRES_BUILT_PROFILE_PATHS)
+      ) {
+        console.log(`[auth:middleware] → redirect ${buildPath} (profile not built yet, state=${profileState})`);
+        return Response.redirect(new URL(buildPath, request.nextUrl));
+      }
+
       // Verified users with no business on the verify page → push them forward
       if (isLoggedIn && verified && onVerify) {
-        const target = completed ? "/homepage" : "/onboarding";
+        const target = !completed
+          ? "/onboarding"
+          : needsBuild
+            ? buildPath
+            : "/homepage";
         console.log(`[auth:middleware] → redirect ${target} (already verified)`);
         return Response.redirect(new URL(target, request.nextUrl));
       }
@@ -121,7 +154,10 @@ export const authConfig = {
         // toAdapterUser. Defaults to 'unverified' if neither set it (e.g.
         // an OAuth user before the trigger seeds applications).
         token.accountLabel = user.accountLabel ?? "unverified";
-        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false} verified=${token.isEmailVerified} label=${token.accountLabel}`);
+        // profileState mirrors users.profile_state — read by middleware to
+        // decide whether to push the user into /build before /homepage.
+        token.profileState = user.profileState ?? "none";
+        console.log(`[auth:jwt] trigger=${trigger} userId=${user.id} role=${user.role ?? "null"} onboarded=${user.onboardingCompleted ?? false} verified=${token.isEmailVerified} label=${token.accountLabel} state=${token.profileState}`);
       }
       // unstable_update() from server actions only hits this path; `user` is absent.
       if (trigger === "update" && session?.user) {
@@ -136,8 +172,11 @@ export const authConfig = {
         if (u.accountLabel) {
           token.accountLabel = u.accountLabel;
         }
+        if (u.profileState) {
+          token.profileState = u.profileState;
+        }
         console.log(
-          `[auth:jwt] trigger=update userId=${token.sub ?? "none"} role=${token.role ?? "null"} onboarded=${token.onboardingCompleted ?? false} verified=${token.isEmailVerified} label=${token.accountLabel}`,
+          `[auth:jwt] trigger=update userId=${token.sub ?? "none"} role=${token.role ?? "null"} onboarded=${token.onboardingCompleted ?? false} verified=${token.isEmailVerified} label=${token.accountLabel} state=${token.profileState ?? "none"}`,
         );
       }
       return token;
@@ -149,6 +188,7 @@ export const authConfig = {
         session.user.onboardingCompleted = token.onboardingCompleted ?? false;
         session.user.isEmailVerified = token.isEmailVerified ?? false;
         session.user.accountLabel = token.accountLabel ?? "unverified";
+        session.user.profileState = token.profileState ?? "none";
       }
       return session;
     },

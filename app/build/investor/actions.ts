@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth, unstable_update } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import { nextSubmit, nextSaveDraft } from "@/lib/applications/lifecycle";
 import {
@@ -11,7 +11,12 @@ import {
   type DraftInvestorInput,
 } from "@/lib/validation/applications";
 import { investorCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
-import type { ApplicationStatus, StartupStage, Database } from "@/types/database";
+import type {
+  ApplicationStatus,
+  StartupStage,
+  Database,
+  ProfileState,
+} from "@/types/database";
 
 type InvestorRow = Database["public"]["Tables"]["investors"]["Row"];
 
@@ -165,6 +170,16 @@ export async function submitInvestorApplicationAction(
       `;
 
       await sql`
+        update public.users
+           set profile_state = case
+                 when profile_state in ('verified','rejected') then profile_state
+                 else 'complete'
+               end,
+               profile_completion_pct = ${completion.pct}
+         where id = ${userId}
+      `;
+
+      await sql`
         update public.email_outbox
            set cancelled_at = now()
          where user_id = ${userId}
@@ -176,6 +191,14 @@ export async function submitInvestorApplicationAction(
   } catch (error) {
     console.error("[submitInvestor] DB write failed", error);
     return { ok: false, error: "Could not publish your profile. Try again." };
+  }
+
+  try {
+    await unstable_update({
+      user: { profileState: "complete" satisfies ProfileState },
+    });
+  } catch (error) {
+    console.error("[submitInvestor] session refresh failed", error);
   }
 
   revalidatePath("/account/application");
@@ -280,10 +303,31 @@ export async function saveInvestorDraftAction(
            set status = ${transition.nextStatus}::public.application_status
          where id = ${current.id}
       `;
+
+      if (hasDraftFields) {
+        await sql`
+          update public.users
+             set profile_state = case
+                   when profile_state in ('none','basic') then 'partial'
+                   else profile_state
+                 end
+           where id = ${userId}
+        `;
+      }
     });
   } catch (error) {
     console.error("[saveInvestorDraft] DB write failed", error);
     return { ok: false, error: "Could not save your draft. Try again." };
+  }
+
+  if (hasDraftFields) {
+    try {
+      await unstable_update({
+        user: { profileState: "partial" satisfies ProfileState },
+      });
+    } catch (error) {
+      console.error("[saveInvestorDraft] session refresh failed", error);
+    }
   }
 
   revalidatePath("/account/application");

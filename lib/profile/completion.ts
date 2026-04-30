@@ -41,7 +41,13 @@ export type InvestorDepthCounts = {
   antiPatternEntries?: number;
 };
 
-export const MIN_PUBLISH_PCT = 80;
+// Bumped from 80 → 90 (post-onboarding profile-funnel sprint). The 80% bar
+// let founders publish without filling location, deck, or traction signals
+// (the optional-but-high-signal wizard fields). At 90% they have to fill
+// those before review — and the depth editor is still entirely optional
+// post-publish, so we're not raising the work the user does pre-launch by
+// much, just nudging the bar past "skip the meaty bits".
+export const MIN_PUBLISH_PCT = 90;
 
 type ChecklistItem = {
   /** Stable id used as React key. */

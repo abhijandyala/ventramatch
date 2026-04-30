@@ -1,11 +1,12 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
-import type { StartupStage, AccountLabel } from "@/types/database";
+import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import { FounderBuilder, type FounderUiDraft, EMPTY_FOUNDER_DRAFT } from "./builder";
 import { fetchStartupDepth, fetchOwnVerifications, fetchOwnReferences } from "@/lib/profile/depth";
 import {
   projectStartupDepth,
+  emptyStartupDepth,
   type StartupDepthView,
 } from "@/lib/profile/visibility";
 import type { OwnVerification, OwnReference } from "@/components/profile/verification-panel";
@@ -33,6 +34,7 @@ type UserRow = {
   bio: string | null;
   name: string | null;
   email: string | null;
+  profile_state: ProfileState | null;
 };
 
 export default async function BuildPage() {
@@ -54,7 +56,7 @@ export default async function BuildPage() {
         limit 1
       `,
       sql<UserRow[]>`
-        select company_name, bio, name, email
+        select company_name, bio, name, email, profile_state
         from public.users
         where id = ${userId}
         limit 1
@@ -63,8 +65,12 @@ export default async function BuildPage() {
     return { startup: s[0] ?? null, user: u[0] ?? null };
   });
 
-  // Load depth tables for the editor initial state (empty if not yet filled).
-  let depthView: StartupDepthView | null = null;
+  // Always provide a depth view so the editor scaffold renders from first
+  // visit. With no startup row yet, save attempts inside any depth section
+  // will return "Create your startup profile first." — but the user can see
+  // the full surface area of the profile up front, instead of having
+  // sections silently appear after the first wizard save.
+  let depthView: StartupDepthView;
   if (both.startup?.id) {
     const rawDepth = await fetchStartupDepth(userId, both.startup.id);
     depthView = projectStartupDepth(
@@ -79,6 +85,8 @@ export default async function BuildPage() {
       },
       "match",
     );
+  } else {
+    depthView = emptyStartupDepth();
   }
 
   // Load verifications + references for the panel (own-only reads).
@@ -139,10 +147,13 @@ export default async function BuildPage() {
   };
 
   const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
+  const profileState: ProfileState =
+    both.user?.profile_state ?? session.user.profileState ?? "none";
   return (
     <FounderBuilder
       initial={initial}
       accountLabel={accountLabel}
+      profileState={profileState}
       depthView={depthView}
       ownVerifications={ownVerifications}
       ownReferences={ownReferences}

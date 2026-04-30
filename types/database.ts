@@ -25,6 +25,28 @@ export type AccountLabel =
   | "rejected"
   | "banned";
 
+// users.profile_state — drives the "what next?" routing across the app.
+// CHECK constraint defined in db/migrations/0006_account_state_and_consent.sql.
+//   none           → no onboarding done
+//   basic          → finished the 3-step onboarding, hasn't started /build
+//   partial        → started /build, < 80% complete
+//   complete       → /build at >= 80%, awaiting submit/auto-review
+//   pending_review → submitted, AI/human review running
+//   verified       → review accepted (or manual)
+//   rejected       → review bounced; user can edit and re-submit
+export type ProfileState =
+  | "none"
+  | "basic"
+  | "partial"
+  | "complete"
+  | "pending_review"
+  | "verified"
+  | "rejected";
+
+// States where we still want to push the user back into the /build wizard
+// instead of letting them roam the product. Used by middleware + /post-auth.
+export const NEEDS_BUILD_STATES: readonly ProfileState[] = ["none", "basic"];
+
 export type ReviewerKind = "rules" | "llm" | "human";
 
 export type ReviewVerdict =

@@ -12,7 +12,8 @@ import { Loader2, X } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
-import type { StartupStage, AccountLabel } from "@/types/database";
+import { ProfileWelcomeCard } from "@/components/profile/welcome-card";
+import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import type { InvestorDepthView } from "@/lib/profile/visibility";
 import type {
   SubmitInvestorInput,
@@ -197,12 +198,14 @@ const REMOTE_OPTIONS = [
 export function InvestorBuilder({
   initial,
   accountLabel,
+  profileState,
   depthView,
   ownVerifications = [],
   ownReferences = [],
 }: {
   initial: InvestorUiDraft;
   accountLabel: AccountLabel;
+  profileState: ProfileState;
   depthView?: InvestorDepthView | null;
   ownVerifications?: OwnVerification[];
   ownReferences?: OwnReference[];
@@ -311,6 +314,8 @@ export function InvestorBuilder({
       </div>
 
       <BuilderBanner accountLabel={accountLabel} />
+
+      <ProfileWelcomeCard profileState={profileState} />
 
       <section className="mx-auto w-full max-w-[760px] px-5 py-12 md:px-8 md:py-16">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">

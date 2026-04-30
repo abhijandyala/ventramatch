@@ -187,10 +187,15 @@ export function OnboardingWizard() {
   };
 
   if (showInterstitial) {
+    // After the 3-step wizard the profile is `basic` — the real product
+    // surfaces (homepage / feed / matches) assume a built profile, so push
+    // the user straight into the /build wizard. Founder vs investor have
+    // different routes; role is required to reach this branch.
+    const buildPath = role === "investor" ? "/build/investor" : "/build";
     return (
       <ReadyInterstitial
         onComplete={() => {
-          window.location.href = "/homepage";
+          window.location.href = buildPath;
           router.refresh();
         }}
       />
