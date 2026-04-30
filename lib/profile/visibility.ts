@@ -1,26 +1,47 @@
 import { withUserRls } from "@/lib/db";
-import type { Database, StartupStage } from "@/types/database";
+import type {
+  AccountLabel,
+  Database,
+  StartupStage,
+} from "@/types/database";
 
 /**
  * Profile visibility tiers — what fields are exposed to whom.
  *
- * Tier 1 (public-ish, post-onboarding): everything that lives in the
- *   feed card. Sector, stage, one-liner, geography, anonymized traction.
- *   This is what every authenticated user sees when they encounter the
- *   profile in a discovery surface.
+ * THREE TIERS (extends the original Tier 1 / Tier 2 split with a
+ * verified-viewer-pre-match tier so serious investors get a real
+ * diligence kit before contact unlocks):
  *
- * Tier 2 (post mutual-match): full deck URL, raw traction string, contact
- *   email. Surfaced only after both sides have expressed Interested AND
- *   the user has account_label='verified'. Anything that could let an
- *   investor cold-DM a founder lives here.
+ *   "public"   — any authenticated user, target verified. Discovery-card
+ *                level: name, sector, stage, one-liner, raise BUCKET (not
+ *                exact), thesis preview. Verification badges visible.
+ *                None of the depth-table data renders.
  *
- * Tier 3 (post first call, future): data room contents, financial model,
- *   cap table. Founder-controlled per-investor grants. Not implemented yet.
+ *   "verified" — viewer's `account_label='verified'` AND target's
+ *                `account_label='verified'`. Pre-match diligence:
+ *                team, structured round details, cap-table summary,
+ *                use-of-funds, traction signals (without raw evidence
+ *                URLs), market analysis, competitive landscape on the
+ *                startup side; team, per-stage check bands, public
+ *                portfolio rows, track record (sans dry powder),
+ *                decision process, value-add, anti-patterns on the
+ *                investor side. Exact figures for the founder's
+ *                stated ASK are visible because the ASK is the founder's
+ *                disclosed intent (same convention as the existing
+ *                `startups.raise_amount` column).
  *
- * Pure projection — no I/O. Caller decides which tier based on a
- * `hasMutualMatch(viewerId, targetUserId)` lookup and whether either
- * party is `verified`.
+ *   "match"    — viewer and target have a mutual match (or viewer IS the
+ *                target). Everything in "verified" PLUS deck URL, raw
+ *                traction `evidence_url`, dry-powder band, private
+ *                portfolio rows. Contact email only flows through the
+ *                intro-request workflow — it is never rendered as a
+ *                Tier-2 field on the profile page.
+ *
+ * Pure projection — no I/O in the project* helpers. `resolveTier` is
+ * the only async call and it does the contact-unlocked / account-label
+ * checks against the DB.
  */
+export type ViewingTier = "public" | "verified" | "match";
 
 type StartupRow = Database["public"]["Tables"]["startups"]["Row"];
 type InvestorRow = Database["public"]["Tables"]["investors"]["Row"];
@@ -171,4 +192,530 @@ export async function hasContactUnlocked(
     `;
     return Boolean(rows[0]?.unlocked);
   });
+}
+
+/**
+ * Resolve the viewing tier for a given (viewer, target) pair.
+ *
+ *   - `match`    if it's a self-view OR a mutual match exists with
+ *                contact unlocked.
+ *   - `verified` if both the viewer and the target have
+ *                `account_label='verified'`. Verified viewers are
+ *                trusted enough to see real diligence material before
+ *                expressing interest.
+ *   - `public`   otherwise.
+ *
+ * Pure data — no UI, no copy. `resolveTier` does the contact-unlocked
+ * lookup itself; pass the `viewerLabel` from the session so we don't
+ * round-trip the DB for that.
+ */
+export async function resolveTier(
+  viewerUserId: string,
+  targetUserId: string,
+  viewerLabel: AccountLabel,
+  targetLabel: AccountLabel,
+): Promise<ViewingTier> {
+  if (viewerUserId === targetUserId) return "match";
+  if (await hasContactUnlocked(viewerUserId, targetUserId)) return "match";
+  if (viewerLabel === "verified" && targetLabel === "verified") {
+    return "verified";
+  }
+  return "public";
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Depth-row projections
+// ──────────────────────────────────────────────────────────────────────────
+//
+// Each project*Depth helper takes the raw rows from `lib/profile/depth.ts`
+// plus the resolved `ViewingTier` and returns a tier-appropriate shape.
+// The shape stays the same across tiers — gated fields are nulled out
+// rather than removed — so downstream UI can branch on "is this null?"
+// without needing to know which tier ran.
+
+type StartupTeamMemberRow =
+  Database["public"]["Tables"]["startup_team_members"]["Row"];
+type StartupRoundDetailsRow =
+  Database["public"]["Tables"]["startup_round_details"]["Row"];
+type StartupCapTableSummaryRow =
+  Database["public"]["Tables"]["startup_cap_table_summary"]["Row"];
+type StartupUseOfFundsLineRow =
+  Database["public"]["Tables"]["startup_use_of_funds_lines"]["Row"];
+type StartupTractionSignalRow =
+  Database["public"]["Tables"]["startup_traction_signals"]["Row"];
+type StartupMarketAnalysisRow =
+  Database["public"]["Tables"]["startup_market_analysis"]["Row"];
+type StartupCompetitorRow =
+  Database["public"]["Tables"]["startup_competitive_landscape"]["Row"];
+
+type InvestorTeamMemberRow =
+  Database["public"]["Tables"]["investor_team_members"]["Row"];
+type InvestorCheckBandRow =
+  Database["public"]["Tables"]["investor_check_bands"]["Row"];
+type InvestorPortfolioRow =
+  Database["public"]["Tables"]["investor_portfolio"]["Row"];
+type InvestorTrackRecordRow =
+  Database["public"]["Tables"]["investor_track_record"]["Row"];
+type InvestorDecisionProcessRow =
+  Database["public"]["Tables"]["investor_decision_process"]["Row"];
+type InvestorValueAddRow =
+  Database["public"]["Tables"]["investor_value_add"]["Row"];
+type InvestorAntiPatternRow =
+  Database["public"]["Tables"]["investor_anti_patterns"]["Row"];
+
+type VerificationRow = Database["public"]["Tables"]["verifications"]["Row"];
+
+export type StartupTeamMemberView = Pick<
+  StartupTeamMemberRow,
+  | "id"
+  | "name"
+  | "role"
+  | "is_founder"
+  | "is_full_time"
+  | "bio"
+  | "prior_company"
+  | "prior_role"
+  | "linkedin_url"
+  | "github_url"
+  | "equity_pct_band"
+  | "linked_user_id"
+  | "display_order"
+>;
+
+export type StartupRoundDetailsView = Pick<
+  StartupRoundDetailsRow,
+  | "instrument"
+  | "valuation_band"
+  | "target_raise_usd"
+  | "min_check_usd"
+  | "lead_status"
+  | "close_by_date"
+  | "committed_amount_usd"
+  | "use_of_funds_summary"
+  | "instrument_terms_summary"
+>;
+
+export type StartupCapTableSummaryView = Pick<
+  StartupCapTableSummaryRow,
+  | "founders_pct_band"
+  | "employee_pool_pct_band"
+  | "outside_investors_pct_band"
+  | "prior_raises_count"
+  | "last_round_amount_band"
+  | "last_round_year"
+>;
+
+export type StartupUseOfFundsLineView = Pick<
+  StartupUseOfFundsLineRow,
+  "id" | "category" | "pct_of_raise" | "narrative" | "display_order"
+>;
+
+export type StartupTractionSignalView = Pick<
+  StartupTractionSignalRow,
+  | "id"
+  | "kind"
+  | "value_numeric"
+  | "period_start"
+  | "period_end"
+  | "source_kind"
+  | "self_reported"
+  | "notes"
+  | "display_order"
+> & {
+  /** Tier 2 only — null at "verified" tier. Carries through at "match". */
+  evidence_url: string | null;
+};
+
+export type StartupMarketAnalysisView = Pick<
+  StartupMarketAnalysisRow,
+  "tam_band" | "sam_band" | "som_band" | "methodology_summary" | "source_links"
+>;
+
+export type StartupCompetitorView = Pick<
+  StartupCompetitorRow,
+  "id" | "competitor_name" | "differentiation" | "link_url" | "display_order"
+>;
+
+export type StartupDepthView = {
+  team: StartupTeamMemberView[];
+  round: StartupRoundDetailsView | null;
+  capTable: StartupCapTableSummaryView | null;
+  useOfFunds: StartupUseOfFundsLineView[];
+  traction: StartupTractionSignalView[];
+  market: StartupMarketAnalysisView | null;
+  competitors: StartupCompetitorView[];
+  /** Tier-2-only fields surface here so the UI can show a single locked card. */
+  matchOnly: {
+    deckUrl: string | null;
+    rawTraction: string | null;
+  };
+};
+
+export type InvestorTeamMemberView = Pick<
+  InvestorTeamMemberRow,
+  | "id"
+  | "name"
+  | "role"
+  | "is_decision_maker"
+  | "bio"
+  | "linkedin_url"
+  | "linked_user_id"
+  | "display_order"
+>;
+
+export type InvestorCheckBandView = Pick<
+  InvestorCheckBandRow,
+  | "id"
+  | "stage"
+  | "role"
+  | "check_min_usd"
+  | "check_max_usd"
+  | "ownership_target_band"
+>;
+
+export type InvestorPortfolioView = Pick<
+  InvestorPortfolioRow,
+  | "id"
+  | "company_name"
+  | "year"
+  | "role"
+  | "sector"
+  | "is_exited"
+  | "exit_kind"
+  | "notes"
+  | "display_order"
+>;
+
+/**
+ * Track-record fields. `dry_powder_band` is omitted at the "verified" tier
+ * (competitive intel) and surfaced at the "match" tier.
+ */
+export type InvestorTrackRecordView = Pick<
+  InvestorTrackRecordRow,
+  | "total_deals_band"
+  | "first_money_in_count_band"
+  | "follow_on_rate_band"
+  | "avg_ownership_band"
+  | "fund_size_band"
+  | "fund_vintage_year"
+> & {
+  /** Tier 2 only. */
+  dry_powder_band: InvestorTrackRecordRow["dry_powder_band"] | null;
+};
+
+export type InvestorDecisionProcessView = Pick<
+  InvestorDecisionProcessRow,
+  | "time_to_term_sheet_band"
+  | "ic_required"
+  | "references_required"
+  | "data_room_required"
+  | "partner_meeting_required"
+  | "process_narrative"
+>;
+
+export type InvestorValueAddView = Pick<
+  InvestorValueAddRow,
+  "id" | "kind" | "narrative" | "display_order"
+>;
+
+export type InvestorAntiPatternView = Pick<
+  InvestorAntiPatternRow,
+  "id" | "kind" | "narrative" | "display_order"
+>;
+
+export type InvestorDepthView = {
+  team: InvestorTeamMemberView[];
+  checkBands: InvestorCheckBandView[];
+  /** Public portfolio rows only at "verified"; all rows at "match". */
+  portfolio: InvestorPortfolioView[];
+  trackRecord: InvestorTrackRecordView | null;
+  decisionProcess: InvestorDecisionProcessView | null;
+  valueAdd: InvestorValueAddView[];
+  antiPatterns: InvestorAntiPatternView[];
+  /** Counts for tier-1 viewers — they see no rows but they DO see "this profile has X portfolio entries". */
+  counts: {
+    portfolioPublic: number;
+    portfolioPrivate: number;
+    team: number;
+  };
+};
+
+export type VerificationBadge = Pick<
+  VerificationRow,
+  "id" | "kind" | "verified_at" | "verified_by"
+>;
+
+export type StartupDepthInput = {
+  team: StartupTeamMemberRow[];
+  round: StartupRoundDetailsRow | null;
+  capTable: StartupCapTableSummaryRow | null;
+  useOfFunds: StartupUseOfFundsLineRow[];
+  traction: StartupTractionSignalRow[];
+  market: StartupMarketAnalysisRow | null;
+  competitors: StartupCompetitorRow[];
+  /** Pulled from the parent `startups` row. */
+  parent: { deck_url: string | null; traction: string | null };
+};
+
+export type InvestorDepthInput = {
+  team: InvestorTeamMemberRow[];
+  checkBands: InvestorCheckBandRow[];
+  portfolio: InvestorPortfolioRow[];
+  trackRecord: InvestorTrackRecordRow | null;
+  decisionProcess: InvestorDecisionProcessRow | null;
+  valueAdd: InvestorValueAddRow[];
+  antiPatterns: InvestorAntiPatternRow[];
+};
+
+/**
+ * Project the startup-depth bundle for the given tier.
+ *
+ *   - "public"   → empty bundle. Counts could be exposed here later if
+ *                  product wants to show "team of 4, 5 traction signals"
+ *                  on the discovery card; for now we keep it strictly empty
+ *                  to match the existing Tier-1 surface.
+ *   - "verified" → full structure minus deck, raw traction, and per-signal
+ *                  evidence URLs.
+ *   - "match"    → everything.
+ */
+export function projectStartupDepth(
+  input: StartupDepthInput,
+  tier: ViewingTier,
+): StartupDepthView {
+  if (tier === "public") {
+    return emptyStartupDepth();
+  }
+
+  const includeMatchOnly = tier === "match";
+
+  return {
+    team: input.team.map((row) => ({
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      is_founder: row.is_founder,
+      is_full_time: row.is_full_time,
+      bio: row.bio,
+      prior_company: row.prior_company,
+      prior_role: row.prior_role,
+      linkedin_url: row.linkedin_url,
+      github_url: row.github_url,
+      equity_pct_band: row.equity_pct_band,
+      linked_user_id: row.linked_user_id,
+      display_order: row.display_order,
+    })),
+    round: input.round
+      ? {
+          instrument: input.round.instrument,
+          valuation_band: input.round.valuation_band,
+          target_raise_usd: input.round.target_raise_usd,
+          min_check_usd: input.round.min_check_usd,
+          lead_status: input.round.lead_status,
+          close_by_date: input.round.close_by_date,
+          committed_amount_usd: input.round.committed_amount_usd,
+          use_of_funds_summary: input.round.use_of_funds_summary,
+          instrument_terms_summary: input.round.instrument_terms_summary,
+        }
+      : null,
+    capTable: input.capTable
+      ? {
+          founders_pct_band: input.capTable.founders_pct_band,
+          employee_pool_pct_band: input.capTable.employee_pool_pct_band,
+          outside_investors_pct_band: input.capTable.outside_investors_pct_band,
+          prior_raises_count: input.capTable.prior_raises_count,
+          last_round_amount_band: input.capTable.last_round_amount_band,
+          last_round_year: input.capTable.last_round_year,
+        }
+      : null,
+    useOfFunds: input.useOfFunds.map((row) => ({
+      id: row.id,
+      category: row.category,
+      pct_of_raise: row.pct_of_raise,
+      narrative: row.narrative,
+      display_order: row.display_order,
+    })),
+    traction: input.traction.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      value_numeric: row.value_numeric,
+      period_start: row.period_start,
+      period_end: row.period_end,
+      source_kind: row.source_kind,
+      self_reported: row.self_reported,
+      notes: row.notes,
+      display_order: row.display_order,
+      evidence_url: includeMatchOnly ? row.evidence_url : null,
+    })),
+    market: input.market
+      ? {
+          tam_band: input.market.tam_band,
+          sam_band: input.market.sam_band,
+          som_band: input.market.som_band,
+          methodology_summary: input.market.methodology_summary,
+          source_links: input.market.source_links,
+        }
+      : null,
+    competitors: input.competitors.map((row) => ({
+      id: row.id,
+      competitor_name: row.competitor_name,
+      differentiation: row.differentiation,
+      link_url: row.link_url,
+      display_order: row.display_order,
+    })),
+    matchOnly: {
+      deckUrl: includeMatchOnly ? input.parent.deck_url : null,
+      rawTraction: includeMatchOnly ? input.parent.traction : null,
+    },
+  };
+}
+
+/**
+ * Project the investor-depth bundle for the given tier.
+ *
+ *   - "public"   → empty bundle (counts surface so the discovery card can
+ *                  show "12-row portfolio" without exposing rows).
+ *   - "verified" → team, check bands, public portfolio rows only,
+ *                  track record (sans dry powder), decision process,
+ *                  value-add, anti-patterns.
+ *   - "match"    → everything, including private portfolio + dry powder.
+ */
+export function projectInvestorDepth(
+  input: InvestorDepthInput,
+  tier: ViewingTier,
+): InvestorDepthView {
+  const portfolioPublicCount = input.portfolio.filter(
+    (row) => row.is_public_listing,
+  ).length;
+  const portfolioPrivateCount = input.portfolio.length - portfolioPublicCount;
+
+  if (tier === "public") {
+    return {
+      ...emptyInvestorDepth(),
+      counts: {
+        portfolioPublic: portfolioPublicCount,
+        portfolioPrivate: portfolioPrivateCount,
+        team: input.team.length,
+      },
+    };
+  }
+
+  const includeMatchOnly = tier === "match";
+  const portfolioRows = includeMatchOnly
+    ? input.portfolio
+    : input.portfolio.filter((row) => row.is_public_listing);
+
+  return {
+    team: input.team.map((row) => ({
+      id: row.id,
+      name: row.name,
+      role: row.role,
+      is_decision_maker: row.is_decision_maker,
+      bio: row.bio,
+      linkedin_url: row.linkedin_url,
+      linked_user_id: row.linked_user_id,
+      display_order: row.display_order,
+    })),
+    checkBands: input.checkBands.map((row) => ({
+      id: row.id,
+      stage: row.stage,
+      role: row.role,
+      check_min_usd: row.check_min_usd,
+      check_max_usd: row.check_max_usd,
+      ownership_target_band: row.ownership_target_band,
+    })),
+    portfolio: portfolioRows.map((row) => ({
+      id: row.id,
+      company_name: row.company_name,
+      year: row.year,
+      role: row.role,
+      sector: row.sector,
+      is_exited: row.is_exited,
+      exit_kind: row.exit_kind,
+      notes: row.notes,
+      display_order: row.display_order,
+    })),
+    trackRecord: input.trackRecord
+      ? {
+          total_deals_band: input.trackRecord.total_deals_band,
+          first_money_in_count_band:
+            input.trackRecord.first_money_in_count_band,
+          follow_on_rate_band: input.trackRecord.follow_on_rate_band,
+          avg_ownership_band: input.trackRecord.avg_ownership_band,
+          fund_size_band: input.trackRecord.fund_size_band,
+          fund_vintage_year: input.trackRecord.fund_vintage_year,
+          dry_powder_band: includeMatchOnly
+            ? input.trackRecord.dry_powder_band
+            : null,
+        }
+      : null,
+    decisionProcess: input.decisionProcess
+      ? {
+          time_to_term_sheet_band: input.decisionProcess.time_to_term_sheet_band,
+          ic_required: input.decisionProcess.ic_required,
+          references_required: input.decisionProcess.references_required,
+          data_room_required: input.decisionProcess.data_room_required,
+          partner_meeting_required:
+            input.decisionProcess.partner_meeting_required,
+          process_narrative: input.decisionProcess.process_narrative,
+        }
+      : null,
+    valueAdd: input.valueAdd.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      narrative: row.narrative,
+      display_order: row.display_order,
+    })),
+    antiPatterns: input.antiPatterns.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      narrative: row.narrative,
+      display_order: row.display_order,
+    })),
+    counts: {
+      portfolioPublic: portfolioPublicCount,
+      portfolioPrivate: portfolioPrivateCount,
+      team: input.team.length,
+    },
+  };
+}
+
+/**
+ * Project verifications. All tiers see confirmed verifications (badges
+ * are a trust signal, not sensitive content). The caller supplies an
+ * already-filtered list (see `fetchConfirmedVerifications`).
+ */
+export function projectVerifications(
+  rows: VerificationRow[],
+): VerificationBadge[] {
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    verified_at: row.verified_at,
+    verified_by: row.verified_by,
+  }));
+}
+
+function emptyStartupDepth(): StartupDepthView {
+  return {
+    team: [],
+    round: null,
+    capTable: null,
+    useOfFunds: [],
+    traction: [],
+    market: null,
+    competitors: [],
+    matchOnly: { deckUrl: null, rawTraction: null },
+  };
+}
+
+function emptyInvestorDepth(): Omit<InvestorDepthView, "counts"> {
+  return {
+    team: [],
+    checkBands: [],
+    portfolio: [],
+    trackRecord: null,
+    decisionProcess: null,
+    valueAdd: [],
+    antiPatterns: [],
+  };
 }
