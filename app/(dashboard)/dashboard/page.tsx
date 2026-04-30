@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { withUserRls } from "@/lib/db";
 import {
   founderDashboardMock,
   investorFeedMock,
@@ -22,11 +21,11 @@ import { AccountStatusBanner } from "@/components/account/account-status-banner"
 import { ProfileCompletionPrompt } from "@/components/account/profile-completion-prompt";
 import { RealRecommendedRail } from "@/components/dashboard/RealRecommendedRail";
 import { RecentViewersRail } from "@/components/dashboard/RecentViewersRail";
+import type { CompletionResult } from "@/lib/profile/completion";
 import {
-  founderCompletion,
-  investorCompletion,
-  type CompletionResult,
-} from "@/lib/profile/completion";
+  founderCompletionWithDepth,
+  investorCompletionWithDepth,
+} from "@/lib/profile/builder-completion";
 import {
   fetchFeedForFounder,
   fetchFeedForInvestor,
@@ -42,11 +41,8 @@ import {
   type IntroBadgeCounts,
 } from "@/lib/intros/query";
 import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
-import type { AccountLabel, Database } from "@/types/database";
+import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
-
-type StartupRow = Database["public"]["Tables"]["startups"]["Row"];
-type InvestorRow = Database["public"]["Tables"]["investors"]["Row"];
 
 export const dynamic = "force-dynamic";
 
@@ -62,19 +58,16 @@ export default async function DashboardPage() {
 
   console.log(`[dashboard] userId=${userId} role=${role} label=${accountLabel}`);
 
+  // Completion now reads from depth tables too — see lib/profile/builder-completion.ts.
+  // Pre-Sprint 9.5 this only counted basic wizard fields, so the displayed %
+  // under-counted users who'd filled team/round/cap-table/market/competitors.
+  const completionPromise: Promise<CompletionResult> =
+    role === "investor"
+      ? investorCompletionWithDepth(userId)
+      : founderCompletionWithDepth(userId);
+
   const [completion, stats, feedItems, introCounts, recentViewers] = await Promise.all([
-    withUserRls<CompletionResult>(userId, async (sql) => {
-      if (role === "investor") {
-        const rows = await sql<InvestorRow[]>`
-          select * from public.investors where user_id = ${userId} limit 1
-        `;
-        return investorCompletion(rows[0] ?? null);
-      }
-      const rows = await sql<StartupRow[]>`
-        select * from public.startups where user_id = ${userId} limit 1
-      `;
-      return founderCompletion(rows[0] ?? null);
-    }),
+    completionPromise,
     fetchProfileStats(userId),
     role === "investor"
       ? fetchFeedForInvestor(userId, { limit: 3 })

@@ -7,6 +7,7 @@ import {
   type InvestorPublic,
 } from "@/lib/profile/visibility";
 import type { FeedFilters } from "@/lib/feed/filters";
+import { resolveAvatarUrl } from "@/lib/profile/avatar";
 import type {
   Database,
   InteractionAction,
@@ -372,6 +373,8 @@ export type RecentViewer = {
    * presenter decide.
    */
   verified: boolean;
+  /** Sprint 9.5.C: resolved avatar URL or null (initials fallback). */
+  avatarSrc: string | null;
 };
 
 /**
@@ -397,6 +400,11 @@ export async function fetchRecentViewers(
       account_label: string;
       startup_name: string | null;
       firm: string | null;
+      // Avatar fields, joined from public.users
+      image: string | null;
+      avatar_storage_key: string | null;
+      avatar_url: string | null;
+      avatar_updated_at: Date | string | null;
     };
     const rows = await sql<Row[]>`
       with windowed as (
@@ -410,6 +418,7 @@ export async function fetchRecentViewers(
       )
       select w.viewer_user_id, w.last_viewed_at, w.count,
              u.name, u.role, u.account_label,
+             u.image, u.avatar_storage_key, u.avatar_url, u.avatar_updated_at,
              s.name as startup_name,
              inv.firm
       from windowed w
@@ -425,16 +434,25 @@ export async function fetchRecentViewers(
         )
       order by w.last_viewed_at desc
     `;
-    return rows.map((r) => ({
-      viewerId: r.viewer_user_id,
-      lastViewedAt: new Date(r.last_viewed_at),
-      count: r.count,
-      name: r.name,
-      role: r.role,
-      startupName: r.startup_name,
-      firm: r.firm,
-      verified: r.account_label === "verified",
-    }));
+    // Resolve avatar URLs in parallel (presigning is local HMAC, no network).
+    return Promise.all(
+      rows.map(async (r) => ({
+        viewerId: r.viewer_user_id,
+        lastViewedAt: new Date(r.last_viewed_at),
+        count: r.count,
+        name: r.name,
+        role: r.role,
+        startupName: r.startup_name,
+        firm: r.firm,
+        verified: r.account_label === "verified",
+        avatarSrc: await resolveAvatarUrl({
+          storageKey: r.avatar_storage_key,
+          cachedUrl: r.avatar_url,
+          cachedAt: r.avatar_updated_at,
+          oauthImage: r.image,
+        }),
+      })),
+    );
   });
 }
 
@@ -475,6 +493,10 @@ export type MutualMatch = {
   /** The OTHER user's role + identity. */
   otherUserId: string;
   otherRole: "founder" | "investor";
+  /** Display name of the other party (their users.name). */
+  otherName: string | null;
+  /** Sprint 9.5.C: resolved avatar URL of the other party. */
+  otherAvatarSrc: string | null;
   startupName?: string;
   investorName?: string;
   industry?: string;
@@ -495,15 +517,31 @@ export async function fetchMutualMatches(userId: string): Promise<MutualMatch[]>
       stage: StartupStage | null;
       investor_name: string | null;
       firm: string | null;
+      // Avatar fields for the OTHER party (computed via case in select).
+      other_name: string | null;
+      other_image: string | null;
+      other_avatar_storage_key: string | null;
+      other_avatar_url: string | null;
+      other_avatar_updated_at: Date | string | null;
     };
     const rows = await sql<Row[]>`
       select m.id, m.matched_at, m.contact_unlocked,
              m.founder_user_id, m.investor_user_id,
              s.name as startup_name, s.industry, s.stage,
-             i.name as investor_name, i.firm
+             i.name as investor_name, i.firm,
+             other_u.name as other_name,
+             other_u.image as other_image,
+             other_u.avatar_storage_key as other_avatar_storage_key,
+             other_u.avatar_url as other_avatar_url,
+             other_u.avatar_updated_at as other_avatar_updated_at
       from public.matches m
       left join public.startups s on s.user_id = m.founder_user_id
       left join public.investors i on i.user_id = m.investor_user_id
+      join public.users other_u
+        on other_u.id = case
+                          when m.founder_user_id = ${userId} then m.investor_user_id
+                          else m.founder_user_id
+                        end
       where (m.founder_user_id = ${userId} or m.investor_user_id = ${userId})
         -- Hide matches with blocked users (either direction). The match
         -- row stays in the table for audit; we just stop surfacing it.
@@ -516,20 +554,29 @@ export async function fetchMutualMatches(userId: string): Promise<MutualMatch[]>
         )
       order by m.matched_at desc
     `;
-    return rows.map((r) => {
-      const isFounder = r.founder_user_id === userId;
-      return {
-        matchId: r.id,
-        matchedAt: new Date(r.matched_at),
-        contactUnlocked: r.contact_unlocked,
-        otherUserId: isFounder ? r.investor_user_id : r.founder_user_id,
-        otherRole: isFounder ? "investor" : "founder",
-        startupName: !isFounder ? r.startup_name ?? undefined : undefined,
-        investorName: isFounder ? r.investor_name ?? undefined : undefined,
-        industry: r.industry ?? undefined,
-        stage: r.stage ?? undefined,
-        firm: r.firm,
-      };
-    });
+    return Promise.all(
+      rows.map(async (r) => {
+        const isFounder = r.founder_user_id === userId;
+        return {
+          matchId: r.id,
+          matchedAt: new Date(r.matched_at),
+          contactUnlocked: r.contact_unlocked,
+          otherUserId: isFounder ? r.investor_user_id : r.founder_user_id,
+          otherRole: isFounder ? "investor" : "founder",
+          otherName: r.other_name,
+          otherAvatarSrc: await resolveAvatarUrl({
+            storageKey: r.other_avatar_storage_key,
+            cachedUrl: r.other_avatar_url,
+            cachedAt: r.other_avatar_updated_at,
+            oauthImage: r.other_image,
+          }),
+          startupName: !isFounder ? r.startup_name ?? undefined : undefined,
+          investorName: isFounder ? r.investor_name ?? undefined : undefined,
+          industry: r.industry ?? undefined,
+          stage: r.stage ?? undefined,
+          firm: r.firm,
+        };
+      }),
+    );
   });
 }

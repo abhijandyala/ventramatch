@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
+import { DeckUploader } from "@/components/profile/deck-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import type { StartupDepthView } from "@/lib/profile/visibility";
@@ -18,6 +19,7 @@ import type {
   SubmitFounderInput,
   DraftFounderInput,
 } from "@/lib/validation/applications";
+import { STARTUP_SECTORS } from "@/lib/profile/sectors";
 import {
   saveFounderDraftAction,
   submitFounderApplicationAction,
@@ -59,7 +61,15 @@ export type FounderUiDraft = {
     notableSignals: string;
     other: string;
   };
-  deck: { url: string; fileName: string };
+  /**
+   * Deck has two coexisting representations:
+   *   - `url`: external link (DocSend / Drive / Notion). Saved on Continue.
+   *   - `fileName` + `uploadedAt`: present when a PDF was uploaded directly
+   *     to our S3 bucket via /api/deck/upload. The upload route writes the
+   *     storage key to the DB; `fileName` here is just for display.
+   * The download route prefers the uploaded file when both are set.
+   */
+  deck: { url: string; fileName: string; uploadedAt: string | null };
   founder: {
     fullName: string;
     role: string;
@@ -74,7 +84,7 @@ export const EMPTY_FOUNDER_DRAFT: FounderUiDraft = {
   stage: null,
   round: { targetRaise: null, minCheck: null, maxCheck: null, leadStatus: null, closeTarget: "", valuationCap: null, useOfFunds: "" },
   traction: { mrr: null, customers: null, growthPct: null, notableSignals: "", other: "" },
-  deck: { url: "", fileName: "" },
+  deck: { url: "", fileName: "", uploadedAt: null },
   founder: { fullName: "", role: "", workEmail: "", linkedinUrl: "" },
 };
 
@@ -153,12 +163,10 @@ const STEP_HEADERS = [
   { title: "Looking good. Review and publish.", sub: "Final pass before your profile goes live." },
 ];
 
-const SECTOR_OPTIONS = [
-  "AI / ML", "SaaS", "Fintech", "Healthtech", "Climate", "DevTools",
-  "Consumer", "Marketplace", "Hardware", "Bio", "Defense", "Robotics",
-  "Web3", "EdTech", "Real estate", "Industrial", "Logistics",
-  "Cybersecurity", "Data infra", "Govtech",
-] as const;
+// Sector taxonomy is centralised in lib/profile/sectors.ts so founder,
+// investor, onboarding, and matching all agree on names. See that file
+// for the rationale + alias map.
+const SECTOR_OPTIONS = STARTUP_SECTORS;
 
 const STAGES_WITH_NOTES: { key: StartupStage; label: string; note: string }[] = [
   { key: "idea",          label: "Idea",          note: "Just an idea" },
@@ -760,30 +768,28 @@ function DeckStep({
   patch: (p: Partial<FounderUiDraft["deck"]>) => void;
   errors: Record<string, string>;
 }) {
+  // `errors.deckUrl` from server validation only applies to the external
+  // URL field. Surface it via the field hint area below the uploader.
   return (
     <div className="space-y-6">
-      <div className="rounded-[14px] border border-dashed border-[color:var(--color-border-strong)] bg-[color:var(--color-bg)] p-6 text-center">
-        <p className="text-[15px] font-semibold text-[color:var(--color-text-strong)]">
-          Deck file upload coming soon
-        </p>
-        <p className="mt-1.5 text-[12.5px] text-[color:var(--color-text-faint)]">
-          For now, paste a link below — Google Drive, DocSend, Notion, etc.
-        </p>
-      </div>
-      <Field label="Deck link" error={errors.deckUrl}>
-        <Input
-          placeholder="https://docsend.com/view/..."
-          value={draft.deck.url}
-          onChange={(v) => patch({ url: v })}
-        />
-      </Field>
-      <Field label="File name (optional, for your reference)">
-        <Input
-          placeholder="Acme Q2 2026 Deck.pdf"
-          value={draft.deck.fileName}
-          onChange={(v) => patch({ fileName: v })}
-        />
-      </Field>
+      <DeckUploader
+        currentDeck={{
+          filename: draft.deck.fileName || null,
+          uploadedAt: draft.deck.uploadedAt,
+        }}
+        urlValue={draft.deck.url}
+        onUrlChange={(v) => patch({ url: v })}
+        onUploaded={(next) => {
+          // next.filename === "" signals removal (see DeckUploader.RemoveButton)
+          patch({
+            fileName: next.filename,
+            uploadedAt: next.filename ? next.uploadedAt : null,
+          });
+        }}
+      />
+      {errors.deckUrl ? (
+        <p className="text-[12px] text-[color:var(--color-danger)]">{errors.deckUrl}</p>
+      ) : null}
       <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 py-3">
         <p className="text-[12.5px] leading-snug text-[color:var(--color-text-muted)]">
           Your deck stays private. It&apos;s only revealed to investors who

@@ -13,11 +13,18 @@ export default async function PostAuthHomePage() {
   const role = (session.user.role as "founder" | "investor") ?? "founder";
   const accountLabel = (session.user.accountLabel ?? "unverified") as AccountLabel;
   const name = session.user.name ?? "";
+  const userId = session.user.id;
+  const avatarSrc = session.user.image ?? null;
 
   return (
     <>
       <AccountStatusBanner label={accountLabel} />
-      <HomePageClient role={role} name={name} />
+      <HomePageClient
+        role={role}
+        name={name}
+        userId={userId}
+        avatarSrc={avatarSrc}
+      />
     </>
   );
 }

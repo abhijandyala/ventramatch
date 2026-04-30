@@ -6,6 +6,7 @@ import { fetchMutualMatches, type MutualMatch } from "@/lib/feed/query";
 import { fetchIntroBadgeCounts } from "@/lib/intros/query";
 import { AccountStatusBanner } from "@/components/account/account-status-banner";
 import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
+import { Avatar } from "@/components/profile/avatar";
 import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
 
@@ -96,16 +97,24 @@ function MatchRow({ match }: { match: MutualMatch }) {
       className="flex flex-wrap items-center justify-between gap-4 border bg-[var(--color-surface)] p-4 transition-colors hover:border-[var(--color-text-faint)]"
       style={{ borderColor: "var(--color-border)" }}
     >
-      <div className="min-w-0 flex-1">
-        <Link
-          href={profileHref}
-          className="block truncate text-[15px] font-semibold tracking-tight text-[var(--color-text-strong)] hover:underline"
-        >
-          {headline}
-        </Link>
-        <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">
-          {subline || "—"}
-        </p>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Avatar
+          id={match.otherUserId}
+          name={match.otherName}
+          src={match.otherAvatarSrc}
+          size="md"
+        />
+        <div className="min-w-0">
+          <Link
+            href={profileHref}
+            className="block truncate text-[15px] font-semibold tracking-tight text-[var(--color-text-strong)] hover:underline"
+          >
+            {headline}
+          </Link>
+          <p className="mt-0.5 truncate text-[12px] text-[var(--color-text-muted)]">
+            {subline || "—"}
+          </p>
+        </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-3 text-[12px] text-[var(--color-text-faint)]">
         <span>{relativeTime(match.matchedAt)}</span>

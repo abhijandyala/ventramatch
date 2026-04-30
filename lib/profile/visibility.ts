@@ -97,9 +97,37 @@ export function projectStartupTier2(row: StartupRow): StartupFull {
     raise_amount: row.raise_amount,
     traction: row.traction,
     location: row.location,
-    deck_url: row.deck_url,
+    // Sprint 9.5.B: when an in-bucket deck exists, route the viewer
+    // through our authed download path so we keep the bucket private.
+    // External-link decks (legacy / DocSend / Drive) pass through.
+    deck_url: effectiveDeckUrl(row.id, row.deck_storage_key, row.deck_url),
+    deck_storage_key: row.deck_storage_key,
+    deck_filename: row.deck_filename,
+    deck_uploaded_at: row.deck_uploaded_at,
     website: row.website,
   };
+}
+
+/**
+ * Resolve the URL we should expose to a tier-2 viewer for the deck.
+ *
+ *   - If we have an uploaded file (deck_storage_key set) → return our
+ *     authed download route. The route validates the viewer has match
+ *     access and issues a 1-hour presigned S3 URL.
+ *   - Else if there's an external link → return it untouched.
+ *   - Else null.
+ *
+ * The path is deliberately RELATIVE so it works on any host without
+ * needing the request URL.
+ */
+export function effectiveDeckUrl(
+  startupId: string,
+  deckStorageKey: string | null | undefined,
+  deckUrl: string | null | undefined,
+): string | null {
+  if (deckStorageKey) return `/api/deck/${startupId}`;
+  if (deckUrl) return deckUrl;
+  return null;
 }
 
 function bucketRaise(amount: number | null): "small" | "medium" | "large" | null {
@@ -454,7 +482,14 @@ export type StartupDepthInput = {
   market: StartupMarketAnalysisRow | null;
   competitors: StartupCompetitorRow[];
   /** Pulled from the parent `startups` row. */
-  parent: { deck_url: string | null; traction: string | null };
+  parent: {
+    /** Used to build the authed deck route /api/deck/[startupId]. */
+    id: string;
+    deck_url: string | null;
+    /** Sprint 9.5.B: if set, the deck lives in S3 and is exposed via authed route. */
+    deck_storage_key: string | null;
+    traction: string | null;
+  };
 };
 
 export type InvestorDepthInput = {
@@ -563,7 +598,13 @@ export function projectStartupDepth(
       display_order: row.display_order,
     })),
     matchOnly: {
-      deckUrl: includeMatchOnly ? input.parent.deck_url : null,
+      deckUrl: includeMatchOnly
+        ? effectiveDeckUrl(
+            input.parent.id,
+            input.parent.deck_storage_key,
+            input.parent.deck_url,
+          )
+        : null,
       rawTraction: includeMatchOnly ? input.parent.traction : null,
     },
   };

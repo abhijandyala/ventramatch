@@ -26,6 +26,8 @@ import { scoreMatch } from "@/lib/matching/score";
 import { fetchPendingIntroForMatch } from "@/lib/intros/query";
 import { recordProfileView } from "@/lib/profile/views";
 import { isBlockedEitherWay } from "@/lib/safety/query";
+import { resolveAvatarUrl } from "@/lib/profile/avatar";
+import { Avatar } from "@/components/profile/avatar";
 import { ProfileMenu } from "@/components/safety/profile-menu";
 import { VerificationBadges } from "@/components/account/verification-badges";
 import { DepthVerificationBadges } from "@/components/account/depth-verification-badges";
@@ -56,6 +58,11 @@ type TargetUser = {
   email_verified_at: Date | string | null;
   linkedin_url: string | null;
   github_url: string | null;
+  // Sprint 9.5.C — for the avatar
+  image: string | null;
+  avatar_storage_key: string | null;
+  avatar_url: string | null;
+  avatar_updated_at: Date | string | null;
 };
 
 export const metadata: Metadata = {
@@ -81,7 +88,8 @@ export default async function PublicProfilePage({
     const [users, startups, investors] = await Promise.all([
       sql<TargetUser[]>`
         select id, name, email, role, account_label, email_verified_at,
-               linkedin_url, github_url
+               linkedin_url, github_url,
+               image, avatar_storage_key, avatar_url, avatar_updated_at
         from public.users
         where id = ${targetUserId}
         limit 1
@@ -126,6 +134,15 @@ export default async function PublicProfilePage({
     void recordProfileView(viewerId, targetUserId);
   }
 
+  // Sprint 9.5.C: resolve the target user's avatar once, pass to both
+  // FounderProfile and InvestorProfile renderers.
+  const targetAvatarSrc = await resolveAvatarUrl({
+    storageKey: data.user.avatar_storage_key,
+    cachedUrl: data.user.avatar_url,
+    cachedAt: data.user.avatar_updated_at,
+    oauthImage: data.user.image,
+  });
+
   // Resolve viewing tier — public / verified / match. Self-view always
   // resolves to "match" so the user can preview their own full profile.
   const tier: ViewingTier = await resolveTier(
@@ -154,7 +171,9 @@ export default async function PublicProfilePage({
           {
             ...startupDepthRaw,
             parent: {
+              id: data.startup.id,
               deck_url: data.startup.deck_url,
+              deck_storage_key: data.startup.deck_storage_key,
               traction: data.startup.traction,
             },
           },
@@ -242,6 +261,7 @@ export default async function PublicProfilePage({
             verifications={verifications}
             isSelf={isSelf}
             matchScore={matchScore}
+            avatarSrc={targetAvatarSrc}
           />
         ) : data.user.role === "investor" && data.investor ? (
           <InvestorProfile
@@ -252,6 +272,7 @@ export default async function PublicProfilePage({
             verifications={verifications}
             isSelf={isSelf}
             matchScore={matchScore}
+            avatarSrc={targetAvatarSrc}
           />
         ) : (
           <p className="text-[14px] text-[var(--color-text-muted)]">
@@ -313,6 +334,7 @@ function FounderProfile({
   verifications,
   isSelf,
   matchScore,
+  avatarSrc,
 }: {
   user: TargetUser;
   row: StartupRow;
@@ -321,6 +343,7 @@ function FounderProfile({
   verifications: VerificationBadge[];
   isSelf: boolean;
   matchScore: { score: number; reason: string } | null;
+  avatarSrc: string | null;
 }) {
   const tier2 = tier === "match";
   const tier1 = projectStartupTier1(row);
@@ -328,28 +351,31 @@ function FounderProfile({
 
   return (
     <article className="space-y-8">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-faint)]">
-          Startup
-        </p>
-        <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-[var(--color-text-strong)]">
-          {tier1.name}
-        </h1>
-        <p className="mt-2 max-w-[60ch] text-[16px] leading-[1.55] text-[var(--color-text)]">
-          {tier1.oneLiner}
-        </p>
+      <header className="flex flex-col items-start gap-5 sm:flex-row">
+        <Avatar id={user.id} name={user.name} src={avatarSrc} size="xl" />
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-faint)]">
+            Startup
+          </p>
+          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-[var(--color-text-strong)]">
+            {tier1.name}
+          </h1>
+          <p className="mt-2 max-w-[60ch] text-[16px] leading-[1.55] text-[var(--color-text)]">
+            {tier1.oneLiner}
+          </p>
 
-        <div className="mt-4 space-y-2">
-          <VerificationBadges
-            inputs={{
-              accountLabel: user.account_label,
-              emailVerified: Boolean(user.email_verified_at),
-              linkedinUrl: user.linkedin_url,
-              githubUrl: user.github_url,
-              websiteUrl: tier1.website,
-            }}
-          />
-          <DepthVerificationBadges badges={verifications} />
+          <div className="mt-4 space-y-2">
+            <VerificationBadges
+              inputs={{
+                accountLabel: user.account_label,
+                emailVerified: Boolean(user.email_verified_at),
+                linkedinUrl: user.linkedin_url,
+                githubUrl: user.github_url,
+                websiteUrl: tier1.website,
+              }}
+            />
+            <DepthVerificationBadges badges={verifications} />
+          </div>
         </div>
       </header>
 
@@ -448,6 +474,7 @@ function InvestorProfile({
   verifications,
   isSelf,
   matchScore,
+  avatarSrc,
 }: {
   user: TargetUser;
   row: InvestorRow;
@@ -456,6 +483,7 @@ function InvestorProfile({
   verifications: VerificationBadge[];
   isSelf: boolean;
   matchScore: { score: number; reason: string } | null;
+  avatarSrc: string | null;
 }) {
   const tier2 = tier === "match";
   const tier1 = projectInvestorTier1(row);
@@ -463,28 +491,31 @@ function InvestorProfile({
 
   return (
     <article className="space-y-8">
-      <header>
-        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-faint)]">
-          Investor
-        </p>
-        <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-[var(--color-text-strong)]">
-          {tier1.name}
-        </h1>
-        {tier1.firm ? (
-          <p className="mt-1 text-[15px] text-[var(--color-text-muted)]">{tier1.firm}</p>
-        ) : null}
+      <header className="flex flex-col items-start gap-5 sm:flex-row">
+        <Avatar id={user.id} name={user.name} src={avatarSrc} size="xl" />
+        <div className="min-w-0 flex-1">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--color-text-faint)]">
+            Investor
+          </p>
+          <h1 className="mt-2 text-[32px] font-semibold tracking-tight text-[var(--color-text-strong)]">
+            {tier1.name}
+          </h1>
+          {tier1.firm ? (
+            <p className="mt-1 text-[15px] text-[var(--color-text-muted)]">{tier1.firm}</p>
+          ) : null}
 
-        <div className="mt-4 space-y-2">
-          <VerificationBadges
-            inputs={{
-              accountLabel: user.account_label,
-              emailVerified: Boolean(user.email_verified_at),
-              linkedinUrl: user.linkedin_url,
-              githubUrl: user.github_url,
-              websiteUrl: null,
-            }}
-          />
-          <DepthVerificationBadges badges={verifications} />
+          <div className="mt-4 space-y-2">
+            <VerificationBadges
+              inputs={{
+                accountLabel: user.account_label,
+                emailVerified: Boolean(user.email_verified_at),
+                linkedinUrl: user.linkedin_url,
+                githubUrl: user.github_url,
+                websiteUrl: null,
+              }}
+            />
+            <DepthVerificationBadges badges={verifications} />
+          </div>
         </div>
       </header>
 

@@ -16,6 +16,16 @@ export default async function FeedbackPage() {
   const role = session.user.role as "founder" | "investor" | null;
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
+  const userId = session.user.id;
+  const avatarSrc = session.user.image ?? null;
 
-  return <FeedbackClient role={role} name={name} email={email} />;
+  return (
+    <FeedbackClient
+      role={role}
+      name={name}
+      email={email}
+      userId={userId}
+      avatarSrc={avatarSrc}
+    />
+  );
 }

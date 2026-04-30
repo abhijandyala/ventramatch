@@ -1,6 +1,7 @@
 import type { Route } from "next";
 import Link from "next/link";
 import type { RecentViewer } from "@/lib/feed/query";
+import { Avatar } from "@/components/profile/avatar";
 
 /**
  * "Who viewed me" rail on the dashboard.
@@ -66,12 +67,16 @@ function ViewerRow({ viewer }: { viewer: RecentViewer }) {
         : viewer.startupName ?? "Founder";
 
   if (isAnonymous) {
+    // For anonymous viewers we render a generic role-coloured avatar (no
+    // photo even if the viewer uploaded one) — keeps their identity hidden
+    // until they verify.
     return (
       <div
-        className="flex items-center justify-between gap-3 border bg-[var(--color-surface)] px-3 py-2.5"
+        className="flex items-center gap-3 border bg-[var(--color-surface)] px-3 py-2.5"
         style={{ borderColor: "var(--color-border)" }}
       >
-        <div className="min-w-0">
+        <Avatar id={viewer.viewerId} name={null} src={null} size="sm" />
+        <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold text-[var(--color-text-strong)]">
             {headline}
           </p>
@@ -90,10 +95,11 @@ function ViewerRow({ viewer }: { viewer: RecentViewer }) {
   return (
     <Link
       href={`/p/${viewer.viewerId}` as Route}
-      className="flex items-center justify-between gap-3 border bg-[var(--color-surface)] px-3 py-2.5 transition-colors hover:border-[var(--color-text-faint)]"
+      className="flex items-center gap-3 border bg-[var(--color-surface)] px-3 py-2.5 transition-colors hover:border-[var(--color-text-faint)]"
       style={{ borderColor: "var(--color-border)" }}
     >
-      <div className="min-w-0">
+      <Avatar id={viewer.viewerId} name={viewer.name} src={viewer.avatarSrc} size="sm" />
+      <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold text-[var(--color-text-strong)]">
           {headline}
         </p>
