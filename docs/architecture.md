@@ -85,6 +85,39 @@ domain ownership, references) lives on a separate `verifications` table
 landing in `0016`, so trust state never gets denormalized onto the claim
 itself.
 
+### Profile depth read paths (Sprint B)
+
+Three viewing tiers gate what the depth tables surface to a viewer.
+The `ViewingTier` type and `resolveTier` helper live in
+`lib/profile/visibility.ts`; `lib/profile/depth.ts` is the RLS-safe
+fetch layer.
+
+| Tier | Audience | Startup hides | Investor hides |
+| --- | --- | --- | --- |
+| **public** | any auth user, target verified | team, round, cap table, traction signals, market, competitive, deck, raw `traction` | team, check bands, portfolio, track record, decision process, value-add, anti-patterns |
+| **verified** | viewer & target both `account_label='verified'`, no match yet | deck URL, traction `evidence_url` | `dry_powder_band`, private portfolio rows (`is_public_listing=false`) |
+| **match** | mutual match exists OR self-view | nothing | nothing |
+
+Verified viewers (label='verified') get a real diligence kit pre-match —
+team, structured round details, traction signals, investor track record,
+decision process, anti-patterns. The platform's competitive edge stays
+intact because contact info, deck URL, traction evidence URLs, dry powder,
+and private portfolio rows only unlock at the **match** tier (post mutual
+interest). Counts surface at the public tier ("12-row portfolio") so the
+discovery card hints at depth without exposing rows.
+
+Tier resolution happens once per request in `app/p/[userId]/page.tsx`,
+which then calls `projectStartupDepth` / `projectInvestorDepth` /
+`projectVerifications` to build the read shape. The same shape is returned
+across tiers — gated fields are nulled out rather than removed — so the
+read renderers in `components/profile/depth-sections.tsx` stay thin.
+
+`references_received` is **never** loaded for cross-user reads.
+`fetchConfirmedReferences` short-circuits to an empty list when
+`viewerId !== targetUserId`; only the owner of the row sees referee
+email or any reference state beyond the projected confirmed-summary.
+That posture matches the strict select-own RLS in 0016.
+
 ### Why RLS is implemented in plain Postgres (not Supabase)
 
 We use **Railway-managed PostgreSQL** only. Policies use `public.app_user_id()`, which reads `ventramatch.user_id` set via `set_config(..., true)` at the start of each transaction in `withUserRls` (`lib/db.ts`). The table owner / migration role bypasses RLS for triggers and admin tasks.
