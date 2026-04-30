@@ -67,6 +67,7 @@ export function NotificationBell({
         <Bell size={18} strokeWidth={1.75} />
         {initialUnread > 0 ? (
           <span
+            aria-live="polite"
             className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 font-mono text-[9px] font-bold leading-none text-white"
             style={{ background: "var(--color-brand)" }}
           >
