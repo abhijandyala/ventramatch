@@ -66,6 +66,12 @@ export function ventramatchAdapter(): Adapter {
   return {
     async createUser(user) {
       console.log(`[auth:adapter:createUser] email=${user.email} name=${user.name}`);
+      // Adapter is only invoked for OAuth/OIDC sign-ups (credentials sign-ups
+      // insert directly in signUpAction without touching the adapter). Treat
+      // every adapter-created user as email-verified — the OAuth provider has
+      // already proven ownership of the email. Falls back to provider's
+      // emailVerified date if it gave one, otherwise stamps `now()`.
+      const verifiedAt = user.emailVerified ?? new Date();
       const rows = await withUserRls<DbUserRow[]>(null, async (sql) => {
         const result = await sql<DbUserRow[]>`
           insert into public.users (email, name, image, email_verified_at)
@@ -73,7 +79,7 @@ export function ventramatchAdapter(): Adapter {
             ${user.email},
             ${user.name ?? null},
             ${user.image ?? null},
-            ${user.emailVerified ?? null}
+            ${verifiedAt}
           )
           returning id, email, name, image, email_verified_at
         `;
@@ -81,7 +87,7 @@ export function ventramatchAdapter(): Adapter {
       });
       const created = toAdapterUser(rows[0]);
       if (!created) throw new Error("Failed to create user");
-      console.log(`[auth:adapter:createUser] created userId=${created.id}`);
+      console.log(`[auth:adapter:createUser] created userId=${created.id} verifiedAt=${verifiedAt.toISOString()}`);
       return created;
     },
 
