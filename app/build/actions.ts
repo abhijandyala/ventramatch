@@ -36,6 +36,7 @@ function inputAsRow(userId: string, data: SubmitFounderInput): StartupRow {
     deck_filename: null,
     deck_uploaded_at: null,
     website: data.website ?? null,
+    startup_sectors: data.startupSectors ?? [data.industry],
     created_at: now,
     updated_at: now,
   };
@@ -128,13 +129,14 @@ export async function submitFounderApplicationAction(
     await withUserRls(userId, async (sql) => {
       await sql`
         insert into public.startups (
-          user_id, name, one_liner, industry, stage,
+          user_id, name, one_liner, industry, startup_sectors, stage,
           raise_amount, traction, location, deck_url, website
         ) values (
           ${userId},
           ${data.companyName},
           ${data.oneLiner},
           ${data.industry},
+          ${data.startupSectors ?? [data.industry]}::text[],
           ${data.stage}::public.startup_stage,
           ${data.raiseAmount ?? null},
           ${data.traction ?? null},
@@ -143,15 +145,16 @@ export async function submitFounderApplicationAction(
           ${data.website ?? null}
         )
         on conflict (user_id) do update set
-          name         = excluded.name,
-          one_liner    = excluded.one_liner,
-          industry     = excluded.industry,
-          stage        = excluded.stage,
-          raise_amount = excluded.raise_amount,
-          traction     = excluded.traction,
-          location     = excluded.location,
-          deck_url     = excluded.deck_url,
-          website      = excluded.website
+          name             = excluded.name,
+          one_liner        = excluded.one_liner,
+          industry         = excluded.industry,
+          startup_sectors  = excluded.startup_sectors,
+          stage            = excluded.stage,
+          raise_amount     = excluded.raise_amount,
+          traction         = excluded.traction,
+          location         = excluded.location,
+          deck_url         = excluded.deck_url,
+          website          = excluded.website
       `;
 
       await sql`
@@ -256,15 +259,22 @@ export async function saveFounderDraftAction(
         const safeIndustry = data.industry?.trim() || "unspecified";
         const safeStage = data.stage ?? "idea";
 
+        const safeSectors = data.startupSectors?.length
+          ? data.startupSectors
+          : safeIndustry !== "unspecified"
+            ? [safeIndustry]
+            : [];
+
         await sql`
           insert into public.startups (
-            user_id, name, one_liner, industry, stage,
+            user_id, name, one_liner, industry, startup_sectors, stage,
             raise_amount, traction, location, deck_url, website
           ) values (
             ${userId},
             ${safeName},
             ${safeOneLiner},
             ${safeIndustry},
+            ${safeSectors}::text[],
             ${safeStage}::public.startup_stage,
             ${data.raiseAmount ?? null},
             ${data.traction ?? null},
@@ -273,15 +283,20 @@ export async function saveFounderDraftAction(
             ${data.website ?? null}
           )
           on conflict (user_id) do update set
-            name         = coalesce(${data.companyName ?? null}, public.startups.name),
-            one_liner    = coalesce(${data.oneLiner ?? null}, public.startups.one_liner),
-            industry     = coalesce(${data.industry ?? null}, public.startups.industry),
-            stage        = coalesce(${data.stage ?? null}::public.startup_stage, public.startups.stage),
-            raise_amount = coalesce(${data.raiseAmount ?? null}, public.startups.raise_amount),
-            traction     = coalesce(${data.traction ?? null}, public.startups.traction),
-            location     = coalesce(${data.location ?? null}, public.startups.location),
-            deck_url     = coalesce(${data.deckUrl ?? null}, public.startups.deck_url),
-            website      = coalesce(${data.website ?? null}, public.startups.website)
+            name             = coalesce(${data.companyName ?? null}, public.startups.name),
+            one_liner        = coalesce(${data.oneLiner ?? null}, public.startups.one_liner),
+            industry         = coalesce(${data.industry ?? null}, public.startups.industry),
+            startup_sectors  = case
+                                 when ${data.startupSectors ?? null}::text[] is not null
+                                 then ${data.startupSectors ?? null}::text[]
+                                 else public.startups.startup_sectors
+                               end,
+            stage            = coalesce(${data.stage ?? null}::public.startup_stage, public.startups.stage),
+            raise_amount     = coalesce(${data.raiseAmount ?? null}, public.startups.raise_amount),
+            traction         = coalesce(${data.traction ?? null}, public.startups.traction),
+            location         = coalesce(${data.location ?? null}, public.startups.location),
+            deck_url         = coalesce(${data.deckUrl ?? null}, public.startups.deck_url),
+            website          = coalesce(${data.website ?? null}, public.startups.website)
         `;
       }
 

@@ -119,7 +119,6 @@ export default async function BuildPage() {
     sectors: both.startup?.industry ? [both.startup.industry] : [],
     stage: both.startup?.stage ?? null,
     round: {
-      ...EMPTY_FOUNDER_DRAFT.round,
       targetRaise: both.startup?.raise_amount ?? null,
     },
     traction: {
