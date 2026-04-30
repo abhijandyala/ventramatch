@@ -26,10 +26,13 @@ import { requireWrite } from "@/lib/auth/access";
 import { sendReferenceRequestEmail } from "@/lib/email/send-reference-request";
 import {
   submitVerificationSchema,
+  submitEmploymentVerificationSchema,
   requestReferenceSchema,
   type SubmitVerificationInput,
   type RequestReferenceInput,
 } from "@/lib/validation/depth";
+import { createAndSendEmploymentVerification } from "@/lib/email/send-verification-claim";
+import { checkAndStamp } from "@/lib/email/rate-limit";
 
 type VerifResult = { ok: true } | { ok: false; error: string };
 
@@ -92,6 +95,42 @@ export async function submitVerificationAction(
   revalidatePath("/build/investor");
   revalidatePath(`/p/${userId}`);
   return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Submit employment verification (email-token magic link)
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function submitEmploymentVerificationAction(
+  input: { employer: string; workEmail: string },
+): Promise<VerifResult & { verificationId?: string }> {
+  const access = await requireWrite();
+  if (!access.ok) return { ok: false, error: access.message };
+  const userId = access.userId;
+
+  const parsed = submitEmploymentVerificationSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { employer, workEmail, employerDomain } = parsed.data;
+
+  const limit = checkAndStamp(`verify:${userId}:${employerDomain}`);
+  if (!limit.ok) {
+    return { ok: false, error: `Wait ${limit.retryAfterSeconds}s before sending another link.` };
+  }
+
+  const session = await (await import("@/auth")).auth();
+  const userName = session?.user?.name ?? null;
+
+  const result = await createAndSendEmploymentVerification(
+    userId, userName, employer, employerDomain, workEmail,
+  );
+
+  if (!result.ok) return { ok: false, error: result.error };
+
+  revalidatePath("/build");
+  revalidatePath(`/p/${userId}`);
+  return { ok: true, verificationId: result.verificationId };
 }
 
 // ──────────────────────────────────────────────────────────────────────────

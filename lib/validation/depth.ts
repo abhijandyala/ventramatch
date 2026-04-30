@@ -512,6 +512,32 @@ export const submitVerificationSchema = z.object({
 });
 export type SubmitVerificationInput = z.infer<typeof submitVerificationSchema>;
 
+const FREEMAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+  "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "mac.com",
+  "protonmail.com", "proton.me", "aol.com", "mail.com", "zoho.com",
+  "yandex.com", "gmx.com", "gmx.de", "fastmail.com",
+]);
+
+export const submitEmploymentVerificationSchema = z
+  .object({
+    employer: z.string().trim().min(2, "Employer name too short.").max(100, "Employer name too long."),
+    workEmail: z.string().trim().email("Enter a valid work email.").max(254),
+  })
+  .refine(
+    (v) => {
+      const domain = v.workEmail.split("@")[1]?.toLowerCase();
+      return domain && !FREEMAIL_DOMAINS.has(domain);
+    },
+    { message: "Use your work email — free-mail providers can't prove employment.", path: ["workEmail"] },
+  )
+  .transform((v) => ({
+    ...v,
+    employerDomain: v.workEmail.split("@")[1]!.toLowerCase(),
+  }));
+
+export type SubmitEmploymentVerificationInput = z.output<typeof submitEmploymentVerificationSchema>;
+
 export const requestReferenceSchema = z.object({
   referee_email: z
     .string()

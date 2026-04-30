@@ -42,6 +42,8 @@ import {
 } from "@/lib/intros/query";
 import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
 import { PublishedBanner } from "@/components/account/published-banner";
+import { CompletionCelebration } from "@/components/profile/completion-celebration";
+import { withUserRls } from "@/lib/db";
 import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +69,7 @@ export default async function DashboardPage() {
       ? investorCompletionWithDepth(userId)
       : founderCompletionWithDepth(userId);
 
-  const [completion, stats, feedItems, introCounts, recentViewers] = await Promise.all([
+  const [completion, stats, feedItems, introCounts, recentViewers, celebrated] = await Promise.all([
     completionPromise,
     fetchProfileStats(userId),
     role === "investor"
@@ -75,32 +77,46 @@ export default async function DashboardPage() {
       : fetchFeedForFounder(userId, { limit: 3 }),
     fetchIntroBadgeCounts(userId),
     fetchRecentViewers(userId, { limit: 8 }),
+    withUserRls<boolean>(userId, async (sql) => {
+      const rows = await sql<{ celebrated_completion_at: Date | null }[]>`
+        select celebrated_completion_at from public.users where id = ${userId} limit 1
+      `;
+      return Boolean(rows[0]?.celebrated_completion_at);
+    }),
   ]);
+
+  const celebration = <CompletionCelebration pct={completion.pct} celebrated={celebrated} />;
 
   if (role === "investor") {
     return (
-      <InvestorDashboard
-        firstName={firstName}
-        accountLabel={accountLabel}
-        completion={completion}
-        stats={stats}
-        feedItems={feedItems as FeedStartupCard[]}
-        introCounts={introCounts}
-        recentViewers={recentViewers}
-      />
+      <>
+        {celebration}
+        <InvestorDashboard
+          firstName={firstName}
+          accountLabel={accountLabel}
+          completion={completion}
+          stats={stats}
+          feedItems={feedItems as FeedStartupCard[]}
+          introCounts={introCounts}
+          recentViewers={recentViewers}
+        />
+      </>
     );
   }
 
   return (
-    <FounderDashboard
-      firstName={firstName}
-      accountLabel={accountLabel}
-      completion={completion}
-      stats={stats}
-      feedItems={feedItems as FeedInvestorCard[]}
-      introCounts={introCounts}
-      recentViewers={recentViewers}
-    />
+    <>
+      {celebration}
+      <FounderDashboard
+        firstName={firstName}
+        accountLabel={accountLabel}
+        completion={completion}
+        stats={stats}
+        feedItems={feedItems as FeedInvestorCard[]}
+        introCounts={introCounts}
+        recentViewers={recentViewers}
+      />
+    </>
   );
 }
 

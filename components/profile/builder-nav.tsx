@@ -59,7 +59,7 @@ export function BuilderNav({ completion, wizardStep, totalWizardSteps }: Props) 
 
   return (
     <div
-      className="flex flex-wrap items-center gap-4 border-b bg-[color:var(--color-surface)] px-5 py-3 md:px-8"
+      className="sticky top-14 z-20 flex flex-wrap items-center gap-4 border-b bg-[color:var(--color-surface)]/95 px-5 py-3 backdrop-blur md:px-8"
       style={{ borderColor: "var(--color-border)" }}
     >
       {/* Overall % */}

@@ -10,7 +10,7 @@ import GitHub from "next-auth/providers/github";
 
 const PROTECTED_PATHS = [
   "/dashboard", "/settings", "/profile", "/post-auth", "/homepage",
-  "/feed", "/matches", "/p", "/build", "/inbox", "/searches",
+  "/feed", "/matches", "/p", "/build", "/inbox", "/searches", "/notifications", "/activity",
 ];
 const ONBOARDING_PATHS = ["/onboarding"];
 const AUTH_PATHS = ["/sign-in", "/sign-up"];

@@ -19,6 +19,7 @@
  */
 
 import { useState, useTransition } from "react";
+import { SaveIndicator, type SaveStatus } from "@/components/profile/save-indicator";
 import {
   saveStartupTeamAction,
   saveStartupRoundDetailsAction,
@@ -94,25 +95,15 @@ function SaveBar({
   result: { ok: boolean; message: string } | null;
   onSave: () => void;
 }) {
+  const status: SaveStatus = saving ? "saving" : result?.ok === false ? "error" : result?.ok === true ? "saved" : "idle";
   return (
-    <div className="mt-4 flex items-center gap-3">
-      <button
-        type="button"
-        disabled={saving}
-        onClick={onSave}
-        className="h-9 px-4 text-[13px] font-medium text-white disabled:opacity-50"
-        style={{ background: "var(--color-brand)" }}
-      >
-        {saving ? "Saving…" : "Save section"}
-      </button>
-      {result ? (
-        <p
-          className={`text-[12.5px] ${result.ok ? "text-[var(--color-text-muted)]" : "text-red-600"}`}
-        >
-          {result.message}
-        </p>
-      ) : null}
-    </div>
+    <SaveIndicator
+      variant="bar"
+      status={status}
+      errorMessage={result?.ok === false ? result.message : null}
+      onSave={onSave}
+      label="Save section"
+    />
   );
 }
 
