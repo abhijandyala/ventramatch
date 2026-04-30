@@ -62,17 +62,21 @@ export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   events: {
     async signIn({ user, account, isNewUser }) {
       console.log(`[auth:event:signIn] userId=${user.id} provider=${account?.provider} isNewUser=${isNewUser}`);
-      if (!isNewUser || !user.id || !account || account.provider === "credentials") {
+      if (!user.id || !account || account.provider === "credentials") {
         return;
       }
+      // Every OAuth sign-in: ensure email_verified_at is set (backfills users
+      // created before the adapter fix landed) and that onboarding_completed
+      // has a non-null default. Both are no-ops if already correct.
       await withUserRls(null, async (sql) => {
         await sql`
           update public.users
-          set onboarding_completed = coalesce(onboarding_completed, false)
+          set email_verified_at = coalesce(email_verified_at, now()),
+              onboarding_completed = coalesce(onboarding_completed, false)
           where id = ${user.id!}
         `;
       });
-      console.log(`[auth:event:signIn] initialized onboarding_completed for new OAuth user ${user.id}`);
+      console.log(`[auth:event:signIn] ensured verified+onboarding flags for OAuth user ${user.id} (isNewUser=${isNewUser})`);
     },
     async createUser({ user }) {
       console.log(`[auth:event:createUser] userId=${user.id} email=${user.email}`);
