@@ -14,6 +14,7 @@
  */
 
 import type { Database } from "@/types/database";
+import { sectorMatches } from "@/lib/profile/sectors";
 
 type Startup = Database["public"]["Tables"]["startups"]["Row"];
 type Investor = Database["public"]["Tables"]["investors"]["Row"];
@@ -109,10 +110,10 @@ export function scoreMatch(
 }
 
 function sectorScore(startupIndustry: string, investorSectors: string[]): number {
-  if (investorSectors.length === 0) return 0;
-  const norm = (s: string) => s.trim().toLowerCase();
-  const target = norm(startupIndustry);
-  return investorSectors.some((s) => norm(s) === target) ? 1 : 0;
+  if (investorSectors.length === 0 || !startupIndustry) return 0;
+  // Use canonical normalisation so legacy aliases ("Healthcare") match
+  // canonical labels ("Healthtech") and vice versa. See lib/profile/sectors.ts.
+  return sectorMatches(startupIndustry, investorSectors) ? 1 : 0;
 }
 
 function stageScore(

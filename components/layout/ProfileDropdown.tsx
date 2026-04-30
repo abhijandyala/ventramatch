@@ -12,26 +12,26 @@ import {
   LogOut,
   ChevronDown,
 } from "lucide-react";
+import { Avatar } from "@/components/profile/avatar";
 
 type Role = "founder" | "investor" | null;
 
 type ProfileDropdownProps = {
   role: Role;
   name: string;
+  /** Sprint 9.5.C: stable id used for the deterministic initials-fallback colour. */
+  userId?: string;
+  /**
+   * Sprint 9.5.C: pre-resolved avatar URL (uploaded > OAuth > null).
+   * Caller (always a server component above us) computes this once via
+   * lib/profile/avatar.ts → resolveAvatarUrl. We render via <Avatar>.
+   */
+  avatarSrc?: string | null;
 };
 
-export function ProfileDropdown({ role, name }: ProfileDropdownProps) {
+export function ProfileDropdown({ role, name, userId, avatarSrc = null }: ProfileDropdownProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const initials = name
-    ? name
-        .split(" ")
-        .slice(0, 2)
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-    : "VM";
 
   useEffect(() => {
     function handleOutsideClick(e: MouseEvent) {
@@ -75,17 +75,12 @@ export function ProfileDropdown({ role, name }: ProfileDropdownProps) {
           aria-haspopup="menu"
           className="flex h-9 items-center gap-1 shrink-0 transition-opacity duration-[120ms] hover:opacity-75"
         >
-          <div
-            className="grid h-9 w-9 place-items-center font-mono text-[11px] font-semibold uppercase tracking-tight"
-            style={{
-              background: "var(--color-brand-tint)",
-              color: "var(--color-brand-strong)",
-              borderRadius: "8px",
-              boxShadow: "0 0 0 1px var(--color-border)",
-            }}
-          >
-            {initials}
-          </div>
+          <Avatar
+            id={userId ?? name ?? "vm"}
+            name={name}
+            src={avatarSrc}
+            size="sm"
+          />
           <ChevronDown
             size={12}
             strokeWidth={2}

@@ -45,7 +45,17 @@ const COPY: Record<Role, { headline: string }> = {
   investor: { headline: "Startups in your thesis." },
 };
 
-export default function HomePageClient({ role, name }: { role: Role; name: string }) {
+export default function HomePageClient({
+  role,
+  name,
+  userId,
+  avatarSrc,
+}: {
+  role: Role;
+  name: string;
+  userId?: string;
+  avatarSrc?: string | null;
+}) {
   const copy = COPY[role];
 
   return (
@@ -54,7 +64,7 @@ export default function HomePageClient({ role, name }: { role: Role; name: strin
       className="flex min-h-screen flex-col bg-[color:var(--color-bg)] text-[color:var(--color-text)]"
     >
       <PixelReveal />
-      <ProductNav role={role} name={name} />
+      <ProductNav role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
 
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
         <OrbBackdrop />
@@ -195,7 +205,17 @@ const NAV_LINKS: Array<{ label: string; href: string }> = [
   { label: "Dashboard", href: "/dashboard" },
 ];
 
-function ProductNav({ role, name }: { role: Role; name: string }) {
+function ProductNav({
+  role,
+  name,
+  userId,
+  avatarSrc,
+}: {
+  role: Role;
+  name: string;
+  userId?: string;
+  avatarSrc?: string | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -221,7 +241,7 @@ function ProductNav({ role, name }: { role: Role; name: string }) {
           </nav>
         </div>
 
-        <ProfileDropdown role={role} name={name} />
+        <ProfileDropdown role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
       </div>
     </header>
   );

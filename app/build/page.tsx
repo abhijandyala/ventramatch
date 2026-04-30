@@ -22,6 +22,9 @@ type StartupRow = {
   traction: string | null;
   location: string | null;
   deck_url: string | null;
+  deck_storage_key: string | null;
+  deck_filename: string | null;
+  deck_uploaded_at: string | null;
   website: string | null;
 };
 
@@ -44,7 +47,8 @@ export default async function BuildPage() {
     const [s, u] = await Promise.all([
       sql<StartupRow[]>`
         select id, name, one_liner, industry, stage, raise_amount,
-               traction, location, deck_url, website
+               traction, location, deck_url, deck_storage_key,
+               deck_filename, deck_uploaded_at, website
         from public.startups
         where user_id = ${userId}
         limit 1
@@ -67,7 +71,9 @@ export default async function BuildPage() {
       {
         ...rawDepth,
         parent: {
+          id: both.startup.id,
           deck_url: both.startup.deck_url,
+          deck_storage_key: both.startup.deck_storage_key,
           traction: both.startup.traction,
         },
       },
@@ -123,6 +129,8 @@ export default async function BuildPage() {
     deck: {
       ...EMPTY_FOUNDER_DRAFT.deck,
       url: both.startup?.deck_url ?? "",
+      fileName: both.startup?.deck_filename ?? "",
+      uploadedAt: both.startup?.deck_uploaded_at ?? null,
     },
     founder: {
       ...EMPTY_FOUNDER_DRAFT.founder,

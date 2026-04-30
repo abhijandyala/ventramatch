@@ -18,6 +18,7 @@ import type {
   SubmitInvestorInput,
   DraftInvestorInput,
 } from "@/lib/validation/applications";
+import { INVESTOR_SECTORS } from "@/lib/profile/sectors";
 import {
   saveInvestorDraftAction,
   submitInvestorApplicationAction,
@@ -152,12 +153,9 @@ const TYPES: { key: InvestorType; label: string; note: string }[] = [
   { key: "cvc",       label: "Corporate VC",     note: "Strategic + financial returns" },
 ];
 
-const SECTOR_OPTIONS = [
-  "AI / ML", "SaaS", "Fintech", "Healthtech", "Climate", "DevTools",
-  "Consumer", "Marketplace", "Hardware", "Bio", "Defense", "Robotics",
-  "Web3", "EdTech", "Real estate", "Industrial", "Logistics",
-  "Cybersecurity", "Data infra", "Govtech",
-] as const;
+// Founders and investors share one sector taxonomy so matching equality
+// holds. See lib/profile/sectors.ts.
+const SECTOR_OPTIONS = INVESTOR_SECTORS;
 
 const STAGES_WITH_NOTES: { key: StartupStage; label: string; note: string }[] = [
   { key: "idea",          label: "Idea",      note: "Just an idea" },

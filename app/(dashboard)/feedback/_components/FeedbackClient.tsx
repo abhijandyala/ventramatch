@@ -54,10 +54,14 @@ export function FeedbackClient({
   role,
   name,
   email,
+  userId,
+  avatarSrc,
 }: {
   role: Role;
   name: string;
   email: string;
+  userId?: string;
+  avatarSrc?: string | null;
 }) {
   const [type, setType] = useState<FeedbackType>("general");
   const [title, setTitle] = useState("");
@@ -78,7 +82,7 @@ export function FeedbackClient({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
-      <AppNav role={role} name={name} />
+      <AppNav role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
 
       {/* Page header */}
       <section
@@ -379,7 +383,7 @@ export function FeedbackClient({
                 profiles, and privacy.
               </p>
               <Link
-                href="/help"
+                href={"/help" as Route}
                 className="inline-flex items-center gap-1.5 text-[13px] font-medium transition-opacity duration-[120ms] hover:opacity-70"
                 style={{ color: "var(--color-brand-ink)" }}
               >
@@ -460,7 +464,17 @@ function SuccessState({
 // App nav
 // ---------------------------------------------------------------------------
 
-function AppNav({ role, name }: { role: Role; name: string }) {
+function AppNav({
+  role,
+  name,
+  userId,
+  avatarSrc,
+}: {
+  role: Role;
+  name: string;
+  userId?: string;
+  avatarSrc?: string | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -488,7 +502,7 @@ function AppNav({ role, name }: { role: Role; name: string }) {
             ))}
           </nav>
         </div>
-        <ProfileDropdown role={role} name={name} />
+        <ProfileDropdown role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
       </div>
     </header>
   );

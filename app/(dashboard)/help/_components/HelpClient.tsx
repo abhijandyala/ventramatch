@@ -95,10 +95,20 @@ const GUIDES = [
 // Main export
 // ---------------------------------------------------------------------------
 
-export function HelpClient({ role, name }: { role: Role; name: string }) {
+export function HelpClient({
+  role,
+  name,
+  userId,
+  avatarSrc,
+}: {
+  role: Role;
+  name: string;
+  userId?: string;
+  avatarSrc?: string | null;
+}) {
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
-      <AppNav role={role} name={name} />
+      <AppNav role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
 
       {/* Page header */}
       <section
@@ -411,7 +421,17 @@ function ContactCard({
 // App nav
 // ---------------------------------------------------------------------------
 
-function AppNav({ role, name }: { role: Role; name: string }) {
+function AppNav({
+  role,
+  name,
+  userId,
+  avatarSrc,
+}: {
+  role: Role;
+  name: string;
+  userId?: string;
+  avatarSrc?: string | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -439,7 +459,7 @@ function AppNav({ role, name }: { role: Role; name: string }) {
             ))}
           </nav>
         </div>
-        <ProfileDropdown role={role} name={name} />
+        <ProfileDropdown role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
       </div>
     </header>
   );

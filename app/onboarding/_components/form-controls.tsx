@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { STARTUP_SECTORS } from "@/lib/profile/sectors";
 
 /* ─── Field ─────────────────────────────────────────────────────────────── */
 
@@ -154,28 +155,12 @@ export function Select({ id, label, value, onChange, error, children }: SelectPr
 
 /* ─── SectorChips ────────────────────────────────────────────────────────── */
 
-const SECTOR_OPTIONS = [
-  "AI / ML",
-  "Climate",
-  "Fintech",
-  "Healthcare",
-  "EdTech",
-  "Consumer",
-  "Enterprise SaaS",
-  "Hardware",
-  "Crypto / Web3",
-  "Biotech",
-  "E-commerce",
-  "Dev Tools",
-  "Media",
-  "Marketplace",
-  "Deep Tech",
-  "Future of Work",
-  "Space",
-  "Defense",
-  "Gaming",
-  "Mobility",
-];
+// Sector taxonomy: shared canonical list. Pre-Sprint-9.5 this was 20+
+// onboarding-specific names (Healthcare vs Healthtech, Bio vs Biotech)
+// that silently broke matching against the founder/investor builders.
+// See lib/profile/sectors.ts for the alias map that preserves backward
+// compatibility for any rows persisted under old names.
+const SECTOR_OPTIONS = STARTUP_SECTORS;
 
 type SectorChipsProps = {
   value: string[];

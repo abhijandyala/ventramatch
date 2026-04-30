@@ -29,6 +29,12 @@ function inputAsRow(userId: string, data: SubmitFounderInput): StartupRow {
     traction: data.traction ?? null,
     location: data.location ?? null,
     deck_url: data.deckUrl ?? null,
+    // Sprint 9.5.B: deck upload writes these out-of-band via /api/deck/upload,
+    // not through this draft path. The completion check below treats deck_url
+    // as the deck signal, so leaving these null is fine here.
+    deck_storage_key: null,
+    deck_filename: null,
+    deck_uploaded_at: null,
     website: data.website ?? null,
     created_at: now,
     updated_at: now,

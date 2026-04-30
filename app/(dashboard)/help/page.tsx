@@ -15,6 +15,8 @@ export default async function HelpPage() {
 
   const role = session.user.role as "founder" | "investor" | null;
   const name = session.user.name ?? "";
+  const userId = session.user.id;
+  const avatarSrc = session.user.image ?? null;
 
-  return <HelpClient role={role} name={name} />;
+  return <HelpClient role={role} name={name} userId={userId} avatarSrc={avatarSrc} />;
 }

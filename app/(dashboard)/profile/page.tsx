@@ -21,11 +21,22 @@ export default async function ProfilePage({ searchParams }: PageProps) {
   const role = session.user.role as "founder" | "investor" | null;
   const name = session.user.name ?? "";
   const email = session.user.email ?? "";
+  const userId = session.user.id;
+  const avatarSrc = session.user.image ?? null;
 
   const { tab } = await searchParams;
   const validTabs = ["personal", "founder", "investor", "settings"] as const;
   type TabId = (typeof validTabs)[number];
   const initialTab = validTabs.includes(tab as TabId) ? (tab as TabId) : undefined;
 
-  return <ProfileTabs role={role} name={name} email={email} initialTab={initialTab} />;
+  return (
+    <ProfileTabs
+      role={role}
+      name={name}
+      email={email}
+      initialTab={initialTab}
+      userId={userId}
+      avatarSrc={avatarSrc}
+    />
+  );
 }

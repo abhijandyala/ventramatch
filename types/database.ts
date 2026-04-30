@@ -346,6 +346,15 @@ export interface Database {
           role: UserRole;
           email_verified: boolean;
           account_label: AccountLabel;
+          /** Display name. Set during sign-up or pulled from OAuth. */
+          name: string | null;
+          /** OAuth provider profile picture URL (Google/LinkedIn/GitHub). */
+          image: string | null;
+          // Sprint 9.5.C — user-uploaded avatar via /api/avatar/upload.
+          // The read path prefers avatar_storage_key (presigned) over image.
+          avatar_storage_key: string | null;
+          avatar_url: string | null;
+          avatar_updated_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -355,6 +364,11 @@ export interface Database {
           role: UserRole;
           email_verified?: boolean;
           account_label?: AccountLabel;
+          name?: string | null;
+          image?: string | null;
+          avatar_storage_key?: string | null;
+          avatar_url?: string | null;
+          avatar_updated_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -372,6 +386,12 @@ export interface Database {
           traction: string | null;
           location: string | null;
           deck_url: string | null;
+          // Sprint 9.5.B — direct deck upload via /api/deck/upload.
+          // The download path /api/deck/[startupId] prefers
+          // deck_storage_key when present, falls back to deck_url.
+          deck_storage_key: string | null;
+          deck_filename: string | null;
+          deck_uploaded_at: string | null;
           website: string | null;
           created_at: string;
           updated_at: string;

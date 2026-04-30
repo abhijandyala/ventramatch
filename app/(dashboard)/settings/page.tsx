@@ -14,7 +14,9 @@ import { PauseAndDelete } from "@/components/settings/pause-and-delete";
 import { ManageCookies } from "@/components/settings/manage-cookies";
 import { DataExportButton } from "@/components/settings/data-export-button";
 import { BlockedUsersList } from "@/components/settings/blocked-users-list";
+import { AvatarSection } from "@/components/settings/avatar-section";
 import { fetchBlockedUsers } from "@/lib/safety/query";
+import { resolveAvatarUrl } from "@/lib/profile/avatar";
 import {
   DEFAULT_NOTIFICATION_PREFS,
   type NotificationPrefs,
@@ -44,6 +46,11 @@ type UserRow = {
   password_hash: string | null;
   tos_accepted_at: Date | string | null;
   privacy_accepted_at: Date | string | null;
+  // Sprint 9.5.C — for the avatar uploader.
+  image: string | null;
+  avatar_storage_key: string | null;
+  avatar_url: string | null;
+  avatar_updated_at: Date | string | null;
 };
 
 export default async function SettingsPage() {
@@ -61,7 +68,8 @@ export default async function SettingsPage() {
         sql<UserRow[]>`
           select email, name, notification_prefs, account_paused_at,
                  deletion_requested_at, password_hash,
-                 tos_accepted_at, privacy_accepted_at
+                 tos_accepted_at, privacy_accepted_at,
+                 image, avatar_storage_key, avatar_url, avatar_updated_at
           from public.users where id = ${userId} limit 1
         `,
         sql<{ provider: Provider }[]>`
@@ -89,6 +97,13 @@ export default async function SettingsPage() {
   const { user, providers, pendingEmailChange } = data;
   const prefs: NotificationPrefs = user.notification_prefs ?? DEFAULT_NOTIFICATION_PREFS;
   const hasPassword = Boolean(user.password_hash);
+
+  const avatarSrc = await resolveAvatarUrl({
+    storageKey: user.avatar_storage_key,
+    cachedUrl: user.avatar_url,
+    cachedAt: user.avatar_updated_at,
+    oauthImage: user.image,
+  });
 
   console.log(
     `[settings] userId=${userId} paused=${Boolean(user.account_paused_at)} deletion=${Boolean(user.deletion_requested_at)} providers=${providers.length}`,
@@ -141,7 +156,12 @@ export default async function SettingsPage() {
 
         <main className="min-w-0">
           <SettingsSection id="account" title="Account">
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-7">
+              <AvatarSection
+                userId={userId}
+                name={user.name}
+                initialSrc={avatarSrc}
+              />
               <Suspense fallback={null}>
                 <EmailChangeForm
                   currentEmail={user.email}

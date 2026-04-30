@@ -22,6 +22,12 @@ export type StartupDepthCounts = {
   teamMembers: number;
   tractionSignals: number;
   hasRoundDetails: boolean;
+  // Sprint 9.5 extensions — additive, default to 0/false when not provided
+  // so existing callers continue to compile and behave identically.
+  hasCapTable?: boolean;
+  hasMarketAnalysis?: boolean;
+  competitors?: number;
+  useOfFundsLines?: number;
 };
 
 export type InvestorDepthCounts = {
@@ -29,6 +35,10 @@ export type InvestorDepthCounts = {
   checkBands: number;
   portfolioEntries: number;
   hasTrackRecord: boolean;
+  // Sprint 9.5 extensions
+  hasDecisionProcess?: boolean;
+  valueAddEntries?: number;
+  antiPatternEntries?: number;
 };
 
 export const MIN_PUBLISH_PCT = 80;
@@ -44,6 +54,13 @@ type ChecklistItem = {
   done: boolean;
   /** Weight contribution toward completion %. */
   weight: number;
+  /**
+   * True for the original base wizard fields. The publish gate (80%) is
+   * computed against base items only — depth items are bonus that climb
+   * the ranking but never block publishing. Default true so any item that
+   * forgets to set this is treated as base.
+   */
+  base?: boolean;
 };
 
 export type CompletionResult = {
@@ -138,20 +155,54 @@ export function founderCompletion(
       done: row ? filledStr(row.deck_url) : false,
       weight: 20,
     },
-    // Depth-table items (bonus — lower weight so base profile still unlocks at 80%).
+    // Depth-table items (bonus — never gate publish; only climb completion %).
     {
       id: "team",
       label: "Add at least one team member",
-      href: "/build",
+      href: "/build#team",
       done: depth ? depth.teamMembers > 0 : false,
       weight: 5,
+      base: false,
     },
     {
       id: "roundDetails",
       label: "Fill in round details",
-      href: "/build",
+      href: "/build#round",
       done: depth ? depth.hasRoundDetails : false,
       weight: 2,
+      base: false,
+    },
+    {
+      id: "capTable",
+      label: "Add a cap-table summary",
+      href: "/build#cap-table",
+      done: depth?.hasCapTable === true,
+      weight: 2,
+      base: false,
+    },
+    {
+      id: "useOfFunds",
+      label: "Break down use of funds",
+      href: "/build#round",
+      done: depth ? (depth.useOfFundsLines ?? 0) > 0 : false,
+      weight: 2,
+      base: false,
+    },
+    {
+      id: "market",
+      label: "Add market analysis",
+      href: "/build#market",
+      done: depth?.hasMarketAnalysis === true,
+      weight: 3,
+      base: false,
+    },
+    {
+      id: "competitors",
+      label: "Name at least one competitor",
+      href: "/build#competitors",
+      done: depth ? (depth.competitors ?? 0) > 0 : false,
+      weight: 3,
+      base: false,
     },
   ];
 
@@ -244,9 +295,34 @@ export function investorCompletion(
     {
       id: "team",
       label: "Add at least one team member",
-      href: "/build/investor",
+      href: "/build/investor#team",
       done: depth ? depth.teamMembers > 0 : false,
       weight: 3,
+      base: false,
+    },
+    {
+      id: "decisionProcess",
+      label: "Document your decision process",
+      href: "/build/investor#decision",
+      done: depth?.hasDecisionProcess === true,
+      weight: 3,
+      base: false,
+    },
+    {
+      id: "valueAdd",
+      label: "List how you add value beyond capital",
+      href: "/build/investor#value-add",
+      done: depth ? (depth.valueAddEntries ?? 0) > 0 : false,
+      weight: 3,
+      base: false,
+    },
+    {
+      id: "antiPatterns",
+      label: "Name what you don't want to see (anti-patterns)",
+      href: "/build/investor#anti-patterns",
+      done: depth ? (depth.antiPatternEntries ?? 0) > 0 : false,
+      weight: 2,
+      base: false,
     },
   ];
 
@@ -254,17 +330,31 @@ export function investorCompletion(
 }
 
 function summarize(items: ChecklistItem[]): CompletionResult {
+  // Display % uses the FULL list (base + bonus depth items) — so the user
+  // sees their profile climb as they fill more depth.
   const totalWeight = items.reduce((sum, x) => sum + x.weight, 0);
   const earned = items
     .filter((x) => x.done)
     .reduce((sum, x) => sum + x.weight, 0);
   const pct = totalWeight === 0 ? 0 : Math.round((earned / totalWeight) * 100);
+
+  // Publish gate is computed against base items ONLY, so adding more depth
+  // items (Sprint 9.5) doesn't accidentally lock out previously-publishable
+  // partial profiles. base:true is the default — items must opt OUT to be
+  // treated as bonus.
+  const baseItems = items.filter((x) => x.base !== false);
+  const baseTotal = baseItems.reduce((sum, x) => sum + x.weight, 0);
+  const baseEarned = baseItems
+    .filter((x) => x.done)
+    .reduce((sum, x) => sum + x.weight, 0);
+  const basePct = baseTotal === 0 ? 0 : Math.round((baseEarned / baseTotal) * 100);
+
   const done = items.filter((x) => x.done);
   const missing = items.filter((x) => !x.done);
   return {
     pct: Math.min(100, Math.max(0, pct)),
     done,
     missing,
-    canPublish: pct >= MIN_PUBLISH_PCT,
+    canPublish: basePct >= MIN_PUBLISH_PCT,
   };
 }
