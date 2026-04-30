@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { headers } from "next/headers";
 import { Resend } from "resend";
 import { withUserRls } from "@/lib/db";
 
@@ -13,7 +14,25 @@ function getResend(): Resend | null {
   return _resend;
 }
 
-function getSiteUrl(): string {
+/**
+ * Derive the public site URL. Prefer the live request host (so production
+ * always points at production, dev at dev) and fall back to env vars when
+ * called outside a request context.
+ */
+async function getSiteUrl(): Promise<string> {
+  try {
+    const h = await headers();
+    const forwardedHost = h.get("x-forwarded-host");
+    const host = forwardedHost ?? h.get("host");
+    if (host) {
+      const proto =
+        h.get("x-forwarded-proto") ??
+        (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+      return `${proto}://${host}`.replace(/\/$/, "");
+    }
+  } catch {
+    // headers() throws outside a request context — fall through to env.
+  }
   const url =
     process.env.NEXT_PUBLIC_SITE_URL ??
     process.env.AUTH_URL ??
@@ -99,7 +118,9 @@ export async function sendVerificationEmail(
     return { ok: false, error: "Could not generate verification link." };
   }
 
-  const link = `${getSiteUrl()}/api/auth/verify?token=${encodeURIComponent(token)}&identifier=${encodeURIComponent(email)}`;
+  const siteUrl = await getSiteUrl();
+  const link = `${siteUrl}/api/auth/verify?token=${encodeURIComponent(token)}&identifier=${encodeURIComponent(email)}`;
+  console.log(`[sendVerificationEmail] siteUrl=${siteUrl} email=${email}`);
 
   const resend = getResend();
   if (!resend) {

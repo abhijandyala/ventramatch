@@ -5,6 +5,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function siteUrl(req: NextRequest): URL {
+  // Honor proxy headers so we always use the public domain Railway sets,
+  // not the internal localhost:8080 the container sees.
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  if (forwardedHost) {
+    return new URL(`${forwardedProto ?? "https"}://${forwardedHost}`);
+  }
+  // Last-resort env override (NEXT_PUBLIC_SITE_URL or AUTH_URL)
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.AUTH_URL;
+  if (envUrl) {
+    try {
+      return new URL(envUrl);
+    } catch {
+      // fall through
+    }
+  }
   return new URL(req.nextUrl.origin);
 }
 
