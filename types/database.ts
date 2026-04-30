@@ -85,6 +85,22 @@ export type ReportReason =
 
 export type ReportStatus = "open" | "reviewing" | "actioned" | "dismissed";
 
+/**
+ * Equity ownership band for a startup team member. Bands rather than exact
+ * percent: avoids stale numbers and aligns with the legal posture in
+ * docs/legal.md (no investment advice, no exact-figure financial claims that
+ * could be relied on). Schema-level CHECK in 0012_profile_depth_team.sql.
+ */
+export type EquityPctBand = "under_5" | "5_15" | "15_30" | "30_50" | "over_50";
+
+export const EQUITY_PCT_BAND_LABELS: Record<EquityPctBand, string> = {
+  under_5: "Under 5%",
+  "5_15": "5–15%",
+  "15_30": "15–30%",
+  "30_50": "30–50%",
+  over_50: "50% or more",
+};
+
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   spam: "Spam or unsolicited promotion",
   harassment: "Harassment or abusive behavior",
@@ -454,6 +470,69 @@ export interface Database {
           send_after?: string;
         };
         Update: Partial<Database["public"]["Tables"]["email_outbox"]["Insert"]>;
+      };
+      startup_team_members: {
+        Row: {
+          id: string;
+          startup_id: string;
+          name: string;
+          role: string;
+          is_founder: boolean;
+          is_full_time: boolean;
+          bio: string | null;
+          prior_company: string | null;
+          prior_role: string | null;
+          linkedin_url: string | null;
+          github_url: string | null;
+          equity_pct_band: EquityPctBand | null;
+          linked_user_id: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_team_members"]["Row"],
+          | "id"
+          | "created_at"
+          | "updated_at"
+          | "is_founder"
+          | "is_full_time"
+          | "display_order"
+        > & {
+          id?: string;
+          is_founder?: boolean;
+          is_full_time?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_team_members"]["Insert"]>;
+      };
+      investor_team_members: {
+        Row: {
+          id: string;
+          investor_id: string;
+          name: string;
+          role: string;
+          is_decision_maker: boolean;
+          bio: string | null;
+          linkedin_url: string | null;
+          linked_user_id: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["investor_team_members"]["Row"],
+          "id" | "created_at" | "updated_at" | "is_decision_maker" | "display_order"
+        > & {
+          id?: string;
+          is_decision_maker?: boolean;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["investor_team_members"]["Insert"]>;
       };
     };
     Views: Record<string, never>;

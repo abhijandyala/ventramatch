@@ -48,11 +48,31 @@ public.users (id uuid PK = auth provider user id, email, role, …)
    │
    ├──┐
    │  └─ 1:1 ─ public.startups (founder)
+   │             └─ 1:N ─ public.startup_team_members (co-founders, key hires)
    │
    └─── 1:1 ─ public.investors (investor)
+                 └─ 1:N ─ public.investor_team_members (GPs, partners, scouts)
 
 public.interactions → trigger → public.matches (mutual like, opposite roles)
 ```
+
+### Profile depth (Sprint A)
+
+Child tables fan out from `startups` and `investors` so a profile can carry
+real depth — the team behind it, structured traction signals, round details
+in bands, and verifications — rather than the single freeform-string
+fields the original schema exposed. Each child table mirrors its parent's
+RLS posture (`select all`; the app layer enforces `account_label='verified'`
+plus the paused / deletion / block checks; insert/update/delete gated by
+ownership through a subquery against the parent). See
+[`db/migrations/0012_profile_depth_team.sql`](../db/migrations/0012_profile_depth_team.sql)
+onward; remaining child tables (round details, traction signals, investor
+depth, verifications) land in subsequent migrations in the same sprint.
+
+Verification of any claim made on a depth row (LinkedIn employment,
+domain ownership, references) lives on a separate `verifications` table
+landing in `0016`, so trust state never gets denormalized onto the claim
+itself.
 
 ### Why RLS is implemented in plain Postgres (not Supabase)
 
