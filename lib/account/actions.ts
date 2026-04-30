@@ -367,6 +367,27 @@ export async function disconnectProviderAction(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+//  Completion celebration — one-time stamp
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function markCelebratedAction(): Promise<ActionResult> {
+  const ctx = await requireUserId();
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+  try {
+    await withUserRls(ctx.userId, async (sql) => {
+      await sql`
+        update public.users
+        set celebrated_completion_at = now()
+        where id = ${ctx.userId} and celebrated_completion_at is null
+      `;
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not save." };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 //  Email change — request side. Confirmation runs in the route handler.
 // ──────────────────────────────────────────────────────────────────────────
 
