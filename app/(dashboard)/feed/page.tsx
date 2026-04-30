@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { MobileFilterToggle } from "@/components/feed/mobile-filter-toggle";
 import {
   fetchFeedForFounder,
   fetchFeedForInvestor,
@@ -102,10 +103,16 @@ function FeedShell({
         <AccountStatusBanner label={accountLabel} />
         <Disclaimer />
 
+        {/* Mobile: show a toggle button that opens filters in a drawer */}
+        <div className="mt-4 lg:hidden">
+          <Suspense fallback={null}>
+            <MobileFilterToggle role={role} />
+          </Suspense>
+        </div>
+
         <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
-          <div className="lg:sticky lg:top-6 lg:self-start">
-            {/* FilterPanel + SaveSearchButton both read URL params via the
-                hook — wrapped in Suspense so this RSC tree can render. */}
+          {/* Desktop sidebar — hidden on mobile (handled by drawer above) */}
+          <div className="hidden lg:sticky lg:top-6 lg:block lg:self-start">
             <Suspense fallback={<FilterPanelFallback />}>
               <FilterPanel role={role} />
             </Suspense>
