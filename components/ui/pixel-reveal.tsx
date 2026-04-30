@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
 import { gsap } from "gsap";
 
 const GREEN_PALETTE = [
@@ -9,55 +9,70 @@ const GREEN_PALETTE = [
   "#34d399", "#10b981", "#047857", "#a7f3d0", "#6ee7b7",
 ];
 
-export function PixelReveal() {
-  const pixelRef = useRef<HTMLDivElement>(null);
-  const [shouldPlay, setShouldPlay] = useState(false);
-  const [done, setDone] = useState(false);
-  const gridSize = 50;
+const GRID_SIZE = 50;
 
-  useEffect(() => {
+type Pixel = {
+  key: string;
+  color: string;
+  left: number;
+  top: number;
+  size: number;
+};
+
+function generatePixels(): Pixel[] {
+  const out: Pixel[] = [];
+  const size = 100 / GRID_SIZE;
+  for (let row = 0; row < GRID_SIZE; row++) {
+    for (let col = 0; col < GRID_SIZE; col++) {
+      out.push({
+        key: `${row}-${col}`,
+        color: GREEN_PALETTE[Math.floor(Math.random() * GREEN_PALETTE.length)],
+        left: col * size,
+        top: row * size,
+        size: size + 0.2,
+      });
+    }
+  }
+  return out;
+}
+
+export function PixelReveal() {
+  // Lazy init: synchronously read sessionStorage on first client render so
+  // pixels paint on first frame before any useEffect runs. SSR returns false.
+  const [shouldPlay] = useState(() => {
+    if (typeof window === "undefined") return false;
     try {
-      if (sessionStorage.getItem("vm:pixel-reveal") === "1") {
-        sessionStorage.removeItem("vm:pixel-reveal");
-        setShouldPlay(true);
-      }
-    } catch {}
-  }, []);
+      const flag = sessionStorage.getItem("vm:pixel-reveal") === "1";
+      if (flag) sessionStorage.removeItem("vm:pixel-reveal");
+      return flag;
+    } catch {
+      return false;
+    }
+  });
+
+  const [done, setDone] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Generate pixels once, only when we're going to play
+  const pixels = useMemo(() => (shouldPlay ? generatePixels() : []), [shouldPlay]);
 
   useEffect(() => {
     if (!shouldPlay) return;
-    const el = pixelRef.current;
+    const el = containerRef.current;
     if (!el) return;
 
-    el.innerHTML = "";
-    const size = 100 / gridSize;
+    const pixelEls = el.querySelectorAll<HTMLDivElement>("[data-p]");
+    if (!pixelEls.length) return;
 
-    for (let row = 0; row < gridSize; row++) {
-      for (let col = 0; col < gridSize; col++) {
-        const pixel = document.createElement("div");
-        pixel.style.cssText = `
-          position:absolute;
-          opacity:1;
-          background:${GREEN_PALETTE[Math.floor(Math.random() * GREEN_PALETTE.length)]};
-          width:${size + 0.15}%;
-          height:${size + 0.15}%;
-          left:${col * size}%;
-          top:${row * size}%;
-        `;
-        pixel.dataset.p = "1";
-        el.appendChild(pixel);
-      }
-    }
-
-    const pixels = el.querySelectorAll<HTMLDivElement>("[data-p]");
+    // Dissolve out, randomly staggered
     const dur = 0.9;
-    const stagger = dur / pixels.length;
+    const stagger = dur / pixelEls.length;
 
-    // Small delay so the homepage has time to paint underneath
-    gsap.delayedCall(0.15, () => {
-      gsap.to(pixels, {
+    // Brief hold so the homepage has time to paint underneath, then dissolve
+    gsap.delayedCall(0.25, () => {
+      gsap.to(pixelEls, {
         opacity: 0,
-        duration: 0.12,
+        duration: 0.14,
         stagger: { each: stagger, from: "random" },
         onComplete: () => setDone(true),
       });
@@ -68,7 +83,23 @@ export function PixelReveal() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]">
-      <div ref={pixelRef} className="absolute inset-0" />
+      <div ref={containerRef} className="absolute inset-0">
+        {pixels.map((p) => (
+          <div
+            key={p.key}
+            data-p="1"
+            style={{
+              position: "absolute",
+              background: p.color,
+              left: `${p.left}%`,
+              top: `${p.top}%`,
+              width: `${p.size}%`,
+              height: `${p.size}%`,
+              opacity: 1,
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }

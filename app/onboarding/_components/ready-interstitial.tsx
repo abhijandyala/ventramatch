@@ -63,13 +63,16 @@ export function ReadyInterstitial({ onComplete }: Props) {
     // Fade pixels in — covers the "Ready to MATCH" text
     gsap.to(pixels, {
       opacity: 1,
-      duration: 0.12,
+      duration: 0.14,
       stagger: { each: stagger, from: "random" },
     });
 
-    // Once fully covered, signal homepage to play dissolve-out, then navigate
-    gsap.delayedCall(dur, () => {
-      try { sessionStorage.setItem("vm:pixel-reveal", "1"); } catch {}
+    // Set the reveal flag NOW so the destination page renders pixels on
+    // its first paint. Then hold the green cover briefly before navigating
+    // so there's no visible gap during the page transition.
+    try { sessionStorage.setItem("vm:pixel-reveal", "1"); } catch {}
+
+    gsap.delayedCall(dur + 0.15, () => {
       if (onComplete) {
         onComplete();
       } else {

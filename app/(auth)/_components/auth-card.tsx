@@ -1,7 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Wordmark } from "@/components/landing/wordmark";
 import { ProviderButtons } from "./provider-buttons";
 import { EmailForm } from "./email-form";
@@ -90,6 +92,11 @@ export function AuthCard({ mode }: { mode: Mode }) {
             }}
           >
             <div className="w-full max-w-[440px]">
+              {mode === "sign-in" && (
+                <Suspense fallback={null}>
+                  <VerifiedBanner />
+                </Suspense>
+              )}
               <h2 className="text-[28px] font-semibold tracking-tight text-[var(--color-text)]">
                 {copy.heading}
               </h2>
@@ -129,6 +136,27 @@ export function AuthCard({ mode }: { mode: Mode }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function VerifiedBanner() {
+  const params = useSearchParams();
+  if (params.get("verified") !== "1") return null;
+  return (
+    <div
+      role="status"
+      className="mb-5 flex items-start gap-2 px-4 py-3 text-[13px] leading-[1.5]"
+      style={{
+        background: "var(--color-brand-tint)",
+        border: "1px solid var(--color-brand)",
+        color: "var(--color-brand-strong)",
+      }}
+    >
+      <span aria-hidden className="mt-0.5">✓</span>
+      <span>
+        Email verified. Sign in below to finish setting up your account.
+      </span>
     </div>
   );
 }

@@ -1,11 +1,14 @@
 "use server";
 
-import { signIn } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { signUpSchema, type SignUpInput } from "@/lib/validation/auth";
+import { sendVerificationEmail } from "@/lib/email/send-verification";
+import { checkAndStamp } from "@/lib/email/rate-limit";
 
-type ActionResult = { ok: true } | { ok: false; error: string };
+type ActionResult =
+  | { ok: true; email: string }
+  | { ok: false; error: string };
 
 export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
   const parsed = signUpSchema.safeParse(input);
@@ -41,17 +44,21 @@ export async function signUpAction(input: SignUpInput): Promise<ActionResult> {
     return { ok: false, error: "Could not create your account. Try again." };
   }
 
-  try {
-    await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-  } catch (error) {
-    console.error("[signUpAction] auto sign-in failed", error);
-    return { ok: false, error: "Account created but sign-in failed. Please sign in." };
+  // Rate-limit per email so a single user can't spam-create + spam-resend
+  const rate = checkAndStamp(`verify:${email}`);
+  if (!rate.ok) {
+    // Account is created, just rate-limited from sending — direct them to verify page
+    console.log(`[signUpAction] rate-limited send for ${email}, retry in ${rate.retryAfterSeconds}s`);
+    return { ok: true, email };
+  }
+
+  const sendResult = await sendVerificationEmail(email, name);
+  if (!sendResult.ok) {
+    // Email failed but account exists — still send them to the verify page where they can resend
+    console.error(`[signUpAction] verification email failed for ${email}`);
+    return { ok: true, email };
   }
 
   console.log(`[signUpAction] success for email=${email}`);
-  return { ok: true };
+  return { ok: true, email };
 }
