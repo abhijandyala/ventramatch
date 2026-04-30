@@ -23,6 +23,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { withUserRls } from "@/lib/db";
 import { requireWrite } from "@/lib/auth/access";
+import { sendReferenceRequestEmail } from "@/lib/email/send-reference-request";
 import {
   submitVerificationSchema,
   requestReferenceSchema,
@@ -120,6 +121,20 @@ export async function requestReferenceAction(
   const rawToken = randomBytes(32).toString("hex");
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");
 
+  // Fetch the requester's display name + company for the email subject line.
+  type UserMeta = { name: string | null; company_name: string | null };
+  let userMeta: UserMeta = { name: null, company_name: null };
+  try {
+    const rows = await withUserRls<UserMeta[]>(userId, async (sql) =>
+      sql<UserMeta[]>`
+        select name, company_name from public.users where id = ${userId} limit 1
+      `,
+    );
+    userMeta = rows[0] ?? userMeta;
+  } catch {
+    // Non-fatal — email will still send with generic copy.
+  }
+
   try {
     await withUserRls(userId, async (sql) => {
       // Unique index: one active (status='sent') request per
@@ -136,9 +151,7 @@ export async function requestReferenceAction(
         )
       `;
 
-      // Enqueue outbound reference request email.
-      // Template 'reference.requested' is future work in the email worker;
-      // the outbox row is created now so the worker can pick it up when ready.
+      // Outbox row for audit trail (and future worker).
       await sql`
         insert into public.email_outbox
           (user_id, template, payload)
@@ -149,7 +162,6 @@ export async function requestReferenceAction(
             refereeEmail: d.referee_email,
             refereeName: d.referee_name,
             relationship: d.relationship,
-            confirmToken: rawToken,
           })}::jsonb
         )
       `;
@@ -164,6 +176,20 @@ export async function requestReferenceAction(
       };
     }
     return { ok: false, error: parseError(e) };
+  }
+
+  // Send email directly via Resend (no in-repo outbox worker yet).
+  // If Resend isn't configured the sender logs the link to console for dev.
+  const emailResult = await sendReferenceRequestEmail({
+    rawToken,
+    requesterName: userMeta.name,
+    requesterCompany: userMeta.company_name,
+    refereeName: d.referee_name,
+    refereeEmail: d.referee_email.toLowerCase(),
+    relationship: d.relationship,
+  });
+  if (!emailResult.ok) {
+    return { ok: false, error: emailResult.error };
   }
 
   revalidatePath("/build");

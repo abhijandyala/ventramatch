@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
+import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
 import type { StartupStage, AccountLabel } from "@/types/database";
 import type { InvestorDepthView } from "@/lib/profile/visibility";
 import type {
@@ -199,10 +200,14 @@ export function InvestorBuilder({
   initial,
   accountLabel,
   depthView,
+  ownVerifications = [],
+  ownReferences = [],
 }: {
   initial: InvestorUiDraft;
   accountLabel: AccountLabel;
   depthView?: InvestorDepthView | null;
+  ownVerifications?: OwnVerification[];
+  ownReferences?: OwnReference[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -388,6 +393,13 @@ export function InvestorBuilder({
           <InvestorDepthEditor depth={depthView} />
         </section>
       ) : null}
+
+      <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+        <VerificationPanel
+          ownVerifications={ownVerifications}
+          ownReferences={ownReferences}
+        />
+      </section>
     </main>
   );
 }

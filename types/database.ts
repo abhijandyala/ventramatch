@@ -45,7 +45,8 @@ export type EmailTemplate =
   | "intro.accepted"
   | "intro.declined"
   | "intro.withdrawn"
-  | "intro.expired";
+  | "intro.expired"
+  | "reference.requested";
 
 export type IntroRequestStatus =
   | "pending"
