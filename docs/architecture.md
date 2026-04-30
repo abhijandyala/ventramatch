@@ -64,10 +64,21 @@ in bands, and verifications — rather than the single freeform-string
 fields the original schema exposed. Each child table mirrors its parent's
 RLS posture (`select all`; the app layer enforces `account_label='verified'`
 plus the paused / deletion / block checks; insert/update/delete gated by
-ownership through a subquery against the parent). See
-[`db/migrations/0012_profile_depth_team.sql`](../db/migrations/0012_profile_depth_team.sql)
-onward; remaining child tables (round details, traction signals, investor
-depth, verifications) land in subsequent migrations in the same sprint.
+ownership through a subquery against the parent).
+
+Sprint A migrations:
+
+- [`0012_profile_depth_team.sql`](../db/migrations/0012_profile_depth_team.sql) — `startup_team_members`, `investor_team_members`.
+- [`0013_profile_depth_round.sql`](../db/migrations/0013_profile_depth_round.sql) — `startup_round_details` (1:1; instrument, valuation band, lead-status state machine, target raise, close date, committed amount), `startup_cap_table_summary` (1:1; founder / employee pool / outside investor pct bands), `startup_use_of_funds_lines` (1:N per category with `pct_of_raise`).
+- `0014` — structured traction signals + market analysis + competitive landscape (next).
+- `0015` — investor depth (check bands per stage, portfolio, track record, decision process, value-add tags, anti-patterns) (next).
+- `0016` — verifications + references magic-link (next).
+
+**Bands, not exact figures, for anything that could read as financial advice
+or stale data**: equity ownership, valuation, fund size, dry powder. The
+founder's stated *ask* (target raise USD) is exact because it's their
+declared intent, not a market valuation — same convention as the existing
+`startups.raise_amount` column from 0001.
 
 Verification of any claim made on a depth row (LinkedIn employment,
 domain ownership, references) lives on a separate `verifications` table

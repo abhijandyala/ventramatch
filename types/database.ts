@@ -101,6 +101,85 @@ export const EQUITY_PCT_BAND_LABELS: Record<EquityPctBand, string> = {
   over_50: "50% or more",
 };
 
+// ──────────────────────────────────────────────────────────────────────────
+//  Round details (0013_profile_depth_round.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type RoundInstrument =
+  | "safe_post_money"
+  | "safe_pre_money"
+  | "priced_round"
+  | "convertible_note";
+
+export type RoundLeadStatus =
+  | "open"
+  | "soliciting_lead"
+  | "lead_committed"
+  | "oversubscribed";
+
+export type UseOfFundsCategory =
+  | "engineering"
+  | "sales_and_marketing"
+  | "operations"
+  | "runway_extension"
+  | "hiring"
+  | "infrastructure"
+  | "research_and_dev"
+  | "other";
+
+/**
+ * Valuation buckets are deliberately finer below $20M (where pre-seed and
+ * seed live). Stored as text + CHECK; revising buckets is a follow-up
+ * migration, not a forced enum-add.
+ */
+export type ValuationBand =
+  | "under_3m"
+  | "3_5m"
+  | "5_10m"
+  | "10_20m"
+  | "20_50m"
+  | "50_100m"
+  | "over_100m";
+
+export const VALUATION_BAND_LABELS: Record<ValuationBand, string> = {
+  under_3m: "Under $3M",
+  "3_5m": "$3–5M",
+  "5_10m": "$5–10M",
+  "10_20m": "$10–20M",
+  "20_50m": "$20–50M",
+  "50_100m": "$50–100M",
+  over_100m: "Over $100M",
+};
+
+export type FoundersPctBand =
+  | "under_50"
+  | "50_70"
+  | "70_85"
+  | "85_95"
+  | "over_95";
+
+export type EmployeePoolPctBand =
+  | "none"
+  | "under_10"
+  | "10_15"
+  | "15_20"
+  | "over_20";
+
+export type OutsideInvestorsPctBand =
+  | "none_yet"
+  | "under_15"
+  | "15_25"
+  | "25_35"
+  | "over_35";
+
+export type LastRoundAmountBand =
+  | "under_500k"
+  | "500k_1m"
+  | "1m_3m"
+  | "3m_10m"
+  | "10m_25m"
+  | "over_25m";
+
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
   spam: "Spam or unsolicited promotion",
   harassment: "Harassment or abusive behavior",
@@ -533,6 +612,80 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["investor_team_members"]["Insert"]>;
+      };
+      startup_round_details: {
+        Row: {
+          id: string;
+          startup_id: string;
+          instrument: RoundInstrument | null;
+          valuation_band: ValuationBand | null;
+          target_raise_usd: number | null;
+          min_check_usd: number | null;
+          lead_status: RoundLeadStatus;
+          close_by_date: string | null;
+          committed_amount_usd: number;
+          use_of_funds_summary: string | null;
+          instrument_terms_summary: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_round_details"]["Row"],
+          "id" | "created_at" | "updated_at" | "lead_status" | "committed_amount_usd"
+        > & {
+          id?: string;
+          lead_status?: RoundLeadStatus;
+          committed_amount_usd?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_round_details"]["Insert"]>;
+      };
+      startup_cap_table_summary: {
+        Row: {
+          id: string;
+          startup_id: string;
+          founders_pct_band: FoundersPctBand | null;
+          employee_pool_pct_band: EmployeePoolPctBand | null;
+          outside_investors_pct_band: OutsideInvestorsPctBand | null;
+          prior_raises_count: number;
+          last_round_amount_band: LastRoundAmountBand | null;
+          last_round_year: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_cap_table_summary"]["Row"],
+          "id" | "created_at" | "updated_at" | "prior_raises_count"
+        > & {
+          id?: string;
+          prior_raises_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_cap_table_summary"]["Insert"]>;
+      };
+      startup_use_of_funds_lines: {
+        Row: {
+          id: string;
+          startup_id: string;
+          category: UseOfFundsCategory;
+          pct_of_raise: number;
+          narrative: string | null;
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_use_of_funds_lines"]["Row"],
+          "id" | "created_at" | "updated_at" | "display_order"
+        > & {
+          id?: string;
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_use_of_funds_lines"]["Insert"]>;
       };
     };
     Views: Record<string, never>;
