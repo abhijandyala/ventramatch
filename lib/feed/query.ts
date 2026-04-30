@@ -8,6 +8,7 @@ import {
 } from "@/lib/profile/visibility";
 import type { FeedFilters } from "@/lib/feed/filters";
 import { resolveAvatarUrl } from "@/lib/profile/avatar";
+import { cacheable } from "@/lib/cache";
 import type {
   Database,
   InteractionAction,
@@ -457,7 +458,8 @@ export async function fetchRecentViewers(
 }
 
 export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
-  return withUserRls<ProfileStats>(userId, async (sql) => {
+  return cacheable(`profileStats:${userId}`, 60, () =>
+  withUserRls<ProfileStats>(userId, async (sql) => {
     const [interactionRows, matchRows] = await Promise.all([
       sql<{ action: InteractionAction; count: number }[]>`
         select action, count(*)::int as count
@@ -479,7 +481,7 @@ export async function fetchProfileStats(userId: string): Promise<ProfileStats> {
       if (row.action === "pass") stats.passes = row.count;
     }
     return stats;
-  });
+  }));
 }
 
 // ──────────────────────────────────────────────────────────────────────────
