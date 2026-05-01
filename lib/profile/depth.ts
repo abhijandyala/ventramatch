@@ -90,7 +90,8 @@ export async function fetchStartupDepth(
   startupId: string,
 ): Promise<StartupDepth> {
   return withUserRls<StartupDepth>(viewerId, async (sql) => {
-    const [team, round, capTable, useOfFunds, traction, market, competitors, narrative] =
+    // Fetch pre-0035 depth tables.
+    const [team, round, capTable, useOfFunds, traction, market, competitors] =
       await Promise.all([
         sql<StartupTeamMember[]>`
           select * from public.startup_team_members
@@ -127,12 +128,20 @@ export async function fetchStartupDepth(
           where startup_id = ${startupId}
           order by display_order asc, created_at asc
         `,
-        sql<StartupNarrative[]>`
-          select * from public.startup_narrative
-          where startup_id = ${startupId}
-          limit 1
-        `,
       ]);
+
+    // 0035: Fetch narrative separately with graceful fallback.
+    let narrative: StartupNarrative | null = null;
+    try {
+      const narrativeRows = await sql<StartupNarrative[]>`
+        select * from public.startup_narrative
+        where startup_id = ${startupId}
+        limit 1
+      `;
+      narrative = narrativeRows[0] ?? null;
+    } catch {
+      // Table doesn't exist yet — gracefully degrade.
+    }
 
     return {
       team,
@@ -142,7 +151,7 @@ export async function fetchStartupDepth(
       traction,
       market: market[0] ?? null,
       competitors,
-      narrative: narrative[0] ?? null,
+      narrative,
     };
   });
 }
