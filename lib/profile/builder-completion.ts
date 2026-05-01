@@ -59,7 +59,28 @@ export async function fetchStartupDepthCounts(
   userId: string,
 ): Promise<StartupDepthCounts> {
   return withUserRls<StartupDepthCounts>(userId, async (sql) => {
-    // Single query for base depth counts (pre-0035 tables).
+    // First resolve the user's startup_id. Depth tables key off startup_id,
+    // not user_id. If the user has no startup row yet, return all zeros.
+    const startupRows = await sql<{ id: string }[]>`
+      select id from public.startups where user_id = ${userId} limit 1
+    `;
+    const startupId = startupRows[0]?.id;
+
+    if (!startupId) {
+      return {
+        teamMembers: 0,
+        tractionSignals: 0,
+        hasRoundDetails: false,
+        hasCapTable: false,
+        hasMarketAnalysis: false,
+        competitors: 0,
+        useOfFundsLines: 0,
+        hasNarrative: false,
+        narrativeFieldsFilled: 0,
+      };
+    }
+
+    // Single query for base depth counts (pre-0035 tables) keyed by startup_id.
     type BaseRow = {
       team_count: number;
       traction_count: number;
@@ -71,13 +92,13 @@ export async function fetchStartupDepthCounts(
     };
     const baseRows = await sql<BaseRow[]>`
       select
-        (select count(*)::int from public.startup_team_members where user_id = ${userId}) as team_count,
-        (select count(*)::int from public.startup_traction_signals where user_id = ${userId}) as traction_count,
-        (select exists(select 1 from public.startup_round_details where user_id = ${userId})) as has_round,
-        (select exists(select 1 from public.startup_cap_table_summary where user_id = ${userId})) as has_cap_table,
-        (select exists(select 1 from public.startup_market_analysis where user_id = ${userId})) as has_market,
-        (select count(*)::int from public.startup_competitive_landscape where user_id = ${userId}) as competitor_count,
-        (select count(*)::int from public.startup_use_of_funds_lines where user_id = ${userId}) as use_of_funds_count
+        (select count(*)::int from public.startup_team_members where startup_id = ${startupId}) as team_count,
+        (select count(*)::int from public.startup_traction_signals where startup_id = ${startupId}) as traction_count,
+        (select exists(select 1 from public.startup_round_details where startup_id = ${startupId})) as has_round,
+        (select exists(select 1 from public.startup_cap_table_summary where startup_id = ${startupId})) as has_cap_table,
+        (select exists(select 1 from public.startup_market_analysis where startup_id = ${startupId})) as has_market,
+        (select count(*)::int from public.startup_competitive_landscape where startup_id = ${startupId}) as competitor_count,
+        (select count(*)::int from public.startup_use_of_funds_lines where startup_id = ${startupId}) as use_of_funds_count
     `;
     const base = baseRows[0];
 
@@ -90,22 +111,20 @@ export async function fetchStartupDepthCounts(
       const narrativeRows = await sql<NarrativeRow[]>`
         select
           exists(
-            select 1 from public.startup_narrative sn
-            join public.startups s on s.id = sn.startup_id
-            where s.user_id = ${userId}
+            select 1 from public.startup_narrative
+            where startup_id = ${startupId}
           ) as has_narrative,
           coalesce((
             select (
-              case when sn.problem_statement is not null and length(sn.problem_statement) > 10 then 1 else 0 end +
-              case when sn.target_customer is not null and length(sn.target_customer) > 10 then 1 else 0 end +
-              case when sn.product_summary is not null and length(sn.product_summary) > 10 then 1 else 0 end +
-              case when sn.technical_moat is not null and length(sn.technical_moat) > 10 then 1 else 0 end +
-              case when sn.why_we_win is not null and length(sn.why_we_win) > 10 then 1 else 0 end +
-              case when sn.founder_background is not null and length(sn.founder_background) > 10 then 1 else 0 end
+              case when problem_statement is not null and length(problem_statement) > 10 then 1 else 0 end +
+              case when target_customer is not null and length(target_customer) > 10 then 1 else 0 end +
+              case when product_summary is not null and length(product_summary) > 10 then 1 else 0 end +
+              case when technical_moat is not null and length(technical_moat) > 10 then 1 else 0 end +
+              case when why_we_win is not null and length(why_we_win) > 10 then 1 else 0 end +
+              case when founder_background is not null and length(founder_background) > 10 then 1 else 0 end
             )
-            from public.startup_narrative sn
-            join public.startups s on s.id = sn.startup_id
-            where s.user_id = ${userId}
+            from public.startup_narrative
+            where startup_id = ${startupId}
             limit 1
           ), 0)::int as narrative_fields_filled
       `;
@@ -151,6 +170,24 @@ export async function fetchInvestorDepthCounts(
   userId: string,
 ): Promise<InvestorDepthCounts> {
   return withUserRls<InvestorDepthCounts>(userId, async (sql) => {
+    // Resolve investor_id first — depth tables key off investor_id, not user_id.
+    const investorRows = await sql<{ id: string }[]>`
+      select id from public.investors where user_id = ${userId} limit 1
+    `;
+    const investorId = investorRows[0]?.id;
+
+    if (!investorId) {
+      return {
+        teamMembers: 0,
+        checkBands: 0,
+        portfolioEntries: 0,
+        hasTrackRecord: false,
+        hasDecisionProcess: false,
+        valueAddEntries: 0,
+        antiPatternEntries: 0,
+      };
+    }
+
     type Row = {
       team_count: number;
       check_band_count: number;
@@ -162,13 +199,13 @@ export async function fetchInvestorDepthCounts(
     };
     const rows = await sql<Row[]>`
       select
-        (select count(*)::int from public.investor_team_members where user_id = ${userId}) as team_count,
-        (select count(*)::int from public.investor_check_bands where user_id = ${userId}) as check_band_count,
-        (select count(*)::int from public.investor_portfolio where user_id = ${userId}) as portfolio_count,
-        (select exists(select 1 from public.investor_track_record where user_id = ${userId})) as has_track_record,
-        (select exists(select 1 from public.investor_decision_process where user_id = ${userId})) as has_decision_process,
-        (select count(*)::int from public.investor_value_add where user_id = ${userId}) as value_add_count,
-        (select count(*)::int from public.investor_anti_patterns where user_id = ${userId}) as anti_pattern_count
+        (select count(*)::int from public.investor_team_members where investor_id = ${investorId}) as team_count,
+        (select count(*)::int from public.investor_check_bands where investor_id = ${investorId}) as check_band_count,
+        (select count(*)::int from public.investor_portfolio where investor_id = ${investorId}) as portfolio_count,
+        (select exists(select 1 from public.investor_track_record where investor_id = ${investorId})) as has_track_record,
+        (select exists(select 1 from public.investor_decision_process where investor_id = ${investorId})) as has_decision_process,
+        (select count(*)::int from public.investor_value_add where investor_id = ${investorId}) as value_add_count,
+        (select count(*)::int from public.investor_anti_patterns where investor_id = ${investorId}) as anti_pattern_count
     `;
     const row = rows[0];
     return {
