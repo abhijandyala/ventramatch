@@ -59,9 +59,8 @@ export async function fetchStartupDepthCounts(
   userId: string,
 ): Promise<StartupDepthCounts> {
   return withUserRls<StartupDepthCounts>(userId, async (sql) => {
-    // Single query, aggregates. Cheaper than separate roundtrips.
-    // 0035: Added has_narrative and narrative_fields_filled for the new investor-grade content.
-    type Row = {
+    // Single query for base depth counts (pre-0035 tables).
+    type BaseRow = {
       team_count: number;
       traction_count: number;
       has_round: boolean;
@@ -69,10 +68,8 @@ export async function fetchStartupDepthCounts(
       has_market: boolean;
       competitor_count: number;
       use_of_funds_count: number;
-      has_narrative: boolean;
-      narrative_fields_filled: number;
     };
-    const rows = await sql<Row[]>`
+    const baseRows = await sql<BaseRow[]>`
       select
         (select count(*)::int from public.startup_team_members where user_id = ${userId}) as team_count,
         (select count(*)::int from public.startup_traction_signals where user_id = ${userId}) as traction_count,
@@ -80,38 +77,54 @@ export async function fetchStartupDepthCounts(
         (select exists(select 1 from public.startup_cap_table_summary where user_id = ${userId})) as has_cap_table,
         (select exists(select 1 from public.startup_market_analysis where user_id = ${userId})) as has_market,
         (select count(*)::int from public.startup_competitive_landscape where user_id = ${userId}) as competitor_count,
-        (select count(*)::int from public.startup_use_of_funds_lines where user_id = ${userId}) as use_of_funds_count,
-        (select exists(
-          select 1 from public.startup_narrative sn
-          join public.startups s on s.id = sn.startup_id
-          where s.user_id = ${userId}
-        )) as has_narrative,
-        (select coalesce((
-          select (
-            case when sn.problem_statement is not null and length(sn.problem_statement) > 10 then 1 else 0 end +
-            case when sn.target_customer is not null and length(sn.target_customer) > 10 then 1 else 0 end +
-            case when sn.product_summary is not null and length(sn.product_summary) > 10 then 1 else 0 end +
-            case when sn.technical_moat is not null and length(sn.technical_moat) > 10 then 1 else 0 end +
-            case when sn.why_we_win is not null and length(sn.why_we_win) > 10 then 1 else 0 end +
-            case when sn.founder_background is not null and length(sn.founder_background) > 10 then 1 else 0 end
-          )
-          from public.startup_narrative sn
-          join public.startups s on s.id = sn.startup_id
-          where s.user_id = ${userId}
-          limit 1
-        ), 0)::int) as narrative_fields_filled
+        (select count(*)::int from public.startup_use_of_funds_lines where user_id = ${userId}) as use_of_funds_count
     `;
-    const row = rows[0];
+    const base = baseRows[0];
+
+    // 0035: Narrative counts in a separate try/catch to gracefully handle
+    // the case where the table doesn't exist yet (migration not applied).
+    let hasNarrative = false;
+    let narrativeFieldsFilled = 0;
+    try {
+      type NarrativeRow = { has_narrative: boolean; narrative_fields_filled: number };
+      const narrativeRows = await sql<NarrativeRow[]>`
+        select
+          exists(
+            select 1 from public.startup_narrative sn
+            join public.startups s on s.id = sn.startup_id
+            where s.user_id = ${userId}
+          ) as has_narrative,
+          coalesce((
+            select (
+              case when sn.problem_statement is not null and length(sn.problem_statement) > 10 then 1 else 0 end +
+              case when sn.target_customer is not null and length(sn.target_customer) > 10 then 1 else 0 end +
+              case when sn.product_summary is not null and length(sn.product_summary) > 10 then 1 else 0 end +
+              case when sn.technical_moat is not null and length(sn.technical_moat) > 10 then 1 else 0 end +
+              case when sn.why_we_win is not null and length(sn.why_we_win) > 10 then 1 else 0 end +
+              case when sn.founder_background is not null and length(sn.founder_background) > 10 then 1 else 0 end
+            )
+            from public.startup_narrative sn
+            join public.startups s on s.id = sn.startup_id
+            where s.user_id = ${userId}
+            limit 1
+          ), 0)::int as narrative_fields_filled
+      `;
+      hasNarrative = narrativeRows[0]?.has_narrative ?? false;
+      narrativeFieldsFilled = narrativeRows[0]?.narrative_fields_filled ?? 0;
+    } catch {
+      // Table doesn't exist or query failed — gracefully degrade.
+    }
+
     return {
-      teamMembers: row?.team_count ?? 0,
-      tractionSignals: row?.traction_count ?? 0,
-      hasRoundDetails: row?.has_round ?? false,
-      hasCapTable: row?.has_cap_table ?? false,
-      hasMarketAnalysis: row?.has_market ?? false,
-      competitors: row?.competitor_count ?? 0,
-      useOfFundsLines: row?.use_of_funds_count ?? 0,
-      hasNarrative: row?.has_narrative ?? false,
-      narrativeFieldsFilled: row?.narrative_fields_filled ?? 0,
+      teamMembers: base?.team_count ?? 0,
+      tractionSignals: base?.traction_count ?? 0,
+      hasRoundDetails: base?.has_round ?? false,
+      hasCapTable: base?.has_cap_table ?? false,
+      hasMarketAnalysis: base?.has_market ?? false,
+      competitors: base?.competitor_count ?? 0,
+      useOfFundsLines: base?.use_of_funds_count ?? 0,
+      hasNarrative,
+      narrativeFieldsFilled,
     };
   });
 }
