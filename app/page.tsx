@@ -7,6 +7,7 @@ import { HowMatchingWorks } from "@/components/landing/how-matching-works";
 import { ProductVision } from "@/components/landing/product-vision";
 import { FAQ } from "@/components/landing/faq";
 import { auth } from "@/auth";
+import { signOutAction } from "@/lib/account/actions";
 
 /**
  * Landing page — Phase 2.5.
@@ -84,12 +85,14 @@ function Nav({ isLoggedIn, onboarded }: { isLoggedIn: boolean; onboarded: boolea
           <div className="ml-1 flex items-center gap-3">
             {isLoggedIn ? (
               <>
-                <a
-                  href="/api/auth/signout"
-                  className="text-sm font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
-                >
-                  Sign out
-                </a>
+                <form action={signOutAction}>
+                  <button
+                    type="submit"
+                    className="text-sm font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+                  >
+                    Sign out
+                  </button>
+                </form>
                 {cta && (
                   <a
                     href={cta.href}

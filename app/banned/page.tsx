@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Wordmark } from "@/components/landing/wordmark";
+import { signOutAction } from "@/lib/account/actions";
 
 export const metadata: Metadata = {
   title: "Account suspended — VentraMatch",
@@ -47,12 +48,14 @@ export default function BannedPage() {
             >
               Contact support
             </a>
-            <Link
-              href="/api/auth/signout"
-              className="inline-flex h-11 items-center justify-center text-[14px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
-            >
-              Sign out
-            </Link>
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="inline-flex h-11 w-full items-center justify-center text-[14px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+              >
+                Sign out
+              </button>
+            </form>
           </div>
         </div>
       </div>
