@@ -4,17 +4,18 @@ import {
   useCallback,
   useState,
   useTransition,
-  useRef,
-  useEffect,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, ChevronDown, Check } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
 import { DeckUploader } from "@/components/profile/deck-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
-import { founderCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
+import { BuilderNav } from "@/components/profile/builder-nav";
+import { ProfileWelcomeCard } from "@/components/profile/welcome-card";
+import { founderCompletion } from "@/lib/profile/completion";
 import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import type { StartupDepthView } from "@/lib/profile/visibility";
 import type {
@@ -34,7 +35,7 @@ function isReadOnly(label: AccountLabel): boolean {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  UI draft shape
+//  UI draft shape (richer than the canonical schema; collapses at submit)
 // ──────────────────────────────────────────────────────────────────────────
 
 export type FounderUiDraft = {
@@ -45,7 +46,7 @@ export type FounderUiDraft = {
     city: string;
     foundedYear: number | null;
   };
-  sectors: string[];
+  sectors: string[]; // up to 3 — first one becomes `industry` at submit
   stage: StartupStage | null;
   round: {
     targetRaise: number | null;
@@ -57,6 +58,14 @@ export type FounderUiDraft = {
     notableSignals: string;
     other: string;
   };
+  /**
+   * Deck has two coexisting representations:
+   *   - `url`: external link (DocSend / Drive / Notion). Saved on Continue.
+   *   - `fileName` + `uploadedAt`: present when a PDF was uploaded directly
+   *     to our S3 bucket via /api/deck/upload. The upload route writes the
+   *     storage key to the DB; `fileName` here is just for display.
+   * The download route prefers the uploaded file when both are set.
+   */
   deck: { url: string; fileName: string; uploadedAt: string | null };
   founder: {
     fullName: string;
@@ -77,9 +86,10 @@ export const EMPTY_FOUNDER_DRAFT: FounderUiDraft = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
-//  Mapping helpers
+//  Mapping: rich UI draft → flat schema the server expects
 // ──────────────────────────────────────────────────────────────────────────
 
+/** Best-effort 1-line summary that preserves what we collected. */
 function buildTractionString(t: FounderUiDraft["traction"]): string | undefined {
   const parts: string[] = [];
   if (t.mrr) parts.push(`MRR: $${t.mrr.toLocaleString()}`);
@@ -127,9 +137,34 @@ function toDraftInput(d: FounderUiDraft): DraftFounderInput {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  Constants
+//  Steps & UI constants
 // ──────────────────────────────────────────────────────────────────────────
 
+const STEPS = [
+  { key: "company", title: "Company" },
+  { key: "sector", title: "Sector" },
+  { key: "stage", title: "Stage" },
+  { key: "round", title: "Round" },
+  { key: "traction", title: "Traction" },
+  { key: "deck", title: "Deck" },
+  { key: "founder", title: "Founder" },
+  { key: "review", title: "Review" },
+] as const;
+
+const STEP_HEADERS = [
+  { title: "Tell us about your company.", sub: "These details are public on your profile. Investors see this first." },
+  { title: "What sector are you in?", sub: "Pick one — it's the largest single signal in the match score." },
+  { title: "What stage are you raising at?", sub: "We only show you investors who explicitly back your stage." },
+  { title: "Tell us about the round.", sub: "Visible only to investors after both sides opt in." },
+  { title: "What's your traction?", sub: "Be specific. Self-reported numbers are clearly labeled until verified." },
+  { title: "Add your deck.", sub: "Paste a link for now. Stays private until mutual interest unlocks." },
+  { title: "Verify it's really you.", sub: "We verify identity before any startup profile activates." },
+  { title: "Looking good. Review and publish.", sub: "Final pass before your profile goes live." },
+];
+
+// Sector taxonomy is centralised in lib/profile/sectors.ts so founder,
+// investor, onboarding, and matching all agree on names. See that file
+// for the rationale + alias map.
 const SECTOR_OPTIONS = STARTUP_SECTORS;
 
 const STAGES_WITH_NOTES: { key: StartupStage; label: string; note: string }[] = [
@@ -148,16 +183,9 @@ const STAGE_LABEL: Record<StartupStage, string> = {
   series_b_plus: "Series B+",
 };
 
-type TabId = "basics" | "depth" | "verifications";
-
-const TABS: { id: TabId; label: string }[] = [
-  { id: "basics", label: "Basics" },
-  { id: "depth", label: "Depth" },
-  { id: "verifications", label: "Verifications" },
-];
 
 // ──────────────────────────────────────────────────────────────────────────
-//  Main component
+//  Top-level component
 // ──────────────────────────────────────────────────────────────────────────
 
 export function FounderBuilder({
@@ -176,7 +204,7 @@ export function FounderBuilder({
   ownReferences?: OwnReference[];
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabId>("basics");
+  const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<FounderUiDraft>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -184,18 +212,10 @@ export function FounderBuilder({
   const [isPublishing, startPublishing] = useTransition();
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  const total = STEPS.length;
+  const t = STEP_HEADERS[step];
+  const isReview = step === total - 1;
   const readOnly = isReadOnly(accountLabel);
-
-  const completion = founderCompletion({
-    id: "", user_id: "", name: draft.company.name, one_liner: draft.company.description,
-    industry: draft.sectors[0] ?? "", stage: draft.stage ?? "idea",
-    raise_amount: draft.round.targetRaise, traction: draft.traction.notableSignals || null,
-    location: draft.company.city || null, deck_url: draft.deck.url || null,
-    deck_storage_key: draft.deck.fileName ? "present" : null,
-    deck_filename: draft.deck.fileName || null, deck_uploaded_at: null,
-    website: draft.company.website || null, startup_sectors: draft.sectors,
-    created_at: "", updated_at: "",
-  });
 
   const save = useCallback(
     (next?: FounderUiDraft) =>
@@ -231,6 +251,11 @@ export function FounderBuilder({
     setDraft((d) => ({ ...d, founder: { ...d.founder, ...p } }));
   }
 
+  async function handleContinue() {
+    const ok = await save();
+    if (ok) setStep((s) => Math.min(total - 1, s + 1));
+  }
+
   function handlePublish() {
     setErrors({});
     setFormError(null);
@@ -252,350 +277,221 @@ export function FounderBuilder({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg)]/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between px-6">
-          <div className="flex items-center gap-5">
-            <Wordmark size="md" />
-            <span className="hidden h-5 w-px bg-[var(--color-border)] sm:block" />
-            <span className="hidden text-[13px] font-medium text-[var(--color-text-muted)] sm:block">
-              Build your profile
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => save()}
-              disabled={isSaving || readOnly}
-              className="inline-flex items-center gap-2 text-[13px] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              {readOnly ? "Read-only" : isSaving ? "Saving..." : savedAt ? `Saved ${savedAt}` : "Save draft"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAndExit}
-              disabled={isSaving || readOnly}
-              className="text-[13px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-50"
-            >
-              Save & exit
-            </button>
-          </div>
+    <main className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 px-5 backdrop-blur md:px-8">
+        <div className="flex items-center gap-4">
+          <Wordmark size="sm" />
+          <span aria-hidden className="hidden h-4 w-px bg-[color:var(--color-border)] sm:block" />
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-text-muted)] sm:inline">
+            Build profile · Startup
+          </span>
+        </div>
+        <div className="flex items-center gap-5">
+          <button
+            type="button"
+            onClick={() => save()}
+            disabled={isSaving || readOnly}
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
+          >
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {readOnly ? "Read-only" : isSaving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Save draft"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveAndExit}
+            disabled={isSaving || readOnly}
+            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
+          >
+            Save &amp; exit
+          </button>
         </div>
       </header>
 
-      {/* Status banner */}
+      <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+        <div className="mx-auto max-w-[960px] px-5 py-7 md:px-8 md:py-8">
+          <Stepper step={step} setStep={setStep} />
+        </div>
+      </div>
+
+      <BuilderNav
+        completion={founderCompletion(
+          // We derive a lightweight completion from the draft state so the
+          // nav bar updates live as the user fills fields — no server trip.
+          {
+            id: "", user_id: "", name: draft.company.name, one_liner: draft.company.description,
+            industry: draft.sectors[0] ?? "", stage: draft.stage ?? "idea",
+            raise_amount: draft.round.targetRaise, traction: draft.traction.notableSignals || null,
+            location: draft.company.city || null, deck_url: draft.deck.url || null,
+            deck_storage_key: draft.deck.fileName ? "present" : null,
+            deck_filename: draft.deck.fileName || null, deck_uploaded_at: null,
+            website: draft.company.website || null, startup_sectors: draft.sectors,
+            created_at: "", updated_at: "",
+          },
+        )}
+        wizardStep={step}
+        totalWizardSteps={total}
+      />
+
       <BuilderBanner accountLabel={accountLabel} />
 
-      {/* Tab bar */}
-      <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="mx-auto max-w-[1120px] px-6">
-          <nav className="flex gap-1" aria-label="Profile sections">
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={[
-                    "relative px-5 py-4 text-[14px] font-medium transition-colors",
-                    isActive
-                      ? "text-[var(--color-text)]"
-                      : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
-                  ].join(" ")}
-                >
-                  {tab.label}
-                  {isActive && (
-                    <span className="absolute inset-x-0 bottom-0 h-[2px] bg-[var(--color-text)]" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
+      <ProfileWelcomeCard profileState={profileState} />
 
-      {/* Main content */}
-      <main className="mx-auto max-w-[1120px] px-6 py-10">
-        <div className="grid gap-10 lg:grid-cols-[1fr_320px]">
-          {/* Left column: Tab content */}
-          <div className="min-w-0">
-            {activeTab === "basics" && (
-              <BasicsTab
-                draft={draft}
-                errors={errors}
-                patchCompany={patchCompany}
-                patchRound={patchRound}
-                patchTraction={patchTraction}
-                patchDeck={patchDeck}
-                patchFounder={patchFounder}
-                setSectors={(s) => setDraft((d) => ({ ...d, sectors: s }))}
-                setStage={(s) => setDraft((d) => ({ ...d, stage: s }))}
-              />
-            )}
-            {activeTab === "depth" && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-[22px] font-semibold tracking-tight text-[var(--color-text)]">
-                    Add depth to your profile
-                  </h2>
-                  <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-muted)]">
-                    Team, round mechanics, traction details, and market context. These aren't required to publish, but they climb your match score.
-                  </p>
-                </div>
-                {depthView ? (
-                  <FounderDepthEditor depth={depthView} />
-                ) : (
-                  <div className="rounded-[12px] border border-dashed border-[var(--color-border)] p-8 text-center">
-                    <p className="text-[14px] text-[var(--color-text-muted)]">
-                      Complete the basics first to unlock depth fields.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            {activeTab === "verifications" && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-[22px] font-semibold tracking-tight text-[var(--color-text)]">
-                    Verifications
-                  </h2>
-                  <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-muted)]">
-                    Self-attested claims and references. Pure trust signal that investors look for.
-                  </p>
-                </div>
-                <VerificationPanel
-                  ownVerifications={ownVerifications}
-                  ownReferences={ownReferences}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Right column: Summary + Publish */}
-          <aside className="lg:sticky lg:top-24 lg:self-start">
-            <SummaryCard
-              draft={draft}
-              completion={completion}
-              formError={formError}
-              isPublishing={isPublishing}
-              readOnly={readOnly}
-              onPublish={handlePublish}
-            />
-          </aside>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  Basics tab with collapsible sections
-// ──────────────────────────────────────────────────────────────────────────
-
-function BasicsTab({
-  draft,
-  errors,
-  patchCompany,
-  patchRound,
-  patchTraction,
-  patchDeck,
-  patchFounder,
-  setSectors,
-  setStage,
-}: {
-  draft: FounderUiDraft;
-  errors: Record<string, string>;
-  patchCompany: (p: Partial<FounderUiDraft["company"]>) => void;
-  patchRound: (p: Partial<FounderUiDraft["round"]>) => void;
-  patchTraction: (p: Partial<FounderUiDraft["traction"]>) => void;
-  patchDeck: (p: Partial<FounderUiDraft["deck"]>) => void;
-  patchFounder: (p: Partial<FounderUiDraft["founder"]>) => void;
-  setSectors: (s: string[]) => void;
-  setStage: (s: StartupStage) => void;
-}) {
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(["company"]));
-
-  function toggle(id: string) {
-    setOpenSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  const sections = [
-    {
-      id: "company",
-      title: "Company",
-      subtitle: "Name, website, and what you do",
-      complete: Boolean(draft.company.name && draft.company.description),
-      content: <CompanySection draft={draft} patch={patchCompany} errors={errors} />,
-    },
-    {
-      id: "sector",
-      title: "Sector",
-      subtitle: "Up to 3 industries",
-      complete: draft.sectors.length > 0,
-      content: <SectorSection draft={draft} setSectors={setSectors} />,
-    },
-    {
-      id: "stage",
-      title: "Stage",
-      subtitle: "Your current fundraising stage",
-      complete: Boolean(draft.stage),
-      content: <StageSection draft={draft} setStage={setStage} />,
-    },
-    {
-      id: "round",
-      title: "Round",
-      subtitle: "How much you're raising",
-      complete: Boolean(draft.round.targetRaise),
-      content: <RoundSection draft={draft} patch={patchRound} errors={errors} />,
-    },
-    {
-      id: "traction",
-      title: "Traction",
-      subtitle: "Revenue, customers, growth",
-      complete: Boolean(draft.traction.mrr || draft.traction.customers || draft.traction.notableSignals),
-      content: <TractionSection draft={draft} patch={patchTraction} />,
-    },
-    {
-      id: "deck",
-      title: "Pitch deck",
-      subtitle: "Upload or link your deck",
-      complete: Boolean(draft.deck.url || draft.deck.fileName),
-      content: <DeckSection draft={draft} patch={patchDeck} errors={errors} />,
-    },
-    {
-      id: "founder",
-      title: "Founder",
-      subtitle: "Your identity for verification",
-      complete: Boolean(draft.founder.fullName && draft.founder.workEmail),
-      content: <FounderSection draft={draft} patch={patchFounder} errors={errors} />,
-    },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="mb-8">
-        <h2 className="text-[22px] font-semibold tracking-tight text-[var(--color-text)]">
-          The basics
-        </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-muted)]">
-          These details are required to publish your profile. Investors see this first.
+      <section className="mx-auto w-full max-w-[760px] px-5 py-12 md:px-8 md:py-16">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+          Step {String(step + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}
+          <span aria-hidden className="mx-2 text-[color:var(--color-border-strong)]">·</span>
+          {STEPS[step].title}
         </p>
-      </div>
-
-      {sections.map((section) => (
-        <CollapsibleSection
-          key={section.id}
-          id={section.id}
-          title={section.title}
-          subtitle={section.subtitle}
-          complete={section.complete}
-          isOpen={openSections.has(section.id)}
-          onToggle={() => toggle(section.id)}
+        <h1
+          className="mt-3 text-balance font-semibold tracking-[-0.014em] text-[color:var(--color-text-strong)]"
+          style={{ fontSize: "clamp(26px, 3vw, 34px)", lineHeight: 1.12 }}
         >
-          {section.content}
-        </CollapsibleSection>
-      ))}
-    </div>
-  );
-}
+          {t.title}
+        </h1>
+        <p className="mt-3 max-w-[58ch] text-[14.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
+          {t.sub}
+        </p>
 
-// ──────────────────────────────────────────────────────────────────────────
-//  Collapsible section with animation
-// ──────────────────────────────────────────────────────────────────────────
+        <div className="mt-10">
+          {step === 0 && <CompanyStep draft={draft} patch={patchCompany} errors={errors} />}
+          {step === 1 && <SectorStep draft={draft} setSectors={(s) => setDraft((d) => ({ ...d, sectors: s }))} />}
+          {step === 2 && <StageStep draft={draft} setStage={(s) => setDraft((d) => ({ ...d, stage: s }))} />}
+          {step === 3 && <RoundStep draft={draft} patch={patchRound} errors={errors} />}
+          {step === 4 && <TractionStep draft={draft} patch={patchTraction} />}
+          {step === 5 && <DeckStep draft={draft} patch={patchDeck} errors={errors} />}
+          {step === 6 && <FounderStep draft={draft} patch={patchFounder} errors={errors} />}
+          {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
+        </div>
 
-function CollapsibleSection({
-  id,
-  title,
-  subtitle,
-  complete,
-  isOpen,
-  onToggle,
-  children,
-}: {
-  id: string;
-  title: string;
-  subtitle: string;
-  complete: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | undefined>(undefined);
-
-  useEffect(() => {
-    if (contentRef.current) {
-      setHeight(contentRef.current.scrollHeight);
-    }
-  }, [children]);
-
-  return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-[var(--color-surface-2)]"
-        aria-expanded={isOpen}
-        aria-controls={`section-${id}`}
-      >
-        <div className="flex items-center gap-4">
-          <span
-            className={[
-              "flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold transition-colors",
-              complete
-                ? "bg-[var(--color-brand-tint)] text-[var(--color-brand-strong)]"
-                : "bg-[var(--color-surface-2)] text-[var(--color-text-faint)]",
-            ].join(" ")}
+        {formError ? (
+          <p
+            role="alert"
+            className="mt-6 rounded-[10px] border border-[color:var(--color-danger)] bg-[color:var(--color-bg)] px-4 py-3 text-[13px] text-[color:var(--color-danger)]"
           >
-            {complete ? <Check size={12} strokeWidth={2.5} /> : null}
-          </span>
-          <div>
-            <p className="text-[15px] font-semibold text-[var(--color-text)]">{title}</p>
-            <p className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">{subtitle}</p>
-          </div>
-        </div>
-        <ChevronDown
-          size={18}
-          strokeWidth={2}
-          className={[
-            "shrink-0 text-[var(--color-text-faint)] transition-transform duration-200",
-            isOpen ? "rotate-180" : "",
-          ].join(" ")}
-          style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
-        />
-      </button>
+            {formError}
+          </p>
+        ) : null}
+      </section>
 
-      <div
-        id={`section-${id}`}
-        style={{
-          height: isOpen ? height : 0,
-          opacity: isOpen ? 1 : 0,
-          transition: "height 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
-      >
-        <div ref={contentRef} className="border-t border-[var(--color-border)] px-6 py-6">
-          {children}
+      {depthView ? (
+        <section id="depth-editor" className="scroll-mt-16 mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+          <FounderDepthEditor depth={depthView} />
+        </section>
+      ) : null}
+
+      <section id="verification-panel" className="scroll-mt-16 mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+        <VerificationPanel
+          ownVerifications={ownVerifications}
+          ownReferences={ownReferences}
+        />
+      </section>
+
+      <footer className="sticky bottom-0 border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between px-5 py-4 md:px-8 md:py-5">
+          <button
+            type="button"
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={step === 0 || isSaving || isPublishing}
+            className="text-[13px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ← Back
+          </button>
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)] sm:inline">
+            {step + 1} / {total}
+          </span>
+          {!isReview ? (
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={isSaving || readOnly}
+              className="inline-flex items-center gap-2 rounded-[10px] bg-[color:var(--color-text-strong)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-text)] disabled:opacity-60"
+            >
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Continue →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={isPublishing || readOnly}
+              className="inline-flex items-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
+            >
+              {isPublishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Publish profile
+            </button>
+          )}
         </div>
-      </div>
-    </div>
+      </footer>
+    </main>
   );
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  Section contents
+//  Stepper
 // ──────────────────────────────────────────────────────────────────────────
 
-function CompanySection({
+function Stepper({ step, setStep }: { step: number; setStep: (i: number) => void }) {
+  return (
+    <ol className="flex items-start">
+      {STEPS.map((s, i) => {
+        const isActive = i === step;
+        const isComplete = i < step;
+        return (
+          <li key={s.key} className="flex min-w-0 flex-1 flex-col items-center">
+            <div className="flex w-full items-center">
+              <span
+                aria-hidden
+                className={[
+                  "h-[2px] flex-1 transition-colors",
+                  i === 0 ? "bg-transparent" : i <= step ? "bg-[color:var(--color-brand)]" : "bg-[color:var(--color-border)]",
+                ].join(" ")}
+              />
+              <button
+                type="button"
+                onClick={() => setStep(i)}
+                aria-current={isActive ? "step" : undefined}
+                aria-label={`Step ${i + 1}: ${s.title}`}
+                className={[
+                  "grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold transition-colors",
+                  isActive
+                    ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand)] text-white"
+                    : isComplete
+                      ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+                      : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-faint)]",
+                ].join(" ")}
+              >
+                {isComplete ? "✓" : i + 1}
+              </button>
+              <span
+                aria-hidden
+                className={[
+                  "h-[2px] flex-1 transition-colors",
+                  i === STEPS.length - 1 ? "bg-transparent" : i < step ? "bg-[color:var(--color-brand)]" : "bg-[color:var(--color-border)]",
+                ].join(" ")}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setStep(i)}
+              className={[
+                "mt-2.5 max-w-full truncate px-1 text-[11.5px] font-medium transition-colors",
+                isActive ? "text-[color:var(--color-text-strong)]" : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]",
+              ].join(" ")}
+            >
+              {s.title}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Steps
+// ──────────────────────────────────────────────────────────────────────────
+
+function CompanyStep({
   draft,
   patch,
   errors,
@@ -605,27 +501,47 @@ function CompanySection({
   errors: Record<string, string>;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
       <Field label="Company name" required error={errors.companyName}>
-        <Input placeholder="Acme Labs" value={draft.company.name} onChange={(v) => patch({ name: v })} />
+        <Input
+          placeholder="Acme Labs"
+          value={draft.company.name}
+          onChange={(v) => patch({ name: v })}
+        />
       </Field>
       <Field label="Website" error={errors.website}>
-        <Input placeholder="https://..." value={draft.company.website} onChange={(v) => patch({ website: v })} />
+        <Input
+          placeholder="https://..."
+          value={draft.company.website}
+          onChange={(v) => patch({ website: v })}
+        />
       </Field>
       <Field label="One-line description" full required error={errors.oneLiner}>
-        <Input placeholder="What you do, in one sentence." value={draft.company.description} onChange={(v) => patch({ description: v })} />
+        <Input
+          placeholder="What you do, in one sentence."
+          value={draft.company.description}
+          onChange={(v) => patch({ description: v })}
+        />
       </Field>
       <Field label="HQ city" error={errors.location}>
-        <Input placeholder="City, State / Country" value={draft.company.city} onChange={(v) => patch({ city: v })} />
+        <Input
+          placeholder="City, State / Country"
+          value={draft.company.city}
+          onChange={(v) => patch({ city: v })}
+        />
       </Field>
       <Field label="Founded">
-        <Input placeholder="YYYY" value={draft.company.foundedYear?.toString() ?? ""} onChange={(v) => patch({ foundedYear: v ? Number(v) : null })} />
+        <Input
+          placeholder="YYYY"
+          value={draft.company.foundedYear?.toString() ?? ""}
+          onChange={(v) => patch({ foundedYear: v ? Number(v) : null })}
+        />
       </Field>
     </div>
   );
 }
 
-function SectorSection({
+function SectorStep({
   draft,
   setSectors,
 }: {
@@ -641,12 +557,8 @@ function SectorSection({
     }
   }
   const atMax = draft.sectors.length >= 3;
-
   return (
     <div>
-      <p className="mb-4 text-[13px] text-[var(--color-text-muted)]">
-        Select up to 3 sectors. The first one becomes your primary industry.
-      </p>
       <div className="flex flex-wrap gap-2">
         {SECTOR_OPTIONS.map((s) => {
           const on = selected.has(s);
@@ -658,10 +570,10 @@ function SectorSection({
               onClick={() => toggle(s)}
               disabled={disabled}
               className={[
-                "rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-150",
+                "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                 on
-                  ? "border-[var(--color-brand)] bg-[var(--color-brand-tint)] text-[var(--color-brand-strong)]"
-                  : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-text-faint)] hover:text-[var(--color-text)]",
+                  ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+                  : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] hover:border-[color:var(--color-text-strong)] hover:text-[color:var(--color-text-strong)]",
                 disabled ? "cursor-not-allowed opacity-40" : "",
               ].join(" ")}
             >
@@ -670,14 +582,19 @@ function SectorSection({
           );
         })}
       </div>
-      <p className="mt-4 text-[12px] text-[var(--color-text-faint)]">
-        {draft.sectors.length} of 3 selected
-      </p>
+      <div className="mt-7 flex items-center justify-between border-t border-[color:var(--color-border)] pt-4">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
+          {draft.sectors.length} of 3 selected
+        </p>
+        <p className="text-[12px] text-[color:var(--color-text-faint)]">
+          The first one becomes your primary industry.
+        </p>
+      </div>
     </div>
   );
 }
 
-function StageSection({
+function StageStep({
   draft,
   setStage,
 }: {
@@ -685,35 +602,43 @@ function StageSection({
   setStage: (s: StartupStage) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-      {STAGES_WITH_NOTES.map((s) => {
-        const on = draft.stage === s.key;
-        return (
-          <button
-            key={s.key}
-            type="button"
-            onClick={() => setStage(s.key)}
-            className={[
-              "flex flex-col items-start rounded-[12px] border p-4 text-left transition-all duration-150",
-              on
-                ? "border-[var(--color-brand)] bg-[var(--color-brand-tint)] ring-1 ring-[var(--color-brand)]"
-                : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-faint)]",
-            ].join(" ")}
-          >
-            <span className={["text-[14px] font-semibold", on ? "text-[var(--color-brand-strong)]" : "text-[var(--color-text)]"].join(" ")}>
-              {s.label}
-            </span>
-            <span className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-              {s.note}
-            </span>
-          </button>
-        );
-      })}
+    <div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {STAGES_WITH_NOTES.map((s) => {
+          const on = draft.stage === s.key;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => setStage(s.key)}
+              className={[
+                "flex flex-col items-start rounded-[14px] border p-5 text-left transition-colors",
+                on
+                  ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] ring-1 ring-[color:var(--color-brand)]"
+                  : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-text-strong)]",
+              ].join(" ")}
+            >
+              <span className={["text-[15px] font-semibold", on ? "text-[color:var(--color-brand-strong)]" : "text-[color:var(--color-text-strong)]"].join(" ")}>
+                {s.label}
+              </span>
+              <span className="mt-2 font-mono text-[10.5px] tabular-nums text-[color:var(--color-text-muted)]">
+                {s.note}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-6 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 py-3">
+        <p className="text-[12.5px] leading-snug text-[color:var(--color-text-muted)]">
+          Stage drives a hard filter. Investors who don&apos;t back your stage
+          will not see your profile, even if every other input matches.
+        </p>
+      </div>
     </div>
   );
 }
 
-function RoundSection({
+function RoundStep({
   draft,
   patch,
   errors,
@@ -723,23 +648,28 @@ function RoundSection({
   errors: Record<string, string>;
 }) {
   return (
-    <div className="max-w-sm">
+    <div className="space-y-7">
       <Field label="Target raise" required error={errors.raiseAmount}>
         <Input
           prefix="$"
-          placeholder="500,000"
+          placeholder="0"
           value={draft.round.targetRaise?.toString() ?? ""}
           onChange={(v) => patch({ targetRaise: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
         />
       </Field>
-      <p className="mt-4 text-[12px] leading-relaxed text-[var(--color-text-faint)]">
-        Round mechanics like valuation, instrument, and terms can be added in the Depth tab.
-      </p>
+      <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 py-3">
+        <p className="text-[12.5px] leading-snug text-[color:var(--color-text-muted)]">
+          <strong className="text-[color:var(--color-text-strong)]">Round mechanics</strong> — instrument,
+          valuation band, lead status, close date, use of funds, and key terms live in the{" "}
+          <span className="font-medium">Round details</span> section below the wizard.
+          Fill them after you finish the basics; they&apos;re saved independently.
+        </p>
+      </div>
     </div>
   );
 }
 
-function TractionSection({
+function TractionStep({
   draft,
   patch,
 }: {
@@ -747,26 +677,57 @@ function TractionSection({
   patch: (p: Partial<FounderUiDraft["traction"]>) => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <Field label="MRR">
-          <Input prefix="$" placeholder="0" value={draft.traction.mrr?.toString() ?? ""} onChange={(v) => patch({ mrr: v ? Number(v.replace(/[^0-9]/g, "")) : null })} />
+          <Input
+            prefix="$"
+            placeholder="0"
+            value={draft.traction.mrr?.toString() ?? ""}
+            onChange={(v) => patch({ mrr: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
+          />
         </Field>
         <Field label="Paying customers">
-          <Input placeholder="0" value={draft.traction.customers?.toString() ?? ""} onChange={(v) => patch({ customers: v ? Number(v.replace(/[^0-9]/g, "")) : null })} />
+          <Input
+            placeholder="0"
+            value={draft.traction.customers?.toString() ?? ""}
+            onChange={(v) => patch({ customers: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
+          />
         </Field>
         <Field label="3-month growth">
-          <Input suffix="%" placeholder="0" value={draft.traction.growthPct?.toString() ?? ""} onChange={(v) => patch({ growthPct: v ? Number(v) : null })} />
+          <Input
+            suffix="%"
+            placeholder="0"
+            value={draft.traction.growthPct?.toString() ?? ""}
+            onChange={(v) => patch({ growthPct: v ? Number(v) : null })}
+          />
         </Field>
       </div>
       <Field label="Notable signals">
-        <Textarea placeholder="Pilots, design partners, enterprise interest, key hires." value={draft.traction.notableSignals} onChange={(v) => patch({ notableSignals: v })} />
+        <Textarea
+          placeholder="Pilots, design partners, enterprise interest, key hires."
+          value={draft.traction.notableSignals}
+          onChange={(v) => patch({ notableSignals: v })}
+        />
       </Field>
+      <Field label="Anything else investors should know">
+        <Textarea
+          placeholder="Optional context — recent press, partnerships, awards."
+          value={draft.traction.other}
+          onChange={(v) => patch({ other: v })}
+        />
+      </Field>
+      <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 py-3">
+        <p className="text-[12.5px] leading-snug text-[color:var(--color-text-muted)]">
+          Traction is the lowest-weighted input on purpose — it&apos;s the
+          easiest one to inflate on a profile. Be honest; investors notice.
+        </p>
+      </div>
     </div>
   );
 }
 
-function DeckSection({
+function DeckStep({
   draft,
   patch,
   errors,
@@ -775,8 +736,10 @@ function DeckSection({
   patch: (p: Partial<FounderUiDraft["deck"]>) => void;
   errors: Record<string, string>;
 }) {
+  // `errors.deckUrl` from server validation only applies to the external
+  // URL field. Surface it via the field hint area below the uploader.
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <DeckUploader
         currentDeck={{
           filename: draft.deck.fileName || null,
@@ -785,23 +748,27 @@ function DeckSection({
         urlValue={draft.deck.url}
         onUrlChange={(v) => patch({ url: v })}
         onUploaded={(next) => {
+          // next.filename === "" signals removal (see DeckUploader.RemoveButton)
           patch({
             fileName: next.filename,
             uploadedAt: next.filename ? next.uploadedAt : null,
           });
         }}
       />
-      {errors.deckUrl && (
-        <p className="text-[12px] text-[var(--color-danger)]">{errors.deckUrl}</p>
-      )}
-      <p className="text-[12px] text-[var(--color-text-faint)]">
-        Your deck stays private until mutual interest is established.
-      </p>
+      {errors.deckUrl ? (
+        <p className="text-[12px] text-[color:var(--color-danger)]">{errors.deckUrl}</p>
+      ) : null}
+      <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] px-4 py-3">
+        <p className="text-[12.5px] leading-snug text-[color:var(--color-text-muted)]">
+          Your deck stays private. It&apos;s only revealed to investors who
+          you&apos;ve mutually matched with.
+        </p>
+      </div>
     </div>
   );
 }
 
-function FounderSection({
+function FounderStep({
   draft,
   patch,
   errors,
@@ -810,175 +777,115 @@ function FounderSection({
   patch: (p: Partial<FounderUiDraft["founder"]>) => void;
   errors: Record<string, string>;
 }) {
+  // These fields are collected for verification UX but the canonical schema
+  // doesn't store them on `startups` — they live on `users`. They're shown
+  // here so the founder can still review them.
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-      <Field label="Full name" required>
-        <Input placeholder="Your full name" value={draft.founder.fullName} onChange={(v) => patch({ fullName: v })} />
-      </Field>
-      <Field label="Role" required>
-        <Input placeholder="CEO & Co-founder" value={draft.founder.role} onChange={(v) => patch({ role: v })} />
-      </Field>
-      <Field label="Work email" required>
-        <Input placeholder="you@company.com" value={draft.founder.workEmail} onChange={(v) => patch({ workEmail: v })} />
-      </Field>
-      <Field label="LinkedIn URL">
-        <Input placeholder="linkedin.com/in/..." value={draft.founder.linkedinUrl} onChange={(v) => patch({ linkedinUrl: v })} />
-      </Field>
-      {errors[""] && (
-        <p className="col-span-full text-[12px] text-[var(--color-danger)]">{errors[""]}</p>
-      )}
+    <div className="space-y-7">
+      <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-bg)] p-5">
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden
+            className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-brand)] font-mono text-[10px] font-bold text-white"
+          >
+            i
+          </span>
+          <p className="text-[13px] leading-[1.6] text-[color:var(--color-text-muted)]">
+            We verify identity before any startup profile activates. This
+            protects investors from impersonators and protects you from
+            catfish accounts. Verification status is private.
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <Field label="Full name" required>
+          <Input
+            placeholder="Your full name"
+            value={draft.founder.fullName}
+            onChange={(v) => patch({ fullName: v })}
+          />
+        </Field>
+        <Field label="Role" required>
+          <Input
+            placeholder="CEO & Co-founder"
+            value={draft.founder.role}
+            onChange={(v) => patch({ role: v })}
+          />
+        </Field>
+        <Field label="Work email" required>
+          <Input
+            placeholder="you@company.com"
+            value={draft.founder.workEmail}
+            onChange={(v) => patch({ workEmail: v })}
+          />
+        </Field>
+        <Field label="LinkedIn URL">
+          <Input
+            placeholder="linkedin.com/in/..."
+            value={draft.founder.linkedinUrl}
+            onChange={(v) => patch({ linkedinUrl: v })}
+          />
+        </Field>
+      </div>
+      {errors[""] ? (
+        <p className="text-[12px] text-[color:var(--color-danger)]">{errors[""]}</p>
+      ) : null}
     </div>
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-//  Summary card
-// ──────────────────────────────────────────────────────────────────────────
-
-function SummaryCard({
+function ReviewStep({
   draft,
-  completion,
-  formError,
-  isPublishing,
-  readOnly,
-  onPublish,
+  fieldErrors,
 }: {
   draft: FounderUiDraft;
-  completion: { pct: number; missing: { id: string; label: string }[]; canPublish: boolean };
-  formError: string | null;
-  isPublishing: boolean;
-  readOnly: boolean;
-  onPublish: () => void;
+  fieldErrors: Record<string, string>;
 }) {
-  const { canPublish } = completion;
-
+  const hasErrors = Object.keys(fieldErrors).length > 0;
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      {/* Preview */}
-      <div className="p-6">
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
-          Preview
-        </p>
-        <p className="mt-3 text-[17px] font-semibold text-[var(--color-text)]">
+    <div className="space-y-6">
+      {hasErrors ? (
+        <div className="rounded-[12px] border border-[color:var(--color-danger)] bg-[color:var(--color-bg)] p-4">
+          <p className="text-[13px] font-medium text-[color:var(--color-danger)]">
+            A few sections still need attention before you can publish:
+          </p>
+          <ul className="mt-2 list-inside list-disc text-[12.5px] text-[color:var(--color-text-muted)]">
+            {Object.values(fieldErrors).slice(0, 6).map((msg, i) => (
+              <li key={i}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6">
+        <p className="text-[18px] font-semibold leading-tight text-[color:var(--color-text-strong)]">
           {draft.company.name || "Untitled startup"}
         </p>
-        <p className="mt-1 text-[13px] text-[var(--color-text-muted)]">
-          {draft.company.description || "No description yet"}
+        <p className="mt-0.5 text-[13px] text-[color:var(--color-text-muted)]">
+          {draft.company.city || "—"}
+          {draft.company.foundedYear ? ` · Founded ${draft.company.foundedYear}` : ""}
         </p>
-        {(draft.sectors.length > 0 || draft.stage) && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {draft.sectors.map((s) => (
-              <span key={s} className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-text-muted)]">
-                {s}
-              </span>
-            ))}
-            {draft.stage && (
-              <span className="rounded-full bg-[var(--color-brand-tint)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-brand-strong)]">
-                {STAGE_LABEL[draft.stage]}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Completion */}
-      <div className="border-t border-[var(--color-border)] px-6 py-5">
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] font-medium text-[var(--color-text)]">Profile completion</span>
-          <span className="font-mono text-[13px] font-semibold tabular-nums text-[var(--color-text)]">
-            {completion.pct}%
-          </span>
-        </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
-          <div
-            className="h-full rounded-full bg-[var(--color-brand)] transition-all duration-300"
-            style={{ width: `${completion.pct}%`, transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
-          />
-        </div>
-        {completion.missing.length > 0 && (
-          <p className="mt-3 text-[12px] text-[var(--color-text-faint)]">
-            Missing: {completion.missing.slice(0, 3).map((m) => m.label).join(", ")}
-            {completion.missing.length > 3 && ` +${completion.missing.length - 3} more`}
-          </p>
-        )}
-      </div>
-
-      {/* Publish */}
-      <div className="border-t border-[var(--color-border)] px-6 py-5">
-        {formError && (
-          <p className="mb-4 text-[12px] text-[var(--color-danger)]">{formError}</p>
-        )}
-        <button
-          type="button"
-          onClick={onPublish}
-          disabled={!canPublish || isPublishing || readOnly}
-          className={[
-            "inline-flex w-full items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[14px] font-semibold transition-all duration-150",
-            canPublish
-              ? "bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-strong)]"
-              : "cursor-not-allowed bg-[var(--color-surface-2)] text-[var(--color-text-faint)]",
-          ].join(" ")}
-        >
-          {isPublishing && <Loader2 className="h-4 w-4 animate-spin" />}
-          {canPublish ? "Publish profile" : `${MIN_PUBLISH_PCT - completion.pct}% more to publish`}
-        </button>
-        <p className="mt-3 text-center text-[11px] text-[var(--color-text-faint)]">
-          Visible only to investors who match your filters.
+        <p className="mt-3 max-w-[60ch] text-[14px] leading-[1.55] text-[color:var(--color-text)]">
+          {draft.company.description || "Add a one-line description in step 1."}
         </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {draft.sectors.map((s) => <Tag key={s}>{s}</Tag>)}
+          {draft.stage ? <Tag>{STAGE_LABEL[draft.stage]}</Tag> : null}
+          {draft.round.targetRaise ? <Tag green>Raising ${formatCurrency(draft.round.targetRaise)}</Tag> : null}
+        </div>
       </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  Status banner
-// ──────────────────────────────────────────────────────────────────────────
-
-function BuilderBanner({ accountLabel }: { accountLabel: AccountLabel }) {
-  if (accountLabel === "verified" || accountLabel === "unverified") return null;
-
-  const config: Record<
-    Exclude<AccountLabel, "verified" | "unverified">,
-    { title: string; body: string; tone: "info" | "warning" | "danger" }
-  > = {
-    in_review: {
-      title: "In review",
-      body: "Your profile is being reviewed. Editing is locked until complete.",
-      tone: "info",
-    },
-    rejected: {
-      title: "Resubmission needed",
-      body: "Your profile was returned. Edit and submit again.",
-      tone: "warning",
-    },
-    banned: {
-      title: "Account suspended",
-      body: "Contact support if you believe this is a mistake.",
-      tone: "danger",
-    },
-  };
-
-  const c = config[accountLabel];
-  const borderColor =
-    c.tone === "danger" ? "var(--color-danger)"
-      : c.tone === "warning" ? "#d97706"
-      : "var(--color-brand)";
-
-  return (
-    <div
-      className="border-b px-6 py-3"
-      style={{
-        background: "var(--color-surface)",
-        borderTop: `2px solid ${borderColor}`,
-        borderBottomColor: "var(--color-border)",
-      }}
-    >
-      <div className="mx-auto flex max-w-[1120px] items-center gap-3">
-        <span className="text-[13px] font-semibold" style={{ color: borderColor }}>
-          {c.title}
-        </span>
-        <span className="text-[13px] text-[var(--color-text-muted)]">{c.body}</span>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <SummaryRow label="Stage" value={draft.stage ? STAGE_LABEL[draft.stage] : "—"} />
+        <SummaryRow label="Target raise" value={draft.round.targetRaise ? `$${formatCurrency(draft.round.targetRaise)}` : "—"} />
+        <SummaryRow label="MRR" value={draft.traction.mrr ? `$${formatCurrency(draft.traction.mrr)}` : "—"} />
+        <SummaryRow label="Customers" value={draft.traction.customers ? draft.traction.customers.toString() : "—"} />
+        <SummaryRow label="Deck" value={draft.deck.url ? (draft.deck.fileName || "Linked") : "Not yet"} />
+        <SummaryRow label="Founder" value={draft.founder.fullName || "—"} />
       </div>
+      <p className="text-[12px] leading-snug text-[color:var(--color-text-faint)]">
+        Profile becomes visible only to investors that match your filters.
+        You won&apos;t appear in any public list, and nothing outside the
+        match score is sent until both sides opt in.
+      </p>
     </div>
   );
 }
@@ -1002,12 +909,14 @@ function Field({
 }) {
   return (
     <label className={["block", full ? "md:col-span-2" : ""].join(" ")}>
-      <span className="mb-2 flex items-center gap-1 text-[13px] font-medium text-[var(--color-text)]">
+      <span className="mb-2 flex items-center gap-1 text-[12px] font-medium text-[color:var(--color-text-strong)]">
         {label}
-        {required && <span className="text-[var(--color-brand)]">*</span>}
+        {required && <span className="text-[color:var(--color-brand)]">*</span>}
       </span>
       {children}
-      {error && <span className="mt-1.5 block text-[12px] text-[var(--color-danger)]">{error}</span>}
+      {error ? (
+        <span className="mt-1 block text-[12px] text-[color:var(--color-danger)]">{error}</span>
+      ) : null}
     </label>
   );
 }
@@ -1026,16 +935,20 @@ function Input({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="flex h-11 items-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 transition-all duration-150 focus-within:border-[var(--color-text)] focus-within:ring-1 focus-within:ring-[var(--color-text)]/20">
-      {prefix && <span className="mr-2 font-mono text-[13px] text-[var(--color-text-faint)]">{prefix}</span>}
+    <div className="flex h-11 items-center rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3.5 transition-colors focus-within:border-[color:var(--color-text-strong)] focus-within:ring-1 focus-within:ring-[color:var(--color-text-strong)]">
+      {prefix ? (
+        <span className="mr-1.5 font-mono text-[12.5px] text-[color:var(--color-text-faint)]">{prefix}</span>
+      ) : null}
       <input
         type="text"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-full w-full bg-transparent text-[14px] text-[var(--color-text)] placeholder:text-[var(--color-text-faint)] focus:outline-none"
+        className="h-full w-full bg-transparent text-[14px] text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-faint)] focus:outline-none"
       />
-      {suffix && <span className="ml-2 font-mono text-[13px] text-[var(--color-text-faint)]">{suffix}</span>}
+      {suffix ? (
+        <span className="ml-1.5 font-mono text-[12.5px] text-[color:var(--color-text-faint)]">{suffix}</span>
+      ) : null}
     </div>
   );
 }
@@ -1055,7 +968,94 @@ function Textarea({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       rows={4}
-      className="block w-full resize-none rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text)] placeholder:text-[var(--color-text-faint)] transition-all duration-150 focus:border-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-text)]/20"
+      className="block w-full resize-none rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3.5 py-3 text-[14px] leading-relaxed text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-faint)] transition-colors focus:border-[color:var(--color-text-strong)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-text-strong)]"
     />
   );
+}
+
+function Tag({ children, green = false }: { children: ReactNode; green?: boolean }) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium",
+        green
+          ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+          : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)]",
+      ].join(" ")}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3">
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
+        {label}
+      </span>
+      <span className="text-right text-[13.5px] font-medium text-[color:var(--color-text-strong)]">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// Inline banner shown above the step content. Mirrors the global
+// AccountStatusBanner but tuned for the dark builder shell — neutral fill,
+// title + body row, no CTA so it stays out of the user's way.
+function BuilderBanner({ accountLabel }: { accountLabel: AccountLabel }) {
+  if (accountLabel === "verified" || accountLabel === "unverified") return null;
+
+  const config: Record<
+    Exclude<AccountLabel, "verified" | "unverified">,
+    { title: string; body: string; tone: "info" | "warning" | "danger" }
+  > = {
+    in_review: {
+      title: "In review",
+      body: "Your last submission is being reviewed. Editing is locked until the result lands (usually under a minute).",
+      tone: "info",
+    },
+    rejected: {
+      title: "Resubmission needed",
+      body: "Your previous submission was bounced back. Edit the flagged sections and submit again.",
+      tone: "warning",
+    },
+    banned: {
+      title: "Account suspended",
+      body: "Editing is disabled while your account is suspended. Contact support if this is a mistake.",
+      tone: "danger",
+    },
+  };
+
+  const c = config[accountLabel];
+  const accent =
+    c.tone === "danger" ? "var(--color-danger)"
+      : c.tone === "warning" ? "#d97706"
+      : "var(--color-brand)";
+
+  return (
+    <div
+      role="status"
+      className="border-b px-5 py-3 md:px-8"
+      style={{
+        background: "var(--color-bg)",
+        borderTop: `2px solid ${accent}`,
+        borderBottom: "1px solid var(--color-border)",
+      }}
+    >
+      <div className="mx-auto flex max-w-[960px] items-baseline gap-3">
+        <p className="text-[12.5px] font-semibold tracking-tight" style={{ color: accent }}>
+          {c.title}
+        </p>
+        <p className="text-[12.5px] leading-[1.5] text-[color:var(--color-text-muted)]">
+          {c.body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function formatCurrency(n: number): string {
+  return n.toLocaleString("en-US");
 }
