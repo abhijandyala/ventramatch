@@ -198,12 +198,15 @@ function GlassBand({ top, height, blur, opacity }: { top: string; height: number
   );
 }
 
-const NAV_LINKS: Array<{ label: string; href: string }> = [
-  { label: "Feed", href: "/feed" },
-  { label: "Matches", href: "/matches" },
-  { label: "Profiles", href: "/profile" },
-  { label: "Dashboard", href: "/dashboard" },
-];
+function navLinks(role: Role): Array<{ label: string; href: string }> {
+  const profileHref = role === "investor" ? "/build/investor" : "/build";
+  return [
+    { label: "Feed", href: "/feed" },
+    { label: "Matches", href: "/matches" },
+    { label: "Profile", href: profileHref },
+    { label: "Dashboard", href: "/dashboard" },
+  ];
+}
 
 function ProductNav({
   role,
@@ -217,6 +220,7 @@ function ProductNav({
   avatarSrc?: string | null;
 }) {
   const pathname = usePathname();
+  const links = navLinks(role);
 
   return (
     <header className="sticky top-0 z-40 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/85 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--color-bg)]/70">
@@ -224,7 +228,7 @@ function ProductNav({
         <div className="flex items-center gap-8">
           <Wordmark size="md" />
           <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
-            {NAV_LINKS.map((link) => (
+            {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href as Route}

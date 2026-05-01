@@ -13,12 +13,15 @@ type Role = "founder" | "investor" | null;
 
 type FeedbackType = "bug" | "feature" | "general";
 
-const NAV_LINKS = [
-  { label: "Feed", href: "/feed" },
-  { label: "Matches", href: "/matches" },
-  { label: "Profiles", href: "/profile" },
-  { label: "Dashboard", href: "/dashboard" },
-];
+function navLinks(role: Role): Array<{ label: string; href: string }> {
+  const profileHref = role === "investor" ? "/build/investor" : "/build";
+  return [
+    { label: "Feed", href: "/feed" },
+    { label: "Matches", href: "/matches" },
+    { label: "Profile", href: profileHref },
+    { label: "Dashboard", href: "/dashboard" },
+  ];
+}
 
 const FEEDBACK_TYPES: Array<{
   id: FeedbackType;
@@ -486,7 +489,7 @@ function AppNav({
         <div className="flex items-center gap-8">
           <Wordmark size="md" />
           <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
-            {NAV_LINKS.map((link) => (
+            {navLinks(role).map((link) => (
               <Link
                 key={link.href}
                 href={link.href as Route}

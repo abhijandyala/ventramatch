@@ -132,13 +132,13 @@ export function ProfileDropdown({ role, name, userId, avatarSrc = null }: Profil
               <MenuLink
                 icon={User}
                 label="Profile"
-                href="/profile"
+                href={role === "investor" ? "/build/investor" : "/build"}
                 onClick={() => setOpen(false)}
               />
               <MenuLink
                 icon={Settings}
                 label="Settings"
-                href={"/profile?tab=settings" as Route}
+                href="/settings"
                 onClick={() => setOpen(false)}
               />
             </div>

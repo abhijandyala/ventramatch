@@ -99,7 +99,7 @@ export function ProfileStrengthCard({
 
       <div className="mt-5">
         <Link
-          href={"/profile" as Route}
+          href={"/build" as Route}
           className={cn(
             "inline-flex items-center gap-1",
             "text-[13px] font-medium text-[var(--color-brand-ink)]",
