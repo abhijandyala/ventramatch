@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, ArrowLeft, Linkedin } from "lucide-react";
 import { founderCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
-import { Wordmark } from "@/components/landing/wordmark";
 import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
 import { DeckUploader } from "@/components/profile/deck-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
@@ -350,11 +349,9 @@ export function FounderBuilder({
         />
       )}
 
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/95 backdrop-blur-sm">
-        <div className="flex h-14 items-center justify-between px-6">
-          <Wordmark size="sm" />
-
+      {/* Header — sits below the shared ProductNav from app/build/layout.tsx. */}
+      <header className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
+        <div className="flex h-14 items-center justify-end px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"

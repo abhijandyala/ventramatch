@@ -26,19 +26,32 @@ import {
   type NotificationPrefs,
 } from "@/types/database";
 import { cn } from "@/lib/utils";
+import {
+  User,
+  Eye,
+  Bell,
+  KeyRound,
+  Plug,
+  ShieldCheck,
+  AlertTriangle,
+} from "lucide-react";
+import { AccountActions } from "@/components/account/account-actions";
 
 export const dynamic = "force-dynamic";
 
 type Provider = "google" | "linkedin" | "github" | "microsoft-entra-id";
 
+const ICON_SIZE = 16;
+const ICON_STROKE = 1.75;
+
 const SECTIONS = [
-  { id: "account",       label: "Account" },
-  { id: "discovery",     label: "Discovery" },
-  { id: "notifications", label: "Notifications" },
-  { id: "security",      label: "Sign-in" },
-  { id: "integrations",  label: "Integrations" },
-  { id: "privacy",       label: "Privacy" },
-  { id: "danger",        label: "Danger zone" },
+  { id: "account",       label: "Account",       Icon: User },
+  { id: "discovery",     label: "Discovery",     Icon: Eye },
+  { id: "notifications", label: "Notifications", Icon: Bell },
+  { id: "security",      label: "Sign-in",       Icon: KeyRound },
+  { id: "integrations",  label: "Integrations",  Icon: Plug },
+  { id: "privacy",       label: "Privacy",       Icon: ShieldCheck },
+  { id: "danger",        label: "Danger zone",   Icon: AlertTriangle },
 ] as const;
 
 type UserRow = {
@@ -158,19 +171,20 @@ export default async function SettingsPage() {
 
       {/* Mobile section nav (hidden on lg) */}
       <div className="mx-auto w-full max-w-[1080px] px-4 sm:px-6 lg:hidden">
-        <SettingsMobileNav sections={[...SECTIONS]} />
+        <SettingsMobileNav sections={SECTIONS.map(({ id, label }) => ({ id, label }))} />
       </div>
 
       <div className="mx-auto grid w-full max-w-[1080px] grid-cols-1 gap-8 px-4 sm:px-6 py-8 lg:grid-cols-[200px_1fr]">
         {/* Desktop sidebar */}
         <aside className="hidden lg:block">
-          <nav className="sticky top-6 flex flex-col gap-1.5" aria-label="Settings sections">
+          <nav className="sticky top-20 flex flex-col gap-0.5" aria-label="Settings sections">
             {SECTIONS.map((s) => (
               <a
                 key={s.id}
                 href={`#${s.id}`}
-                className="px-3 py-1.5 text-[12.5px] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-strong)]"
+                className="flex items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[13px] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text-strong)]"
               >
+                <s.Icon size={ICON_SIZE} strokeWidth={ICON_STROKE} className="shrink-0" />
                 {s.label}
               </a>
             ))}
@@ -200,6 +214,7 @@ export default async function SettingsPage() {
             id="account"
             title="Account identity"
             description="Your profile photo, display name, and sign-in email."
+            icon={<User size={20} strokeWidth={ICON_STROKE} />}
           >
             <div className="flex flex-col gap-7">
               <AvatarSection
@@ -230,6 +245,7 @@ export default async function SettingsPage() {
             id="discovery"
             title="Discovery & matching"
             description="Whether your profile is visible in the feed and how match scores are calculated."
+            icon={<Eye size={20} strokeWidth={ICON_STROKE} />}
             fullWidth
           >
             <DiscoveryStatusCard
@@ -244,6 +260,7 @@ export default async function SettingsPage() {
             id="notifications"
             title="Notifications"
             description="Transactional email only — no spam. Toggle off anything you don't need."
+            icon={<Bell size={20} strokeWidth={ICON_STROKE} />}
           >
             <NotificationPrefsForm initial={prefs} />
           </SettingsSection>
@@ -253,6 +270,7 @@ export default async function SettingsPage() {
             id="security"
             title="Sign-in & security"
             description="Your password and connected OAuth providers. At least one sign-in method must remain active."
+            icon={<KeyRound size={20} strokeWidth={ICON_STROKE} />}
           >
             <div className="flex flex-col gap-8">
               {/* Security summary pill */}
@@ -297,6 +315,7 @@ export default async function SettingsPage() {
             id="integrations"
             title="Integrations"
             description="Third-party connections that extend VentraMatch."
+            icon={<Plug size={20} strokeWidth={ICON_STROKE} />}
           >
             <div className="flex flex-col gap-2">
               <p className="text-[10.5px] font-medium uppercase tracking-[0.09em] text-[var(--color-text-faint)]">
@@ -311,6 +330,7 @@ export default async function SettingsPage() {
             id="privacy"
             title="Privacy & safety"
             description="Blocked users, data export, cookie consent, and legal acceptance."
+            icon={<ShieldCheck size={20} strokeWidth={ICON_STROKE} />}
             fullWidth
           >
             <div className="flex flex-col gap-9 max-w-[60ch]">
@@ -366,6 +386,7 @@ export default async function SettingsPage() {
             id="danger"
             title="Danger zone"
             description="Pause removes you from discovery but keeps matches and inbox intact. Delete schedules permanent removal after 30 days."
+            icon={<AlertTriangle size={20} strokeWidth={ICON_STROKE} />}
             variant="danger"
           >
             <PauseAndDelete
@@ -374,6 +395,8 @@ export default async function SettingsPage() {
               deletionRequestedAt={deletionRequestedAt}
             />
           </SettingsSection>
+
+          <AccountActions />
         </main>
       </div>
     </div>

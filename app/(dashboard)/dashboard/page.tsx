@@ -46,6 +46,7 @@ import { CompletionCelebration } from "@/components/profile/completion-celebrati
 import { withUserRls } from "@/lib/db";
 import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { AccountActions } from "@/components/account/account-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -234,6 +235,7 @@ function FounderDashboard({
           />
           <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
         </section>
+        <AccountActions />
       </main>
     </>
   );
@@ -354,6 +356,7 @@ function InvestorDashboard({
           />
           <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
         </section>
+        <AccountActions />
       </main>
     </>
   );
