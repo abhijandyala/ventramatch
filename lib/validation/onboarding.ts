@@ -32,17 +32,29 @@ export const LEAD_FOLLOW_LABELS: Record<LeadFollow, string> = {
 export const investorTypeSchema = z.enum(["firm", "angel"]);
 export type InvestorType = z.infer<typeof investorTypeSchema>;
 
+// `lookingFor` is the open-ended preference text captured at onboarding step
+// 2. It is the strongest single signal we plan to feed into the future ML/LLM
+// recommendation model. Optional today (don't block onboarding); the placeholder
+// ranking falls back to bio + sector data when blank.
+const lookingForSchema = z
+  .string()
+  .trim()
+  .max(800, "Keep it under 800 characters.")
+  .optional();
+
 export const profileInfoSchema = z.discriminatedUnion("role", [
   z.object({
     role: z.literal("founder"),
     companyName: z.string().trim().min(1, "Enter your startup name.").max(120, "Too long."),
     description: z.string().trim().min(1, "Add a short description.").max(300, "Keep it under 300 characters."),
+    lookingFor: lookingForSchema,
   }),
   z.object({
     role: z.literal("investor"),
     investorType: investorTypeSchema,
     firmName: z.string().trim().max(120, "Too long.").optional(),
     description: z.string().trim().min(1, "Add a short description.").max(300, "Keep it under 300 characters."),
+    lookingFor: lookingForSchema,
   }),
 ]);
 export type ProfileInfoInput = z.infer<typeof profileInfoSchema>;

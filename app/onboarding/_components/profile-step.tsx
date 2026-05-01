@@ -9,6 +9,11 @@ type ProfileData = {
   investorType: InvestorType;
   firmName: string;
   description: string;
+  /**
+   * Optional preference text. Strongest single signal for the future
+   * ML/LLM recommendation model. Stored on `users.goals`.
+   */
+  lookingFor: string;
 };
 
 type Props = {
@@ -19,6 +24,11 @@ type Props = {
 };
 
 export type { ProfileData };
+
+const FOUNDER_LOOKING_FOR_PLACEHOLDER =
+  "We are looking for AI, devtools, or B2B SaaS investors who can write $250K–$750K checks, help with enterprise sales, and understand seed-stage technical teams.";
+const INVESTOR_LOOKING_FOR_PLACEHOLDER =
+  "I am looking for seed-stage AI, fintech, or healthcare startups with strong technical founders, early traction, and room to invest $100K–$500K.";
 
 export function ProfileStep({ role, value, onChange, errors }: Props) {
   if (role === "founder") {
@@ -40,6 +50,12 @@ export function ProfileStep({ role, value, onChange, errors }: Props) {
           onChange={(v) => onChange({ ...value, description: v })}
           error={errors.description}
           maxLength={300}
+        />
+        <LookingForField
+          value={value.lookingFor}
+          onChange={(v) => onChange({ ...value, lookingFor: v })}
+          placeholder={FOUNDER_LOOKING_FOR_PLACEHOLDER}
+          error={errors.lookingFor}
         />
       </div>
     );
@@ -70,6 +86,47 @@ export function ProfileStep({ role, value, onChange, errors }: Props) {
         error={errors.description}
         maxLength={300}
       />
+      <LookingForField
+        value={value.lookingFor}
+        onChange={(v) => onChange({ ...value, lookingFor: v })}
+        placeholder={INVESTOR_LOOKING_FOR_PLACEHOLDER}
+        error={errors.lookingFor}
+      />
+    </div>
+  );
+}
+
+/**
+ * Optional textarea capturing the user's open-ended preference. Stored on
+ * `users.goals`. This is the strongest single signal for the future ML/LLM
+ * recommendation model — encourage filling it out, but never block onboarding.
+ */
+function LookingForField({
+  value,
+  onChange,
+  placeholder,
+  error,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  error?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TextArea
+        id="lookingFor"
+        label="What are you looking for?"
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        error={error}
+        maxLength={800}
+      />
+      <p className="text-[12px] leading-relaxed text-[var(--color-text-faint)]">
+        Optional, but the more specific you are the better matches you&apos;ll see.
+        You can edit this anytime.
+      </p>
     </div>
   );
 }

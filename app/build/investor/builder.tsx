@@ -13,7 +13,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, X, ArrowLeft, Linkedin } from "lucide-react";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
-import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
+import type { StartupStage, AccountLabel, ProfileState, Database } from "@/types/database";
+import { investorCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
 import type { InvestorDepthView } from "@/lib/profile/visibility";
 import type {
   SubmitInvestorInput,
@@ -30,6 +31,7 @@ import {
   type LinkedInConnectionStatus,
 } from "./connect-actions";
 import { LinkedInFillModal } from "@/components/profile/linkedin-fill-modal";
+import { switchRoleAction } from "../switch-role-action";
 
 function isReadOnly(label: AccountLabel): boolean {
   return label === "in_review";
@@ -219,6 +221,8 @@ export function InvestorBuilder({
   linkedInStatus?: LinkedInConnectionStatus;
 }) {
   const router = useRouter();
+  type Page = "basics" | "depth" | "verifications";
+  const [page, setPage] = useState<Page>("basics");
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<InvestorUiDraft>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -242,6 +246,23 @@ export function InvestorBuilder({
   const t = STEP_HEADERS[step];
   const isReview = step === total - 1;
   const readOnly = isReadOnly(accountLabel);
+
+  // Build a lightweight investor row for the completion calculator.
+  const completion = investorCompletion({
+    id: "",
+    user_id: "",
+    name: draft.identity.fullName || "",
+    firm: draft.identity.firmName || null,
+    check_min: draft.check.minCheck ?? 0,
+    check_max: draft.check.maxCheck ?? 0,
+    stages: draft.stages as StartupStage[],
+    sectors: draft.sectors.sectors,
+    geographies: draft.geo.regions,
+    is_active: true,
+    thesis: buildThesis(draft) ?? null,
+    created_at: "",
+    updated_at: "",
+  });
 
   const save = useCallback(
     (next?: InvestorUiDraft) =>
@@ -343,10 +364,22 @@ export function InvestorBuilder({
         />
       )}
 
-      {/* Action header — sits below the shared ProductNav from app/build/layout.tsx. */}
+      {/* Header */}
       <header className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
-        <div className="mx-auto flex h-14 max-w-[800px] items-center justify-end px-6">
-          <div className="flex items-center gap-4">
+        <div className="flex h-14 items-center justify-between px-6">
+          <button
+            type="button"
+            onClick={() => {
+              startSaving(async () => {
+                const res = await switchRoleAction("founder");
+                if (res.ok) window.location.href = "/build";
+              });
+            }}
+            className="text-[12px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-muted)]"
+          >
+            Switch to Founder
+          </button>
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={handleFillLinkedIn}
@@ -383,108 +416,174 @@ export function InvestorBuilder({
         </div>
       </header>
 
+      {/* Page tabs */}
+      <nav className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
+        <div className="flex px-6">
+          {(["basics", "depth", "verifications"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => { if (page !== p) { save(); setPage(p); } }}
+              className={[
+                "relative px-5 py-3.5 text-[14px] font-medium capitalize transition-colors",
+                page === p
+                  ? "text-[color:var(--color-text)]"
+                  : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]",
+              ].join(" ")}
+            >
+              {p}
+              {page === p && (
+                <span className="absolute inset-x-0 bottom-0 h-[2px] bg-[color:var(--color-text)]" />
+              )}
+            </button>
+          ))}
+        </div>
+      </nav>
+
       <BuilderBanner accountLabel={accountLabel} />
 
-      <div className="mx-auto w-full max-w-[600px] px-6 py-12 md:py-16">
-        {/* Progress bar */}
-        <div className="mb-10 h-[3px] w-full overflow-hidden rounded-full bg-[color:var(--color-border)]">
-          <div
-            className="h-full rounded-full bg-[color:var(--color-brand)] transition-all duration-500"
-            style={{ width: `${((step + 1) / total) * 100}%`, transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
-          />
-        </div>
-
-        {/* Step heading */}
-        <h1
-          className="font-serif font-semibold leading-[1.08] tracking-tight text-[color:var(--color-text)]"
-          style={{ fontSize: "clamp(28px, 4vw, 38px)" }}
+      {/* Page content */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={page}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
         >
-          {t.title}
-        </h1>
-        <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-[color:var(--color-text-muted)]">
-          {t.sub}
-        </p>
+          {page === "basics" && (
+            <div className="mx-auto w-full max-w-[720px] px-6 py-12 md:py-16">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={step}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {/* Step heading */}
+                  <h1
+                    className="font-serif font-semibold leading-[1.08] tracking-tight text-[color:var(--color-text)]"
+                    style={{ fontSize: "clamp(28px, 4vw, 38px)" }}
+                  >
+                    {t.title}
+                  </h1>
+                  <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-[color:var(--color-text-muted)]">
+                    {t.sub}
+                  </p>
 
-        {/* Animated step content */}
-        <div className="mt-10">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={step}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            >
-              {step === 0 && <IdentityStep draft={draft} patch={patchIdentity} errors={errors} />}
-              {step === 1 && <TypeStep draft={draft} setType={(t) => setDraft((d) => ({ ...d, type: t }))} />}
-              {step === 2 && <SectorsStep draft={draft} patch={patchSectors} />}
-              {step === 3 && <StagesStep draft={draft} setStages={(s) => setDraft((d) => ({ ...d, stages: s }))} />}
-              {step === 4 && <CheckStep draft={draft} patch={patchCheck} errors={errors} />}
-              {step === 5 && <GeoStep draft={draft} patch={patchGeo} />}
-              {step === 6 && <TrackStep draft={draft} patch={patchTrack} />}
-              {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
-            </motion.div>
-          </AnimatePresence>
-        </div>
+                  <div className="mt-10">
+                    {step === 0 && <IdentityStep draft={draft} patch={patchIdentity} errors={errors} />}
+                    {step === 1 && <TypeStep draft={draft} setType={(t) => setDraft((d) => ({ ...d, type: t }))} />}
+                    {step === 2 && <SectorsStep draft={draft} patch={patchSectors} />}
+                    {step === 3 && <StagesStep draft={draft} setStages={(s) => setDraft((d) => ({ ...d, stages: s }))} />}
+                    {step === 4 && <CheckStep draft={draft} patch={patchCheck} errors={errors} />}
+                    {step === 5 && <GeoStep draft={draft} patch={patchGeo} />}
+                    {step === 6 && <TrackStep draft={draft} patch={patchTrack} />}
+                    {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
 
-        {formError ? (
-          <p role="alert" className="mt-5 text-[13px] text-[color:var(--color-danger)]">
-            {formError}
-          </p>
-        ) : null}
+              {formError ? (
+                <p role="alert" className="mt-5 text-[13px] text-[color:var(--color-danger)]">
+                  {formError}
+                </p>
+              ) : null}
 
-        {/* Navigation */}
-        <div className="mt-10 flex items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-            disabled={step === 0 || isSaving || isPublishing}
-            className="inline-flex h-11 items-center gap-1.5 rounded-[10px] px-3 text-[14px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-            Back
-          </button>
+              {/* Navigation */}
+              <div className="mt-10 flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setStep((s) => Math.max(0, s - 1))}
+                  disabled={step === 0 || isSaving || isPublishing}
+                  className="inline-flex h-11 items-center gap-1.5 rounded-[10px] px-3 text-[14px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+                  Back
+                </button>
 
-          {!isReview ? (
-            <button
-              type="button"
-              onClick={handleContinue}
-              disabled={isSaving || readOnly}
-              className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-6 text-[15px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
-              Continue
-            </button>
-          ) : (
+                {!isReview ? (
+                  <button
+                    type="button"
+                    onClick={handleContinue}
+                    disabled={isSaving || readOnly}
+                    className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-6 text-[15px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
+                  >
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
+                    Continue
+                  </button>
+                ) : null}
+              </div>
+
+              <p className="mt-8 text-center text-[11px] leading-5 text-[color:var(--color-text-faint)]">
+                Informational only — not investment advice. You can refine your profile at any time.
+              </p>
+            </div>
+          )}
+
+          {page === "depth" && depthView && (
+            <div className="mx-auto w-full max-w-[720px] px-6 py-12 md:py-16">
+              <InvestorDepthEditor depth={depthView} />
+            </div>
+          )}
+
+          {page === "verifications" && (
+            <div className="mx-auto w-full max-w-[720px] px-6 py-12 md:py-16">
+              <VerificationPanel
+                ownVerifications={ownVerifications}
+                ownReferences={ownReferences}
+              />
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Bottom completion bar */}
+      <motion.div
+        initial={{ y: 60, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
+        className="fixed inset-x-0 bottom-0 z-40"
+      >
+        <div
+          className="border-t border-[color:var(--color-border)] bg-white px-6 py-3"
+          style={{ boxShadow: "0 -4px 24px -8px rgba(15, 23, 42, 0.08)" }}
+        >
+          <div className="mx-auto flex max-w-[960px] items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="font-mono text-[13px] font-semibold tabular-nums text-[color:var(--color-text)]">
+                {completion.pct}%
+              </span>
+              <div className="hidden h-[4px] w-40 overflow-hidden bg-[color:var(--color-border)] sm:block">
+                <div
+                  className="h-full bg-[color:var(--color-text)] transition-all duration-500"
+                  style={{ width: `${completion.pct}%`, transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
+                />
+              </div>
+              <span className="text-[13px] text-[color:var(--color-text-muted)]">
+                {completion.missing.length > 0
+                  ? `${completion.missing.length} field${completion.missing.length === 1 ? "" : "s"} remaining`
+                  : "Ready to publish"}
+              </span>
+            </div>
             <button
               type="button"
               onClick={handlePublish}
-              disabled={isPublishing || readOnly}
-              className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-6 text-[15px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
+              disabled={!completion.canPublish || isPublishing || readOnly}
+              className={[
+                "inline-flex h-10 items-center justify-center gap-2 px-6 text-[14px] font-semibold transition-all duration-150",
+                completion.canPublish
+                  ? "bg-[color:var(--color-text)] text-white hover:bg-[color:var(--color-text-strong)]"
+                  : "bg-[color:var(--color-surface-2)] text-[color:var(--color-text-faint)] cursor-not-allowed",
+              ].join(" ")}
             >
-              {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
-              Publish profile
+              {isPublishing && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />}
+              Complete
             </button>
-          )}
+          </div>
         </div>
-
-        <p className="mt-8 text-center text-[11px] leading-5 text-[color:var(--color-text-faint)]">
-          Informational only — not investment advice. You can refine your profile at any time.
-        </p>
-      </div>
-
-      {depthView ? (
-        <section className="mx-auto w-full max-w-[600px] border-t border-[color:var(--color-border)] px-6 py-10">
-          <InvestorDepthEditor depth={depthView} />
-        </section>
-      ) : null}
-
-      <section className="mx-auto w-full max-w-[600px] border-t border-[color:var(--color-border)] px-6 py-10">
-        <VerificationPanel
-          ownVerifications={ownVerifications}
-          ownReferences={ownReferences}
-        />
-      </section>
+      </motion.div>
     </main>
   );
 }

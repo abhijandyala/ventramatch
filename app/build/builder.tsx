@@ -32,6 +32,7 @@ import {
   type LinkedInConnectionStatus,
 } from "./connect-actions";
 import { LinkedInFillModal } from "@/components/profile/linkedin-fill-modal";
+import { switchRoleAction } from "./switch-role-action";
 
 const READ_ONLY_LABELS: AccountLabel[] = ["in_review"];
 
@@ -351,7 +352,19 @@ export function FounderBuilder({
 
       {/* Header — sits below the shared ProductNav from app/build/layout.tsx. */}
       <header className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
-        <div className="flex h-14 items-center justify-end px-6">
+        <div className="flex h-14 items-center justify-between px-6">
+          <button
+            type="button"
+            onClick={() => {
+              startSaving(async () => {
+                const res = await switchRoleAction("investor");
+                if (res.ok) window.location.href = "/build/investor";
+              });
+            }}
+            className="text-[12px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-muted)]"
+          >
+            Switch to Investor
+          </button>
           <div className="flex items-center gap-3">
             <button
               type="button"
