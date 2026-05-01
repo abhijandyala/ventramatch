@@ -92,22 +92,24 @@ export const EMPTY_INVESTOR_DRAFT: InvestorUiDraft = {
 
 function buildThesis(d: InvestorUiDraft): string | undefined {
   const parts: string[] = [];
-  if (d.sectors.thesis.trim()) parts.push(d.sectors.thesis.trim());
-  if (d.sectors.antiThesis.trim()) parts.push(`Anti-thesis: ${d.sectors.antiThesis.trim()}`);
-  if (d.geo.officeHours.trim()) parts.push(`Office hours: ${d.geo.officeHours.trim()}`);
+  if (d.sectors?.thesis?.trim()) parts.push(d.sectors.thesis.trim());
+  if (d.sectors?.antiThesis?.trim()) parts.push(`Anti-thesis: ${d.sectors.antiThesis.trim()}`);
+  if (d.geo?.officeHours?.trim()) parts.push(`Office hours: ${d.geo.officeHours.trim()}`);
   const result = parts.join(" · ");
   return result || undefined;
 }
 
 function toSubmitInput(d: InvestorUiDraft): SubmitInvestorInput {
+  const fullName = d.identity?.fullName?.trim() ?? "";
+  const role = d.identity?.role?.trim() ?? "";
   return {
-    name: [d.identity.fullName.trim(), d.identity.role.trim()].filter(Boolean).join(" — ") || d.identity.fullName.trim(),
-    firm: d.identity.firmName.trim() || undefined,
-    checkMin: d.check.minCheck ?? 0,
-    checkMax: d.check.maxCheck ?? 0,
-    stages: d.stages,
-    sectors: d.sectors.sectors,
-    geographies: d.geo.regions,
+    name: [fullName, role].filter(Boolean).join(" — ") || fullName,
+    firm: d.identity?.firmName?.trim() || undefined,
+    checkMin: d.check?.minCheck ?? 0,
+    checkMax: d.check?.maxCheck ?? 0,
+    stages: d.stages ?? [],
+    sectors: d.sectors?.sectors ?? [],
+    geographies: d.geo?.regions ?? [],
     isActive: true,
     thesis: buildThesis(d),
   };
@@ -115,13 +117,13 @@ function toSubmitInput(d: InvestorUiDraft): SubmitInvestorInput {
 
 function toDraftInput(d: InvestorUiDraft): DraftInvestorInput {
   const draft: DraftInvestorInput = {};
-  if (d.identity.fullName.trim()) draft.name = d.identity.fullName.trim();
-  if (d.identity.firmName.trim()) draft.firm = d.identity.firmName.trim();
-  if (d.check.minCheck != null) draft.checkMin = d.check.minCheck;
-  if (d.check.maxCheck != null) draft.checkMax = d.check.maxCheck;
-  if (d.stages.length) draft.stages = d.stages;
-  if (d.sectors.sectors.length) draft.sectors = d.sectors.sectors;
-  if (d.geo.regions.length) draft.geographies = d.geo.regions;
+  if (d.identity?.fullName?.trim()) draft.name = d.identity.fullName.trim();
+  if (d.identity?.firmName?.trim()) draft.firm = d.identity.firmName.trim();
+  if (d.check?.minCheck != null) draft.checkMin = d.check.minCheck;
+  if (d.check?.maxCheck != null) draft.checkMax = d.check.maxCheck;
+  if (d.stages?.length) draft.stages = d.stages;
+  if (d.sectors?.sectors?.length) draft.sectors = d.sectors.sectors;
+  if (d.geo?.regions?.length) draft.geographies = d.geo.regions;
   const t = buildThesis(d);
   if (t) draft.thesis = t;
   return draft;
@@ -251,13 +253,13 @@ export function InvestorBuilder({
   const completion = investorCompletion({
     id: "",
     user_id: "",
-    name: draft.identity.fullName || "",
-    firm: draft.identity.firmName || null,
-    check_min: draft.check.minCheck ?? 0,
-    check_max: draft.check.maxCheck ?? 0,
-    stages: draft.stages as StartupStage[],
-    sectors: draft.sectors.sectors,
-    geographies: draft.geo.regions,
+    name: draft.identity?.fullName || "",
+    firm: draft.identity?.firmName || null,
+    check_min: draft.check?.minCheck ?? 0,
+    check_max: draft.check?.maxCheck ?? 0,
+    stages: (draft.stages ?? []) as StartupStage[],
+    sectors: draft.sectors?.sectors ?? [],
+    geographies: draft.geo?.regions ?? [],
     is_active: true,
     thesis: buildThesis(draft) ?? null,
     created_at: "",
@@ -357,9 +359,9 @@ export function InvestorBuilder({
           onApply={handleApplyLinkedIn}
           onClose={() => setShowLinkedInModal(false)}
           currentValues={{
-            name: draft.identity.fullName,
+            name: draft.identity?.fullName ?? "",
             picture: "",
-            email: draft.identity.workEmail,
+            email: draft.identity?.workEmail ?? "",
           }}
         />
       )}
