@@ -4,15 +4,14 @@ import {
   useCallback,
   useState,
   useTransition,
-  useRef,
-  useEffect,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ChevronDown, Check, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
+import { ProfileWelcomeCard } from "@/components/profile/welcome-card";
 import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import type { InvestorDepthView } from "@/lib/profile/visibility";
 import type {
@@ -30,7 +29,7 @@ function isReadOnly(label: AccountLabel): boolean {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  UI draft shape
+//  UI draft (richer than canonical schema; collapses at submit)
 // ──────────────────────────────────────────────────────────────────────────
 
 type InvestorType = "angel" | "syndicate" | "early" | "growth" | "family" | "cvc";
@@ -79,7 +78,7 @@ export const EMPTY_INVESTOR_DRAFT: InvestorUiDraft = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
-//  Mapping helpers
+//  Mapping rich UI → canonical schema
 // ──────────────────────────────────────────────────────────────────────────
 
 function buildThesis(d: InvestorUiDraft): string | undefined {
@@ -123,6 +122,28 @@ function toDraftInput(d: InvestorUiDraft): DraftInvestorInput {
 //  Constants
 // ──────────────────────────────────────────────────────────────────────────
 
+const STEPS = [
+  { key: "identity", title: "Identity" },
+  { key: "type",     title: "Type" },
+  { key: "sectors",  title: "Sectors" },
+  { key: "stages",   title: "Stages" },
+  { key: "check",    title: "Check" },
+  { key: "geo",      title: "Geography" },
+  { key: "track",    title: "Track record" },
+  { key: "review",   title: "Review" },
+] as const;
+
+const STEP_HEADERS = [
+  { title: "Tell us who's behind the check.", sub: "Founders see your name, role, and firm before anything else." },
+  { title: "What kind of investor are you?", sub: "Sets the tone of matches and routes you to the right verification track." },
+  { title: "What do you invest in?", sub: "Pick every sector you actively write checks into." },
+  { title: "What stages do you back?", sub: "We only show you founders raising at one of your stages." },
+  { title: "What's your check size?", sub: "Founders are pre-filtered against this band before they ever see you." },
+  { title: "Where do you invest?", sub: "Geography is a soft signal — out-of-market still scores, just lower." },
+  { title: "Show your track record.", sub: "Recent checks build trust faster than a tagline. Founders see this." },
+  { title: "Looking good. Review and publish.", sub: "Final pass before founders can match with you." },
+];
+
 const TYPES: { key: InvestorType; label: string; note: string }[] = [
   { key: "angel",     label: "Solo angel",       note: "Personal capital, single-decision" },
   { key: "syndicate", label: "Syndicate lead",   note: "AngelList / Sweater style" },
@@ -132,6 +153,8 @@ const TYPES: { key: InvestorType; label: string; note: string }[] = [
   { key: "cvc",       label: "Corporate VC",     note: "Strategic + financial returns" },
 ];
 
+// Founders and investors share one sector taxonomy so matching equality
+// holds. See lib/profile/sectors.ts.
 const SECTOR_OPTIONS = INVESTOR_SECTORS;
 
 const STAGES_WITH_NOTES: { key: StartupStage; label: string; note: string }[] = [
@@ -167,16 +190,8 @@ const REMOTE_OPTIONS = [
   { key: "no" as const,       label: "No" },
 ];
 
-type TabId = "basics" | "depth" | "verifications";
-
-const TABS: { id: TabId; label: string }[] = [
-  { id: "basics", label: "Basics" },
-  { id: "depth", label: "Depth" },
-  { id: "verifications", label: "Verifications" },
-];
-
 // ──────────────────────────────────────────────────────────────────────────
-//  Main component
+//  Top-level
 // ──────────────────────────────────────────────────────────────────────────
 
 export function InvestorBuilder({
@@ -195,7 +210,7 @@ export function InvestorBuilder({
   ownReferences?: OwnReference[];
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabId>("basics");
+  const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<InvestorUiDraft>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -203,14 +218,10 @@ export function InvestorBuilder({
   const [isPublishing, startPublishing] = useTransition();
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
+  const total = STEPS.length;
+  const t = STEP_HEADERS[step];
+  const isReview = step === total - 1;
   const readOnly = isReadOnly(accountLabel);
-
-  // Minimal completion calculation for investors
-  const completion = {
-    pct: calculateInvestorCompletion(draft),
-    canPublish: calculateInvestorCompletion(draft) >= 80,
-    missing: getInvestorMissingFields(draft),
-  };
 
   const save = useCallback(
     (next?: InvestorUiDraft) =>
@@ -246,6 +257,11 @@ export function InvestorBuilder({
     setDraft((d) => ({ ...d, track: { ...d.track, ...p } }));
   }
 
+  async function handleContinue() {
+    const ok = await save();
+    if (ok) setStep((s) => Math.min(total - 1, s + 1));
+  }
+
   function handlePublish() {
     setErrors({});
     setFormError(null);
@@ -256,7 +272,7 @@ export function InvestorBuilder({
         if (result.field) setErrors({ [result.field]: result.error });
         return;
       }
-      router.push("/dashboard?published=1");
+      router.push("/dashboard");
       router.refresh();
     });
   }
@@ -267,384 +283,201 @@ export function InvestorBuilder({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-bg)]/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between px-6">
-          <div className="flex items-center gap-5">
-            <Wordmark size="md" />
-            <span className="hidden h-5 w-px bg-[var(--color-border)] sm:block" />
-            <span className="hidden text-[13px] font-medium text-[var(--color-text-muted)] sm:block">
-              Build your investor profile
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => save()}
-              disabled={isSaving || readOnly}
-              className="inline-flex items-center gap-2 text-[13px] text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-50"
-            >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              {readOnly ? "Read-only" : isSaving ? "Saving..." : savedAt ? `Saved ${savedAt}` : "Save draft"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAndExit}
-              disabled={isSaving || readOnly}
-              className="text-[13px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)] disabled:opacity-50"
-            >
-              Save & exit
-            </button>
-          </div>
+    <main className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 px-5 backdrop-blur md:px-8">
+        <div className="flex items-center gap-4">
+          <Wordmark size="sm" />
+          <span aria-hidden className="hidden h-4 w-px bg-[color:var(--color-border)] sm:block" />
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-text-muted)] sm:inline">
+            Build profile · Investor
+          </span>
+        </div>
+        <div className="flex items-center gap-5">
+          <button
+            type="button"
+            onClick={() => save()}
+            disabled={isSaving || readOnly}
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
+          >
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            {readOnly ? "Read-only" : isSaving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Save draft"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveAndExit}
+            disabled={isSaving || readOnly}
+            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
+          >
+            Save &amp; exit
+          </button>
         </div>
       </header>
 
-      {/* Status banner */}
+      <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
+        <div className="mx-auto max-w-[960px] px-5 py-7 md:px-8 md:py-8">
+          <Stepper step={step} setStep={setStep} />
+        </div>
+      </div>
+
       <BuilderBanner accountLabel={accountLabel} />
 
-      {/* Tab bar */}
-      <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="mx-auto max-w-[1120px] px-6">
-          <nav className="flex gap-1" aria-label="Profile sections">
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={[
-                    "relative px-5 py-4 text-[14px] font-medium transition-colors",
-                    isActive
-                      ? "text-[var(--color-text)]"
-                      : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
-                  ].join(" ")}
-                >
-                  {tab.label}
-                  {isActive && (
-                    <span className="absolute inset-x-0 bottom-0 h-[2px] bg-[var(--color-text)]" />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
+      <ProfileWelcomeCard profileState={profileState} />
 
-      {/* Main content */}
-      <main className="mx-auto max-w-[1120px] px-6 py-10">
-        <div className="grid gap-10 lg:grid-cols-[1fr_320px]">
-          {/* Left column: Tab content */}
-          <div className="min-w-0">
-            {activeTab === "basics" && (
-              <BasicsTab
-                draft={draft}
-                errors={errors}
-                patchIdentity={patchIdentity}
-                patchSectors={patchSectors}
-                patchCheck={patchCheck}
-                patchGeo={patchGeo}
-                patchTrack={patchTrack}
-                setType={(t) => setDraft((d) => ({ ...d, type: t }))}
-                setStages={(s) => setDraft((d) => ({ ...d, stages: s }))}
-              />
-            )}
-            {activeTab === "depth" && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-[22px] font-semibold tracking-tight text-[var(--color-text)]">
-                    Add depth to your profile
-                  </h2>
-                  <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-muted)]">
-                    Portfolio, decision process, value-add, and anti-patterns. These aren't required to publish, but they help founders understand your style.
-                  </p>
-                </div>
-                {depthView ? (
-                  <InvestorDepthEditor depth={depthView} />
-                ) : (
-                  <div className="rounded-[12px] border border-dashed border-[var(--color-border)] p-8 text-center">
-                    <p className="text-[14px] text-[var(--color-text-muted)]">
-                      Complete the basics first to unlock depth fields.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            {activeTab === "verifications" && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-[22px] font-semibold tracking-tight text-[var(--color-text)]">
-                    Verifications
-                  </h2>
-                  <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-muted)]">
-                    Self-attested claims and references. Founders trust verified investors more.
-                  </p>
-                </div>
-                <VerificationPanel
-                  ownVerifications={ownVerifications}
-                  ownReferences={ownReferences}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Right column: Summary + Publish */}
-          <aside className="lg:sticky lg:top-24 lg:self-start">
-            <SummaryCard
-              draft={draft}
-              completion={completion}
-              formError={formError}
-              isPublishing={isPublishing}
-              readOnly={readOnly}
-              onPublish={handlePublish}
-            />
-          </aside>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  Completion helpers
-// ──────────────────────────────────────────────────────────────────────────
-
-function calculateInvestorCompletion(draft: InvestorUiDraft): number {
-  let score = 0;
-  const total = 100;
-  
-  if (draft.identity.fullName.trim()) score += 15;
-  if (draft.identity.workEmail.trim()) score += 10;
-  if (draft.type) score += 10;
-  if (draft.sectors.sectors.length > 0) score += 15;
-  if (draft.stages.length > 0) score += 15;
-  if (draft.check.minCheck && draft.check.maxCheck) score += 20;
-  if (draft.geo.regions.length > 0) score += 10;
-  if (draft.identity.firmName || draft.identity.role) score += 5;
-  
-  return Math.min(score, total);
-}
-
-function getInvestorMissingFields(draft: InvestorUiDraft): { id: string; label: string }[] {
-  const missing: { id: string; label: string }[] = [];
-  
-  if (!draft.identity.fullName.trim()) missing.push({ id: "name", label: "Add your name" });
-  if (!draft.identity.workEmail.trim()) missing.push({ id: "email", label: "Add work email" });
-  if (!draft.type) missing.push({ id: "type", label: "Select investor type" });
-  if (draft.sectors.sectors.length === 0) missing.push({ id: "sectors", label: "Select sectors" });
-  if (draft.stages.length === 0) missing.push({ id: "stages", label: "Select stages" });
-  if (!draft.check.minCheck || !draft.check.maxCheck) missing.push({ id: "check", label: "Set check size" });
-  if (draft.geo.regions.length === 0) missing.push({ id: "geo", label: "Select regions" });
-  
-  return missing;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  Basics tab with collapsible sections
-// ──────────────────────────────────────────────────────────────────────────
-
-function BasicsTab({
-  draft,
-  errors,
-  patchIdentity,
-  patchSectors,
-  patchCheck,
-  patchGeo,
-  patchTrack,
-  setType,
-  setStages,
-}: {
-  draft: InvestorUiDraft;
-  errors: Record<string, string>;
-  patchIdentity: (p: Partial<InvestorUiDraft["identity"]>) => void;
-  patchSectors: (p: Partial<InvestorUiDraft["sectors"]>) => void;
-  patchCheck: (p: Partial<InvestorUiDraft["check"]>) => void;
-  patchGeo: (p: Partial<InvestorUiDraft["geo"]>) => void;
-  patchTrack: (p: Partial<InvestorUiDraft["track"]>) => void;
-  setType: (t: InvestorType) => void;
-  setStages: (s: StartupStage[]) => void;
-}) {
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set(["identity"]));
-
-  function toggle(id: string) {
-    setOpenSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  const sections = [
-    {
-      id: "identity",
-      title: "Identity",
-      subtitle: "Name, role, and firm",
-      complete: Boolean(draft.identity.fullName && draft.identity.workEmail),
-      content: <IdentitySection draft={draft} patch={patchIdentity} errors={errors} />,
-    },
-    {
-      id: "type",
-      title: "Investor type",
-      subtitle: "What kind of investor are you?",
-      complete: Boolean(draft.type),
-      content: <TypeSection draft={draft} setType={setType} />,
-    },
-    {
-      id: "sectors",
-      title: "Sectors & thesis",
-      subtitle: "What you invest in",
-      complete: draft.sectors.sectors.length > 0,
-      content: <SectorsSection draft={draft} patch={patchSectors} />,
-    },
-    {
-      id: "stages",
-      title: "Stages",
-      subtitle: "What stages you back",
-      complete: draft.stages.length > 0,
-      content: <StagesSection draft={draft} setStages={setStages} />,
-    },
-    {
-      id: "check",
-      title: "Check size",
-      subtitle: "Your investment range",
-      complete: Boolean(draft.check.minCheck && draft.check.maxCheck),
-      content: <CheckSection draft={draft} patch={patchCheck} errors={errors} />,
-    },
-    {
-      id: "geo",
-      title: "Geography",
-      subtitle: "Where you invest",
-      complete: draft.geo.regions.length > 0,
-      content: <GeoSection draft={draft} patch={patchGeo} />,
-    },
-    {
-      id: "track",
-      title: "Track record",
-      subtitle: "Your investment history",
-      complete: Boolean(draft.track.totalChecks || draft.track.recent.length > 0),
-      content: <TrackSection draft={draft} patch={patchTrack} />,
-    },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="mb-8">
-        <h2 className="text-[22px] font-semibold tracking-tight text-[var(--color-text)]">
-          The basics
-        </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-[var(--color-text-muted)]">
-          These details are required to publish your profile. Founders see this first.
+      <section className="mx-auto w-full max-w-[760px] px-5 py-12 md:px-8 md:py-16">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
+          Step {String(step + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}
+          <span aria-hidden className="mx-2 text-[color:var(--color-border-strong)]">·</span>
+          {STEPS[step].title}
         </p>
-      </div>
-
-      {sections.map((section) => (
-        <CollapsibleSection
-          key={section.id}
-          id={section.id}
-          title={section.title}
-          subtitle={section.subtitle}
-          complete={section.complete}
-          isOpen={openSections.has(section.id)}
-          onToggle={() => toggle(section.id)}
+        <h1
+          className="mt-3 text-balance font-semibold tracking-[-0.014em] text-[color:var(--color-text-strong)]"
+          style={{ fontSize: "clamp(26px, 3vw, 34px)", lineHeight: 1.12 }}
         >
-          {section.content}
-        </CollapsibleSection>
-      ))}
-    </div>
-  );
-}
+          {t.title}
+        </h1>
+        <p className="mt-3 max-w-[58ch] text-[14.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
+          {t.sub}
+        </p>
 
-// ──────────────────────────────────────────────────────────────────────────
-//  Collapsible section with animation
-// ──────────────────────────────────────────────────────────────────────────
+        <div className="mt-10">
+          {step === 0 && <IdentityStep draft={draft} patch={patchIdentity} errors={errors} />}
+          {step === 1 && <TypeStep draft={draft} setType={(t) => setDraft((d) => ({ ...d, type: t }))} />}
+          {step === 2 && <SectorsStep draft={draft} patch={patchSectors} />}
+          {step === 3 && <StagesStep draft={draft} setStages={(s) => setDraft((d) => ({ ...d, stages: s }))} />}
+          {step === 4 && <CheckStep draft={draft} patch={patchCheck} errors={errors} />}
+          {step === 5 && <GeoStep draft={draft} patch={patchGeo} />}
+          {step === 6 && <TrackStep draft={draft} patch={patchTrack} />}
+          {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
+        </div>
 
-function CollapsibleSection({
-  id,
-  title,
-  subtitle,
-  complete,
-  isOpen,
-  onToggle,
-  children,
-}: {
-  id: string;
-  title: string;
-  subtitle: string;
-  complete: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | undefined>(undefined);
-
-  useEffect(() => {
-    if (contentRef.current) {
-      setHeight(contentRef.current.scrollHeight);
-    }
-  }, [children]);
-
-  return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-[var(--color-surface-2)]"
-        aria-expanded={isOpen}
-        aria-controls={`section-${id}`}
-      >
-        <div className="flex items-center gap-4">
-          <span
-            className={[
-              "flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold transition-colors",
-              complete
-                ? "bg-[var(--color-brand-tint)] text-[var(--color-brand-strong)]"
-                : "bg-[var(--color-surface-2)] text-[var(--color-text-faint)]",
-            ].join(" ")}
+        {formError ? (
+          <p
+            role="alert"
+            className="mt-6 rounded-[10px] border border-[color:var(--color-danger)] bg-[color:var(--color-bg)] px-4 py-3 text-[13px] text-[color:var(--color-danger)]"
           >
-            {complete ? <Check size={12} strokeWidth={2.5} /> : null}
-          </span>
-          <div>
-            <p className="text-[15px] font-semibold text-[var(--color-text)]">{title}</p>
-            <p className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">{subtitle}</p>
-          </div>
-        </div>
-        <ChevronDown
-          size={18}
-          strokeWidth={2}
-          className={[
-            "shrink-0 text-[var(--color-text-faint)] transition-transform duration-200",
-            isOpen ? "rotate-180" : "",
-          ].join(" ")}
-          style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
-        />
-      </button>
+            {formError}
+          </p>
+        ) : null}
+      </section>
 
-      <div
-        id={`section-${id}`}
-        style={{
-          height: isOpen ? height : 0,
-          opacity: isOpen ? 1 : 0,
-          transition: "height 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
-      >
-        <div ref={contentRef} className="border-t border-[var(--color-border)] px-6 py-6">
-          {children}
+      <footer className="sticky bottom-0 border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between px-5 py-4 md:px-8 md:py-5">
+          <button
+            type="button"
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={step === 0 || isSaving || isPublishing}
+            className="text-[13px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ← Back
+          </button>
+          <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)] sm:inline">
+            {step + 1} / {total}
+          </span>
+          {!isReview ? (
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={isSaving || readOnly}
+              className="inline-flex items-center gap-2 rounded-[10px] bg-[color:var(--color-text-strong)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-text)] disabled:opacity-60"
+            >
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Continue →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={isPublishing || readOnly}
+              className="inline-flex items-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
+            >
+              {isPublishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Publish profile
+            </button>
+          )}
         </div>
-      </div>
-    </div>
+      </footer>
+
+      {depthView ? (
+        <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+          <InvestorDepthEditor depth={depthView} />
+        </section>
+      ) : null}
+
+      <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+        <VerificationPanel
+          ownVerifications={ownVerifications}
+          ownReferences={ownReferences}
+        />
+      </section>
+    </main>
   );
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-//  Section contents
+//  Stepper
 // ──────────────────────────────────────────────────────────────────────────
 
-function IdentitySection({
+function Stepper({ step, setStep }: { step: number; setStep: (i: number) => void }) {
+  return (
+    <ol className="flex items-start">
+      {STEPS.map((s, i) => {
+        const isActive = i === step;
+        const isComplete = i < step;
+        return (
+          <li key={s.key} className="flex min-w-0 flex-1 flex-col items-center">
+            <div className="flex w-full items-center">
+              <span
+                aria-hidden
+                className={[
+                  "h-[2px] flex-1 transition-colors",
+                  i === 0 ? "bg-transparent" : i <= step ? "bg-[color:var(--color-brand)]" : "bg-[color:var(--color-border)]",
+                ].join(" ")}
+              />
+              <button
+                type="button"
+                onClick={() => setStep(i)}
+                aria-current={isActive ? "step" : undefined}
+                className={[
+                  "grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold transition-colors",
+                  isActive
+                    ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand)] text-white"
+                    : isComplete
+                      ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+                      : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-faint)]",
+                ].join(" ")}
+              >
+                {isComplete ? "✓" : i + 1}
+              </button>
+              <span
+                aria-hidden
+                className={[
+                  "h-[2px] flex-1 transition-colors",
+                  i === STEPS.length - 1 ? "bg-transparent" : i < step ? "bg-[color:var(--color-brand)]" : "bg-[color:var(--color-border)]",
+                ].join(" ")}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setStep(i)}
+              className={[
+                "mt-2.5 max-w-full truncate px-1 text-[11.5px] font-medium transition-colors",
+                isActive ? "text-[color:var(--color-text-strong)]" : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]",
+              ].join(" ")}
+            >
+              {s.title}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Steps
+// ──────────────────────────────────────────────────────────────────────────
+
+function IdentityStep({
   draft,
   patch,
   errors,
@@ -654,9 +487,9 @@ function IdentitySection({
   errors: Record<string, string>;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
       <Field label="Full name" required error={errors.name}>
-        <Input value={draft.identity.fullName} onChange={(v) => patch({ fullName: v })} placeholder="Your name" />
+        <Input value={draft.identity.fullName} onChange={(v) => patch({ fullName: v })} />
       </Field>
       <Field label="Title / Role" required>
         <Input value={draft.identity.role} onChange={(v) => patch({ role: v })} placeholder="Partner, Principal, Angel, etc." />
@@ -677,13 +510,17 @@ function IdentitySection({
         <Input value={draft.identity.city} onChange={(v) => patch({ city: v })} placeholder="City, State / Country" />
       </Field>
       <Field label="Founded">
-        <Input value={draft.identity.foundedYear?.toString() ?? ""} onChange={(v) => patch({ foundedYear: v ? Number(v) : null })} placeholder="YYYY" />
+        <Input
+          value={draft.identity.foundedYear?.toString() ?? ""}
+          onChange={(v) => patch({ foundedYear: v ? Number(v) : null })}
+          placeholder="YYYY"
+        />
       </Field>
     </div>
   );
 }
 
-function TypeSection({
+function TypeStep({
   draft,
   setType,
 }: {
@@ -691,7 +528,7 @@ function TypeSection({
   setType: (t: InvestorType) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
       {TYPES.map((t) => {
         const on = draft.type === t.key;
         return (
@@ -700,16 +537,16 @@ function TypeSection({
             type="button"
             onClick={() => setType(t.key)}
             className={[
-              "flex flex-col items-start rounded-[12px] border p-4 text-left transition-all duration-150",
+              "flex h-full flex-col items-start rounded-[14px] border p-5 text-left transition-colors",
               on
-                ? "border-[var(--color-brand)] bg-[var(--color-brand-tint)] ring-1 ring-[var(--color-brand)]"
-                : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-faint)]",
+                ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] ring-1 ring-[color:var(--color-brand)]"
+                : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-text-strong)]",
             ].join(" ")}
           >
-            <span className={["text-[14px] font-semibold", on ? "text-[var(--color-brand-strong)]" : "text-[var(--color-text)]"].join(" ")}>
+            <span className={["text-[15px] font-semibold leading-tight", on ? "text-[color:var(--color-brand-strong)]" : "text-[color:var(--color-text-strong)]"].join(" ")}>
               {t.label}
             </span>
-            <span className="mt-1 text-[12px] text-[var(--color-text-muted)]">
+            <span className="mt-2 text-[12px] leading-snug text-[color:var(--color-text-muted)]">
               {t.note}
             </span>
           </button>
@@ -719,7 +556,7 @@ function TypeSection({
   );
 }
 
-function SectorsSection({
+function SectorsStep({
   draft,
   patch,
 }: {
@@ -734,12 +571,11 @@ function SectorsSection({
       patch({ sectors: [...draft.sectors.sectors, s] });
     }
   }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div>
-        <p className="mb-3 text-[13px] text-[var(--color-text-muted)]">
-          Select all sectors you actively invest in.
+        <p className="mb-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
+          Sectors I write checks into
         </p>
         <div className="flex flex-wrap gap-2">
           {SECTOR_OPTIONS.map((s) => {
@@ -750,10 +586,10 @@ function SectorsSection({
                 type="button"
                 onClick={() => toggle(s)}
                 className={[
-                  "rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-150",
+                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   on
-                    ? "border-[var(--color-brand)] bg-[var(--color-brand-tint)] text-[var(--color-brand-strong)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-text-faint)] hover:text-[var(--color-text)]",
+                    ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+                    : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] hover:border-[color:var(--color-text-strong)]",
                 ].join(" ")}
               >
                 {s}
@@ -761,21 +597,33 @@ function SectorsSection({
             );
           })}
         </div>
-        <p className="mt-3 text-[12px] text-[var(--color-text-faint)]">
+        <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
           {draft.sectors.sectors.length} selected
         </p>
       </div>
-      <Field label="Investment thesis (public)">
-        <Textarea placeholder="One paragraph on what you back and why founders should care." value={draft.sectors.thesis} onChange={(v) => patch({ thesis: v })} />
-      </Field>
-      <Field label="Anti-thesis (private)">
-        <Input placeholder='e.g. "No consumer social, no crypto-only plays"' value={draft.sectors.antiThesis} onChange={(v) => patch({ antiThesis: v })} />
-      </Field>
+      <div className="border-t border-[color:var(--color-border)] pt-6">
+        <Field label="Investment thesis (public)">
+          <Textarea
+            placeholder="One paragraph on what you back and why founders should care."
+            value={draft.sectors.thesis}
+            onChange={(v) => patch({ thesis: v })}
+          />
+        </Field>
+      </div>
+      <div>
+        <Field label="Anti-thesis (private — used to filter)">
+          <Input
+            placeholder='e.g. "No consumer social, no crypto-only plays"'
+            value={draft.sectors.antiThesis}
+            onChange={(v) => patch({ antiThesis: v })}
+          />
+        </Field>
+      </div>
     </div>
   );
 }
 
-function StagesSection({
+function StagesStep({
   draft,
   setStages,
 }: {
@@ -790,37 +638,38 @@ function StagesSection({
       setStages([...draft.stages, s]);
     }
   }
-
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-      {STAGES_WITH_NOTES.map((s) => {
-        const on = selected.has(s.key);
-        return (
-          <button
-            key={s.key}
-            type="button"
-            onClick={() => toggle(s.key)}
-            className={[
-              "flex flex-col items-start rounded-[12px] border p-4 text-left transition-all duration-150",
-              on
-                ? "border-[var(--color-brand)] bg-[var(--color-brand-tint)] ring-1 ring-[var(--color-brand)]"
-                : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text-faint)]",
-            ].join(" ")}
-          >
-            <span className={["text-[14px] font-semibold", on ? "text-[var(--color-brand-strong)]" : "text-[var(--color-text)]"].join(" ")}>
-              {s.label}
-            </span>
-            <span className="mt-1 font-mono text-[11px] text-[var(--color-text-muted)]">
-              {s.note}
-            </span>
-          </button>
-        );
-      })}
+    <div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        {STAGES_WITH_NOTES.map((s) => {
+          const on = selected.has(s.key);
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => toggle(s.key)}
+              className={[
+                "flex flex-col items-start rounded-[14px] border p-5 text-left transition-colors",
+                on
+                  ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] ring-1 ring-[color:var(--color-brand)]"
+                  : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] hover:border-[color:var(--color-text-strong)]",
+              ].join(" ")}
+            >
+              <span className={["text-[15px] font-semibold", on ? "text-[color:var(--color-brand-strong)]" : "text-[color:var(--color-text-strong)]"].join(" ")}>
+                {s.label}
+              </span>
+              <span className="mt-2 font-mono text-[10.5px] tabular-nums text-[color:var(--color-text-muted)]">
+                {s.note}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function CheckSection({
+function CheckStep({
   draft,
   patch,
   errors,
@@ -830,19 +679,31 @@ function CheckSection({
   errors: Record<string, string>;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <Field label="Min check" required error={errors.checkMin}>
-          <Input prefix="$" value={draft.check.minCheck?.toString() ?? ""} onChange={(v) => patch({ minCheck: v ? Number(v.replace(/[^0-9]/g, "")) : null })} placeholder="25,000" />
+          <Input
+            prefix="$"
+            value={draft.check.minCheck?.toString() ?? ""}
+            onChange={(v) => patch({ minCheck: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
+          />
         </Field>
         <Field label="Sweet spot">
-          <Input prefix="$" value={draft.check.sweetSpot?.toString() ?? ""} onChange={(v) => patch({ sweetSpot: v ? Number(v.replace(/[^0-9]/g, "")) : null })} placeholder="100,000" />
+          <Input
+            prefix="$"
+            value={draft.check.sweetSpot?.toString() ?? ""}
+            onChange={(v) => patch({ sweetSpot: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
+          />
         </Field>
         <Field label="Max check" required error={errors.checkMax}>
-          <Input prefix="$" value={draft.check.maxCheck?.toString() ?? ""} onChange={(v) => patch({ maxCheck: v ? Number(v.replace(/[^0-9]/g, "")) : null })} placeholder="250,000" />
+          <Input
+            prefix="$"
+            value={draft.check.maxCheck?.toString() ?? ""}
+            onChange={(v) => patch({ maxCheck: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
+          />
         </Field>
       </div>
-      <Field label="Position preference">
+      <Field label="Position">
         <div className="flex flex-wrap gap-2">
           {POSITIONS.map((opt) => {
             const on = draft.check.position === opt.key;
@@ -852,10 +713,10 @@ function CheckSection({
                 type="button"
                 onClick={() => patch({ position: opt.key })}
                 className={[
-                  "rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-150",
+                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   on
-                    ? "border-[var(--color-text)] bg-[var(--color-text)] text-white"
-                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-text-faint)]",
+                    ? "border-[color:var(--color-text-strong)] bg-[color:var(--color-text-strong)] text-white"
+                    : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] hover:border-[color:var(--color-text-strong)]",
                 ].join(" ")}
               >
                 {opt.label}
@@ -866,17 +727,24 @@ function CheckSection({
       </Field>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <Field label="Annual capacity (checks / yr)">
-          <Input value={draft.check.annualCapacity?.toString() ?? ""} onChange={(v) => patch({ annualCapacity: v ? Number(v) : null })} placeholder="10" />
+          <Input
+            value={draft.check.annualCapacity?.toString() ?? ""}
+            onChange={(v) => patch({ annualCapacity: v ? Number(v) : null })}
+          />
         </Field>
-        <Field label="Max valuation cap">
-          <Input prefix="$" value={draft.check.maxValuation?.toString() ?? ""} onChange={(v) => patch({ maxValuation: v ? Number(v.replace(/[^0-9]/g, "")) : null })} placeholder="20,000,000" />
+        <Field label="Max valuation cap you'll write at">
+          <Input
+            prefix="$"
+            value={draft.check.maxValuation?.toString() ?? ""}
+            onChange={(v) => patch({ maxValuation: v ? Number(v.replace(/[^0-9]/g, "")) : null })}
+          />
         </Field>
       </div>
     </div>
   );
 }
 
-function GeoSection({
+function GeoStep({
   draft,
   patch,
 }: {
@@ -891,12 +759,11 @@ function GeoSection({
       patch({ regions: [...draft.geo.regions, r] });
     }
   }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div>
-        <p className="mb-3 text-[13px] text-[var(--color-text-muted)]">
-          Select the markets you invest in.
+        <p className="mb-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
+          Markets I invest in
         </p>
         <div className="flex flex-wrap gap-2">
           {REGION_OPTIONS.map((r) => {
@@ -907,10 +774,10 @@ function GeoSection({
                 type="button"
                 onClick={() => toggle(r)}
                 className={[
-                  "rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-150",
+                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   on
-                    ? "border-[var(--color-brand)] bg-[var(--color-brand-tint)] text-[var(--color-brand-strong)]"
-                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-text-faint)]",
+                    ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
+                    : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] hover:border-[color:var(--color-text-strong)]",
                 ].join(" ")}
               >
                 {r}
@@ -929,10 +796,10 @@ function GeoSection({
                 type="button"
                 onClick={() => patch({ remoteOk: opt.key })}
                 className={[
-                  "rounded-full border px-4 py-2 text-[13px] font-medium transition-all duration-150",
+                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   on
-                    ? "border-[var(--color-text)] bg-[var(--color-text)] text-white"
-                    : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-text-faint)]",
+                    ? "border-[color:var(--color-text-strong)] bg-[color:var(--color-text-strong)] text-white"
+                    : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] hover:border-[color:var(--color-text-strong)]",
                 ].join(" ")}
               >
                 {opt.label}
@@ -941,14 +808,18 @@ function GeoSection({
           })}
         </div>
       </Field>
-      <Field label="Office hours / availability">
-        <Input placeholder="e.g. NYC Wed/Thu, SF first week of every month" value={draft.geo.officeHours} onChange={(v) => patch({ officeHours: v })} />
+      <Field label="Office hours / in-person availability (will appear in your thesis)">
+        <Input
+          placeholder="e.g. NYC Wed/Thu, SF first week of every month"
+          value={draft.geo.officeHours}
+          onChange={(v) => patch({ officeHours: v })}
+        />
       </Field>
     </div>
   );
 }
 
-function TrackSection({
+function TrackStep({
   draft,
   patch,
 }: {
@@ -957,7 +828,10 @@ function TrackSection({
 }) {
   function addRow() {
     patch({
-      recent: [...draft.track.recent, { company: "", round: "", year: null, checkSize: "" }],
+      recent: [
+        ...draft.track.recent,
+        { company: "", round: "", year: null, checkSize: "" },
+      ],
     });
   }
   function removeRow(i: number) {
@@ -968,208 +842,136 @@ function TrackSection({
       recent: draft.track.recent.map((r, idx) => (idx === i ? { ...r, ...p } : r)),
     });
   }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
         <Field label="Total checks written">
-          <Input value={draft.track.totalChecks?.toString() ?? ""} onChange={(v) => patch({ totalChecks: v ? Number(v) : null })} placeholder="50" />
+          <Input
+            value={draft.track.totalChecks?.toString() ?? ""}
+            onChange={(v) => patch({ totalChecks: v ? Number(v) : null })}
+          />
         </Field>
         <Field label="Years investing">
-          <Input value={draft.track.yearsInvesting?.toString() ?? ""} onChange={(v) => patch({ yearsInvesting: v ? Number(v) : null })} placeholder="5" />
+          <Input
+            value={draft.track.yearsInvesting?.toString() ?? ""}
+            onChange={(v) => patch({ yearsInvesting: v ? Number(v) : null })}
+          />
         </Field>
         <Field label="Checks last 12 months">
-          <Input value={draft.track.checksLast12mo?.toString() ?? ""} onChange={(v) => patch({ checksLast12mo: v ? Number(v) : null })} placeholder="8" />
+          <Input
+            value={draft.track.checksLast12mo?.toString() ?? ""}
+            onChange={(v) => patch({ checksLast12mo: v ? Number(v) : null })}
+          />
         </Field>
       </div>
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[13px] font-medium text-[var(--color-text)]">
-            Recent investments (public)
+          <p className="font-mono text-[10.5px] font-medium uppercase tracking-[0.16em] text-[color:var(--color-text-faint)]">
+            Recent investments — public on your profile
           </p>
-          <button type="button" onClick={addRow} className="text-[13px] font-medium text-[var(--color-brand)] hover:underline">
-            + Add investment
+          <button
+            type="button"
+            onClick={addRow}
+            className="text-[12.5px] font-medium text-[color:var(--color-text-strong)] hover:underline"
+          >
+            + Add
           </button>
         </div>
-        <div className="space-y-2">
+        <ul className="divide-y divide-[color:var(--color-border)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
           {draft.track.recent.length === 0 ? (
-            <div className="rounded-[12px] border border-dashed border-[var(--color-border)] p-6 text-center">
-              <p className="text-[13px] text-[var(--color-text-muted)]">
-                No investments added yet. Click "+ Add investment" to add one.
-              </p>
-            </div>
+            <li className="px-4 py-6 text-center text-[13px] text-[color:var(--color-text-faint)]">
+              No investments added yet. Click &ldquo;+ Add&rdquo; to add one.
+            </li>
           ) : (
             draft.track.recent.map((r, i) => (
-              <div key={i} className="grid grid-cols-1 gap-2 rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
-                <Input placeholder="Company" value={r.company} onChange={(v) => updateRow(i, { company: v })} />
-                <Input placeholder="Round" value={r.round ?? ""} onChange={(v) => updateRow(i, { round: v })} />
-                <Input placeholder="Year" value={r.year?.toString() ?? ""} onChange={(v) => updateRow(i, { year: v ? Number(v) : null })} />
-                <Input placeholder="$1M" value={r.checkSize ?? ""} onChange={(v) => updateRow(i, { checkSize: v })} />
-                <button type="button" onClick={() => removeRow(i)} className="flex h-11 w-11 items-center justify-center rounded-[8px] text-[var(--color-text-faint)] transition-colors hover:bg-[var(--color-bg)] hover:text-[var(--color-danger)]" aria-label="Remove">
-                  <X size={16} />
+              <li key={i} className="grid grid-cols-1 items-center gap-2 px-4 py-3 md:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+                <Input
+                  placeholder="Company"
+                  value={r.company}
+                  onChange={(v) => updateRow(i, { company: v })}
+                />
+                <Input
+                  placeholder="Round"
+                  value={r.round ?? ""}
+                  onChange={(v) => updateRow(i, { round: v })}
+                />
+                <Input
+                  placeholder="Year"
+                  value={r.year?.toString() ?? ""}
+                  onChange={(v) => updateRow(i, { year: v ? Number(v) : null })}
+                />
+                <Input
+                  placeholder="$1M"
+                  value={r.checkSize ?? ""}
+                  onChange={(v) => updateRow(i, { checkSize: v })}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  className="grid h-8 w-8 place-items-center rounded-[8px] text-[color:var(--color-text-faint)] hover:bg-[color:var(--color-bg)] hover:text-[color:var(--color-danger)]"
+                  aria-label="Remove"
+                >
+                  <X className="h-4 w-4" />
                 </button>
-              </div>
+              </li>
             ))
           )}
-        </div>
+        </ul>
       </div>
     </div>
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-//  Summary card
-// ──────────────────────────────────────────────────────────────────────────
-
-function SummaryCard({
+function ReviewStep({
   draft,
-  completion,
-  formError,
-  isPublishing,
-  readOnly,
-  onPublish,
+  fieldErrors,
 }: {
   draft: InvestorUiDraft;
-  completion: { pct: number; canPublish: boolean; missing: { id: string; label: string }[] };
-  formError: string | null;
-  isPublishing: boolean;
-  readOnly: boolean;
-  onPublish: () => void;
+  fieldErrors: Record<string, string>;
 }) {
-  const { canPublish } = completion;
-  const typeLabel = TYPES.find((t) => t.key === draft.type)?.label ?? "";
-
+  const hasErrors = Object.keys(fieldErrors).length > 0;
+  const typeLabel = TYPES.find((t) => t.key === draft.type)?.label ?? "—";
   return (
-    <div className="overflow-hidden rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)]">
-      {/* Preview */}
-      <div className="p-6">
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-faint)]">
-          Preview
-        </p>
-        <p className="mt-3 text-[17px] font-semibold text-[var(--color-text)]">
+    <div className="space-y-6">
+      {hasErrors ? (
+        <div className="rounded-[12px] border border-[color:var(--color-danger)] bg-[color:var(--color-bg)] p-4">
+          <p className="text-[13px] font-medium text-[color:var(--color-danger)]">
+            A few sections still need attention before you can publish:
+          </p>
+          <ul className="mt-2 list-inside list-disc text-[12.5px] text-[color:var(--color-text-muted)]">
+            {Object.values(fieldErrors).slice(0, 6).map((msg, i) => (
+              <li key={i}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6">
+        <p className="text-[18px] font-semibold leading-tight text-[color:var(--color-text-strong)]">
           {draft.identity.fullName || "Untitled investor"}
         </p>
-        <p className="mt-1 text-[13px] text-[var(--color-text-muted)]">
-          {[draft.identity.role, draft.identity.firmName].filter(Boolean).join(" · ") || "No role or firm"}
+        <p className="mt-0.5 text-[13px] text-[color:var(--color-text-muted)]">
+          {draft.identity.role || "—"}
+          {draft.identity.firmName ? ` · ${draft.identity.firmName}` : ""}
         </p>
-        {(draft.sectors.sectors.length > 0 || typeLabel) && (
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {typeLabel && (
-              <span className="rounded-full bg-[var(--color-brand-tint)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-brand-strong)]">
-                {typeLabel}
-              </span>
-            )}
-            {draft.sectors.sectors.slice(0, 3).map((s) => (
-              <span key={s} className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-text-muted)]">
-                {s}
-              </span>
-            ))}
-            {draft.sectors.sectors.length > 3 && (
-              <span className="rounded-full bg-[var(--color-surface-2)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-text-faint)]">
-                +{draft.sectors.sectors.length - 3}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Completion */}
-      <div className="border-t border-[var(--color-border)] px-6 py-5">
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] font-medium text-[var(--color-text)]">Profile completion</span>
-          <span className="font-mono text-[13px] font-semibold tabular-nums text-[var(--color-text)]">
-            {completion.pct}%
-          </span>
-        </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--color-surface-2)]">
-          <div
-            className="h-full rounded-full bg-[var(--color-brand)] transition-all duration-300"
-            style={{ width: `${completion.pct}%`, transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
-          />
-        </div>
-        {completion.missing.length > 0 && (
-          <p className="mt-3 text-[12px] text-[var(--color-text-faint)]">
-            Missing: {completion.missing.slice(0, 3).map((m) => m.label).join(", ")}
-            {completion.missing.length > 3 && ` +${completion.missing.length - 3} more`}
-          </p>
-        )}
-      </div>
-
-      {/* Publish */}
-      <div className="border-t border-[var(--color-border)] px-6 py-5">
-        {formError && (
-          <p className="mb-4 text-[12px] text-[var(--color-danger)]">{formError}</p>
-        )}
-        <button
-          type="button"
-          onClick={onPublish}
-          disabled={!canPublish || isPublishing || readOnly}
-          className={[
-            "inline-flex w-full items-center justify-center gap-2 rounded-[10px] px-5 py-3 text-[14px] font-semibold transition-all duration-150",
-            canPublish
-              ? "bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-strong)]"
-              : "cursor-not-allowed bg-[var(--color-surface-2)] text-[var(--color-text-faint)]",
-          ].join(" ")}
-        >
-          {isPublishing && <Loader2 className="h-4 w-4 animate-spin" />}
-          {canPublish ? "Publish profile" : `${80 - completion.pct}% more to publish`}
-        </button>
-        <p className="mt-3 text-center text-[11px] text-[var(--color-text-faint)]">
-          Visible only to founders who match your filters.
+        <p className="mt-3 max-w-[60ch] text-[14px] leading-[1.55] text-[color:var(--color-text)]">
+          {draft.sectors.thesis || "Add your thesis in step 3."}
         </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {draft.sectors.sectors.slice(0, 8).map((s) => <Tag key={s}>{s}</Tag>)}
+          {draft.stages.map((s) => <Tag key={s}>{STAGE_LABEL[s]}</Tag>)}
+        </div>
       </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  Status banner
-// ──────────────────────────────────────────────────────────────────────────
-
-function BuilderBanner({ accountLabel }: { accountLabel: AccountLabel }) {
-  if (accountLabel === "verified" || accountLabel === "unverified") return null;
-
-  const config: Record<
-    Exclude<AccountLabel, "verified" | "unverified">,
-    { title: string; body: string; tone: "info" | "warning" | "danger" }
-  > = {
-    in_review: {
-      title: "In review",
-      body: "Your profile is being reviewed. Editing is locked until complete.",
-      tone: "info",
-    },
-    rejected: {
-      title: "Resubmission needed",
-      body: "Your profile was returned. Edit and submit again.",
-      tone: "warning",
-    },
-    banned: {
-      title: "Account suspended",
-      body: "Contact support if you believe this is a mistake.",
-      tone: "danger",
-    },
-  };
-
-  const c = config[accountLabel];
-  const borderColor =
-    c.tone === "danger" ? "var(--color-danger)"
-      : c.tone === "warning" ? "#d97706"
-      : "var(--color-brand)";
-
-  return (
-    <div
-      className="border-b px-6 py-3"
-      style={{
-        background: "var(--color-surface)",
-        borderTop: `2px solid ${borderColor}`,
-        borderBottomColor: "var(--color-border)",
-      }}
-    >
-      <div className="mx-auto flex max-w-[1120px] items-center gap-3">
-        <span className="text-[13px] font-semibold" style={{ color: borderColor }}>
-          {c.title}
-        </span>
-        <span className="text-[13px] text-[var(--color-text-muted)]">{c.body}</span>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <SummaryRow label="Type" value={typeLabel} />
+        <SummaryRow label="Stages" value={draft.stages.map((s) => STAGE_LABEL[s]).join(", ") || "—"} />
+        <SummaryRow label="Check range" value={
+          draft.check.minCheck && draft.check.maxCheck
+            ? `$${formatCurrency(draft.check.minCheck)} – $${formatCurrency(draft.check.maxCheck)}`
+            : "—"
+        } />
+        <SummaryRow label="Sweet spot" value={draft.check.sweetSpot ? `$${formatCurrency(draft.check.sweetSpot)}` : "—"} />
+        <SummaryRow label="Sectors" value={draft.sectors.sectors.length ? `${draft.sectors.sectors.length}` : "—"} />
+        <SummaryRow label="Regions" value={draft.geo.regions.length ? `${draft.geo.regions.length}` : "—"} />
       </div>
     </div>
   );
@@ -1194,12 +996,14 @@ function Field({
 }) {
   return (
     <label className={["block", full ? "md:col-span-2" : ""].join(" ")}>
-      <span className="mb-2 flex items-center gap-1 text-[13px] font-medium text-[var(--color-text)]">
+      <span className="mb-2 flex items-center gap-1 text-[12px] font-medium text-[color:var(--color-text-strong)]">
         {label}
-        {required && <span className="text-[var(--color-brand)]">*</span>}
+        {required && <span className="text-[color:var(--color-brand)]">*</span>}
       </span>
       {children}
-      {error && <span className="mt-1.5 block text-[12px] text-[var(--color-danger)]">{error}</span>}
+      {error ? (
+        <span className="mt-1 block text-[12px] text-[color:var(--color-danger)]">{error}</span>
+      ) : null}
     </label>
   );
 }
@@ -1218,16 +1022,20 @@ function Input({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="flex h-11 items-center rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 transition-all duration-150 focus-within:border-[var(--color-text)] focus-within:ring-1 focus-within:ring-[var(--color-text)]/20">
-      {prefix && <span className="mr-2 font-mono text-[13px] text-[var(--color-text-faint)]">{prefix}</span>}
+    <div className="flex h-11 items-center rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3.5 transition-colors focus-within:border-[color:var(--color-text-strong)] focus-within:ring-1 focus-within:ring-[color:var(--color-text-strong)]">
+      {prefix ? (
+        <span className="mr-1.5 font-mono text-[12.5px] text-[color:var(--color-text-faint)]">{prefix}</span>
+      ) : null}
       <input
         type="text"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-full w-full bg-transparent text-[14px] text-[var(--color-text)] placeholder:text-[var(--color-text-faint)] focus:outline-none"
+        className="h-full w-full bg-transparent text-[14px] text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-faint)] focus:outline-none"
       />
-      {suffix && <span className="ml-2 font-mono text-[13px] text-[var(--color-text-faint)]">{suffix}</span>}
+      {suffix ? (
+        <span className="ml-1.5 font-mono text-[12.5px] text-[color:var(--color-text-faint)]">{suffix}</span>
+      ) : null}
     </div>
   );
 }
@@ -1247,7 +1055,84 @@ function Textarea({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       rows={4}
-      className="block w-full resize-none rounded-[10px] border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-[14px] leading-relaxed text-[var(--color-text)] placeholder:text-[var(--color-text-faint)] transition-all duration-150 focus:border-[var(--color-text)] focus:outline-none focus:ring-1 focus:ring-[var(--color-text)]/20"
+      className="block w-full resize-none rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3.5 py-3 text-[14px] leading-relaxed text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-faint)] transition-colors focus:border-[color:var(--color-text-strong)] focus:outline-none focus:ring-1 focus:ring-[color:var(--color-text-strong)]"
     />
   );
+}
+
+function Tag({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2.5 py-0.5 text-[11.5px] font-medium text-[color:var(--color-text-muted)]">
+      {children}
+    </span>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3">
+      <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-[color:var(--color-text-faint)]">
+        {label}
+      </span>
+      <span className="text-right text-[13.5px] font-medium text-[color:var(--color-text-strong)]">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function BuilderBanner({ accountLabel }: { accountLabel: AccountLabel }) {
+  if (accountLabel === "verified" || accountLabel === "unverified") return null;
+
+  const config: Record<
+    Exclude<AccountLabel, "verified" | "unverified">,
+    { title: string; body: string; tone: "info" | "warning" | "danger" }
+  > = {
+    in_review: {
+      title: "In review",
+      body: "Your last submission is being reviewed. Editing is locked until the result lands (usually under a minute).",
+      tone: "info",
+    },
+    rejected: {
+      title: "Resubmission needed",
+      body: "Your previous submission was bounced back. Edit the flagged sections and submit again.",
+      tone: "warning",
+    },
+    banned: {
+      title: "Account suspended",
+      body: "Editing is disabled while your account is suspended. Contact support if this is a mistake.",
+      tone: "danger",
+    },
+  };
+
+  const c = config[accountLabel];
+  const accent =
+    c.tone === "danger" ? "var(--color-danger)"
+      : c.tone === "warning" ? "#d97706"
+      : "var(--color-brand)";
+
+  return (
+    <div
+      role="status"
+      className="border-b px-5 py-3 md:px-8"
+      style={{
+        background: "var(--color-bg)",
+        borderTop: `2px solid ${accent}`,
+        borderBottom: "1px solid var(--color-border)",
+      }}
+    >
+      <div className="mx-auto flex max-w-[960px] items-baseline gap-3">
+        <p className="text-[12.5px] font-semibold tracking-tight" style={{ color: accent }}>
+          {c.title}
+        </p>
+        <p className="text-[12.5px] leading-[1.5] text-[color:var(--color-text-muted)]">
+          {c.body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function formatCurrency(n: number): string {
+  return n.toLocaleString("en-US");
 }
