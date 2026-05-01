@@ -5,12 +5,13 @@ import { Loader2 } from "lucide-react";
 import { updateNotificationPrefsAction } from "@/lib/account/actions";
 import type { NotificationPrefs } from "@/types/database";
 
-const ROWS: {
+type PrefRow = {
   key: keyof NotificationPrefs;
   label: string;
   description: string;
-  required?: boolean;
-}[] = [
+};
+
+const IMPORTANT_ROWS: PrefRow[] = [
   {
     key: "matches",
     label: "Mutual matches",
@@ -27,6 +28,9 @@ const ROWS: {
     description:
       "Status changes from our review team (accepted, needs changes, rejected). We strongly recommend leaving this on.",
   },
+];
+
+const OPTIONAL_ROWS: PrefRow[] = [
   {
     key: "weeklyDigest",
     label: "Weekly digest",
@@ -69,29 +73,30 @@ export function NotificationPrefsForm({ initial }: { initial: NotificationPrefs 
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4">
-      <ul className="flex flex-col divide-y" style={{ borderColor: "var(--color-border)" }}>
-        {ROWS.map((row) => (
-          <li
-            key={row.key}
-            className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] py-4 last:border-none"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-medium text-[var(--color-text-strong)]">
-                {row.label}
-              </p>
-              <p className="mt-1 text-[12.5px] leading-[1.5] text-[var(--color-text-muted)]">
-                {row.description}
-              </p>
-            </div>
-            <Toggle
-              checked={prefs[row.key]}
-              onToggle={() => toggle(row.key)}
-              ariaLabel={`Toggle ${row.label}`}
-            />
-          </li>
-        ))}
-      </ul>
+    <form onSubmit={submit} className="flex flex-col gap-6">
+      {/* Important activity */}
+      <div>
+        <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.09em] text-[var(--color-text-faint)]">
+          Important activity
+        </p>
+        <ul className="flex flex-col">
+          {IMPORTANT_ROWS.map((row) => (
+            <PrefRow key={row.key} row={row} prefs={prefs} onToggle={toggle} />
+          ))}
+        </ul>
+      </div>
+
+      {/* Optional updates */}
+      <div>
+        <p className="mb-3 text-[11px] font-medium uppercase tracking-[0.09em] text-[var(--color-text-faint)]">
+          Optional updates
+        </p>
+        <ul className="flex flex-col">
+          {OPTIONAL_ROWS.map((row) => (
+            <PrefRow key={row.key} row={row} prefs={prefs} onToggle={toggle} />
+          ))}
+        </ul>
+      </div>
 
       {error ? (
         <p role="alert" className="border-l-2 border-[var(--color-danger)] pl-3 text-[12.5px] text-[var(--color-danger)]">
@@ -109,11 +114,42 @@ export function NotificationPrefsForm({ initial }: { initial: NotificationPrefs 
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
           Save preferences
         </button>
-        {saved ? (
+        {dirty && !saved ? (
+          <span className="text-[12px] text-[var(--color-text-muted)]">Unsaved changes</span>
+        ) : null}
+        {saved && !dirty ? (
           <span className="text-[12px] text-[var(--color-brand-strong)]">Saved.</span>
         ) : null}
       </div>
     </form>
+  );
+}
+
+function PrefRow({
+  row,
+  prefs,
+  onToggle,
+}: {
+  row: PrefRow;
+  prefs: NotificationPrefs;
+  onToggle: (key: keyof NotificationPrefs) => void;
+}) {
+  return (
+    <li className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] py-4 last:border-none">
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-medium text-[var(--color-text-strong)]">
+          {row.label}
+        </p>
+        <p className="mt-1 text-[12.5px] leading-[1.5] text-[var(--color-text-muted)]">
+          {row.description}
+        </p>
+      </div>
+      <Toggle
+        checked={prefs[row.key]}
+        onToggle={() => onToggle(row.key)}
+        ariaLabel={`Toggle ${row.label}`}
+      />
+    </li>
   );
 }
 
