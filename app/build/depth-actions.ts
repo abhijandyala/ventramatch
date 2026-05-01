@@ -31,6 +31,7 @@ import {
   startupTractionSignalSchema,
   startupMarketAnalysisSchema,
   startupCompetitorSchema,
+  startupNarrativeSchema,
   type StartupTeamMemberInput,
   type StartupRoundDetailsInput,
   type StartupCapTableSummaryInput,
@@ -38,6 +39,7 @@ import {
   type StartupTractionSignalInput,
   type StartupMarketAnalysisInput,
   type StartupCompetitorInput,
+  type StartupNarrativeInput,
 } from "@/lib/validation/depth";
 
 type DepthResult = { ok: true } | { ok: false; error: string };
@@ -146,7 +148,8 @@ export async function saveStartupRoundDetailsAction(
         insert into public.startup_round_details
           (startup_id, instrument, valuation_band, target_raise_usd,
            min_check_usd, lead_status, close_by_date, committed_amount_usd,
-           use_of_funds_summary, instrument_terms_summary)
+           use_of_funds_summary, instrument_terms_summary,
+           runway_months_after_raise, milestones_summary)
         values (
           ${startupId},
           ${d.instrument ?? null}::public.round_instrument,
@@ -157,18 +160,22 @@ export async function saveStartupRoundDetailsAction(
           ${d.close_by_date ?? null},
           ${d.committed_amount_usd ?? 0},
           ${d.use_of_funds_summary ?? null},
-          ${d.instrument_terms_summary ?? null}
+          ${d.instrument_terms_summary ?? null},
+          ${d.runway_months_after_raise ?? null},
+          ${d.milestones_summary ?? null}
         )
         on conflict (startup_id) do update set
-          instrument              = excluded.instrument,
-          valuation_band          = excluded.valuation_band,
-          target_raise_usd        = excluded.target_raise_usd,
-          min_check_usd           = excluded.min_check_usd,
-          lead_status             = excluded.lead_status,
-          close_by_date           = excluded.close_by_date,
-          committed_amount_usd    = excluded.committed_amount_usd,
-          use_of_funds_summary    = excluded.use_of_funds_summary,
-          instrument_terms_summary = excluded.instrument_terms_summary
+          instrument               = excluded.instrument,
+          valuation_band           = excluded.valuation_band,
+          target_raise_usd         = excluded.target_raise_usd,
+          min_check_usd            = excluded.min_check_usd,
+          lead_status              = excluded.lead_status,
+          close_by_date            = excluded.close_by_date,
+          committed_amount_usd     = excluded.committed_amount_usd,
+          use_of_funds_summary     = excluded.use_of_funds_summary,
+          instrument_terms_summary = excluded.instrument_terms_summary,
+          runway_months_after_raise = excluded.runway_months_after_raise,
+          milestones_summary        = excluded.milestones_summary
       `;
     });
   } catch (e) {
@@ -438,6 +445,102 @@ export async function saveStartupCompetitorsAction(
           )
         `;
       }
+    });
+  } catch (e) {
+    return { ok: false, error: parseError(e) };
+  }
+
+  revalidatePath("/build");
+  revalidatePath(`/p/${userId}`);
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Startup narrative (1:1) — 0035
+// ──────────────────────────────────────────────────────────────────────────
+
+export async function saveStartupNarrativeAction(
+  input: StartupNarrativeInput,
+): Promise<DepthResult> {
+  const access = await requireWrite();
+  if (!access.ok) return { ok: false, error: access.message };
+  const userId = access.userId;
+
+  const parsed = startupNarrativeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const d = parsed.data;
+
+  const startupId = await loadStartupId(userId);
+  if (!startupId) return { ok: false, error: "Create your startup profile first." };
+
+  try {
+    await withUserRls(userId, async (sql) => {
+      await sql`
+        insert into public.startup_narrative
+          (startup_id,
+           problem_statement, target_customer, current_alternatives, why_alternatives_fail,
+           product_summary, key_features, technical_moat, roadmap,
+           target_market, market_trend, beachhead_market, why_now,
+           notable_customers, customer_proof, retention_engagement,
+           revenue_model, pricing, average_contract_value_band, gross_margin_band, sales_cycle_band,
+           acquisition_channels, current_gtm, planned_gtm, why_channels_work,
+           why_we_win, defensibility, investor_misunderstanding,
+           founder_background, founder_market_fit, technical_strengths, business_strengths, advisors, key_hires_needed,
+           technical_risk, market_risk, execution_risk, biggest_unknown, failure_scenario)
+        values (
+          ${startupId},
+          ${d.problem_statement ?? null}, ${d.target_customer ?? null}, ${d.current_alternatives ?? null}, ${d.why_alternatives_fail ?? null},
+          ${d.product_summary ?? null}, ${d.key_features ?? null}, ${d.technical_moat ?? null}, ${d.roadmap ?? null},
+          ${d.target_market ?? null}, ${d.market_trend ?? null}, ${d.beachhead_market ?? null}, ${d.why_now ?? null},
+          ${d.notable_customers ?? null}, ${d.customer_proof ?? null}, ${d.retention_engagement ?? null},
+          ${d.revenue_model ?? null}, ${d.pricing ?? null}, ${d.average_contract_value_band ?? null}, ${d.gross_margin_band ?? null}, ${d.sales_cycle_band ?? null},
+          ${d.acquisition_channels ?? null}, ${d.current_gtm ?? null}, ${d.planned_gtm ?? null}, ${d.why_channels_work ?? null},
+          ${d.why_we_win ?? null}, ${d.defensibility ?? null}, ${d.investor_misunderstanding ?? null},
+          ${d.founder_background ?? null}, ${d.founder_market_fit ?? null}, ${d.technical_strengths ?? null}, ${d.business_strengths ?? null}, ${d.advisors ?? null}, ${d.key_hires_needed ?? null},
+          ${d.technical_risk ?? null}, ${d.market_risk ?? null}, ${d.execution_risk ?? null}, ${d.biggest_unknown ?? null}, ${d.failure_scenario ?? null}
+        )
+        on conflict (startup_id) do update set
+          problem_statement          = excluded.problem_statement,
+          target_customer            = excluded.target_customer,
+          current_alternatives       = excluded.current_alternatives,
+          why_alternatives_fail      = excluded.why_alternatives_fail,
+          product_summary            = excluded.product_summary,
+          key_features               = excluded.key_features,
+          technical_moat             = excluded.technical_moat,
+          roadmap                    = excluded.roadmap,
+          target_market              = excluded.target_market,
+          market_trend               = excluded.market_trend,
+          beachhead_market           = excluded.beachhead_market,
+          why_now                    = excluded.why_now,
+          notable_customers          = excluded.notable_customers,
+          customer_proof             = excluded.customer_proof,
+          retention_engagement       = excluded.retention_engagement,
+          revenue_model              = excluded.revenue_model,
+          pricing                    = excluded.pricing,
+          average_contract_value_band = excluded.average_contract_value_band,
+          gross_margin_band          = excluded.gross_margin_band,
+          sales_cycle_band           = excluded.sales_cycle_band,
+          acquisition_channels       = excluded.acquisition_channels,
+          current_gtm                = excluded.current_gtm,
+          planned_gtm                = excluded.planned_gtm,
+          why_channels_work          = excluded.why_channels_work,
+          why_we_win                 = excluded.why_we_win,
+          defensibility              = excluded.defensibility,
+          investor_misunderstanding  = excluded.investor_misunderstanding,
+          founder_background         = excluded.founder_background,
+          founder_market_fit         = excluded.founder_market_fit,
+          technical_strengths        = excluded.technical_strengths,
+          business_strengths         = excluded.business_strengths,
+          advisors                   = excluded.advisors,
+          key_hires_needed           = excluded.key_hires_needed,
+          technical_risk             = excluded.technical_risk,
+          market_risk                = excluded.market_risk,
+          execution_risk             = excluded.execution_risk,
+          biggest_unknown            = excluded.biggest_unknown,
+          failure_scenario           = excluded.failure_scenario
+      `;
     });
   } catch (e) {
     return { ok: false, error: parseError(e) };

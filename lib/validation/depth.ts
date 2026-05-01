@@ -149,6 +149,14 @@ export const startupRoundDetailsSchema = z.object({
   committed_amount_usd: nonnegBigInt.default(0),
   use_of_funds_summary: optText(500),
   instrument_terms_summary: optText(500),
+  // 0035: Extended round fields
+  runway_months_after_raise: z
+    .number()
+    .int()
+    .min(0, "Cannot be negative.")
+    .max(120, "Maximum 120 months.")
+    .optional(),
+  milestones_summary: optText(1500),
 });
 export type StartupRoundDetailsInput = z.infer<typeof startupRoundDetailsSchema>;
 
@@ -327,6 +335,99 @@ export const startupCompetitorSchema = z.object({
   display_order: z.number().int().min(0).default(0),
 });
 export type StartupCompetitorInput = z.infer<typeof startupCompetitorSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────
+//  0035 — Startup narrative (investor-grade depth)
+// ──────────────────────────────────────────────────────────────────────────
+
+const acvBands = [
+  "under_1k",
+  "1k_10k",
+  "10k_50k",
+  "50k_250k",
+  "250k_1m",
+  "over_1m",
+] as const;
+
+const grossMarginBands = [
+  "under_30",
+  "30_50",
+  "50_70",
+  "70_85",
+  "over_85",
+] as const;
+
+const salesCycleBands = [
+  "under_1wk",
+  "1_4wk",
+  "1_3mo",
+  "3_6mo",
+  "6_12mo",
+  "over_12mo",
+] as const;
+
+/**
+ * Full narrative schema for the startup_narrative table (1:1 with startups).
+ * Organized by investor question category.
+ */
+export const startupNarrativeSchema = z.object({
+  // A. Problem
+  problem_statement: optText(1500),
+  target_customer: optText(800),
+  current_alternatives: optText(1200),
+  why_alternatives_fail: optText(1200),
+
+  // B. Solution
+  product_summary: optText(1500),
+  key_features: optText(2000),
+  technical_moat: optText(1200),
+  roadmap: optText(2000),
+
+  // C. Market narrative
+  target_market: optText(1000),
+  market_trend: optText(1200),
+  beachhead_market: optText(1000),
+  why_now: optText(1200),
+
+  // D. Customer proof
+  notable_customers: optText(1200),
+  customer_proof: optText(2000),
+  retention_engagement: optText(1200),
+
+  // E. Business model
+  revenue_model: optText(800),
+  pricing: optText(1000),
+  average_contract_value_band: z.enum(acvBands).optional(),
+  gross_margin_band: z.enum(grossMarginBands).optional(),
+  sales_cycle_band: z.enum(salesCycleBands).optional(),
+
+  // F. Go-to-market
+  acquisition_channels: optText(1200),
+  current_gtm: optText(1200),
+  planned_gtm: optText(1200),
+  why_channels_work: optText(1200),
+
+  // G. Competition narrative
+  why_we_win: optText(1200),
+  defensibility: optText(1200),
+  investor_misunderstanding: optText(1200),
+
+  // H. Team narrative
+  founder_background: optText(2000),
+  founder_market_fit: optText(1200),
+  technical_strengths: optText(1000),
+  business_strengths: optText(1000),
+  advisors: optText(1200),
+  key_hires_needed: optText(1000),
+
+  // J. Risks
+  technical_risk: optText(1000),
+  market_risk: optText(1000),
+  execution_risk: optText(1000),
+  biggest_unknown: optText(800),
+  failure_scenario: optText(1000),
+});
+export type StartupNarrativeInput = z.infer<typeof startupNarrativeSchema>;
 
 // ──────────────────────────────────────────────────────────────────────────
 //  0015 — Investor depth

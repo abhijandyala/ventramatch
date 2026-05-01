@@ -34,6 +34,8 @@ type StartupMarketAnalysis =
   Database["public"]["Tables"]["startup_market_analysis"]["Row"];
 type StartupCompetitor =
   Database["public"]["Tables"]["startup_competitive_landscape"]["Row"];
+type StartupNarrative =
+  Database["public"]["Tables"]["startup_narrative"]["Row"];
 
 type InvestorTeamMember =
   Database["public"]["Tables"]["investor_team_members"]["Row"];
@@ -62,6 +64,8 @@ export type StartupDepth = {
   traction: StartupTractionSignal[];
   market: StartupMarketAnalysis | null;
   competitors: StartupCompetitor[];
+  /** 0035: Investor-grade narrative fields. */
+  narrative: StartupNarrative | null;
 };
 
 export type InvestorDepth = {
@@ -86,7 +90,7 @@ export async function fetchStartupDepth(
   startupId: string,
 ): Promise<StartupDepth> {
   return withUserRls<StartupDepth>(viewerId, async (sql) => {
-    const [team, round, capTable, useOfFunds, traction, market, competitors] =
+    const [team, round, capTable, useOfFunds, traction, market, competitors, narrative] =
       await Promise.all([
         sql<StartupTeamMember[]>`
           select * from public.startup_team_members
@@ -123,6 +127,11 @@ export async function fetchStartupDepth(
           where startup_id = ${startupId}
           order by display_order asc, created_at asc
         `,
+        sql<StartupNarrative[]>`
+          select * from public.startup_narrative
+          where startup_id = ${startupId}
+          limit 1
+        `,
       ]);
 
     return {
@@ -133,6 +142,7 @@ export async function fetchStartupDepth(
       traction,
       market: market[0] ?? null,
       competitors,
+      narrative: narrative[0] ?? null,
     };
   });
 }

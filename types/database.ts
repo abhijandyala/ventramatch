@@ -258,6 +258,97 @@ export const MARKET_SIZE_BAND_LABELS: Record<MarketSizeBand, string> = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────
+//  Startup basics (0035_founder_narrative_depth.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type ProductStatus =
+  | "idea"
+  | "prototype"
+  | "beta"
+  | "launched"
+  | "revenue_generating";
+
+export const PRODUCT_STATUS_LABELS: Record<ProductStatus, string> = {
+  idea: "Idea",
+  prototype: "Prototype",
+  beta: "Beta",
+  launched: "Launched",
+  revenue_generating: "Revenue Generating",
+};
+
+export type CustomerType =
+  | "consumer"
+  | "smb"
+  | "enterprise"
+  | "developer"
+  | "government"
+  | "marketplace"
+  | "other";
+
+export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
+  consumer: "Consumer (B2C)",
+  smb: "SMB",
+  enterprise: "Enterprise",
+  developer: "Developer",
+  government: "Government",
+  marketplace: "Marketplace",
+  other: "Other",
+};
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Startup narrative bands (0035_founder_narrative_depth.sql)
+// ──────────────────────────────────────────────────────────────────────────
+
+export type AverageContractValueBand =
+  | "under_1k"
+  | "1k_10k"
+  | "10k_50k"
+  | "50k_250k"
+  | "250k_1m"
+  | "over_1m";
+
+export const ACV_BAND_LABELS: Record<AverageContractValueBand, string> = {
+  under_1k: "Under $1K",
+  "1k_10k": "$1K–$10K",
+  "10k_50k": "$10K–$50K",
+  "50k_250k": "$50K–$250K",
+  "250k_1m": "$250K–$1M",
+  over_1m: "Over $1M",
+};
+
+export type GrossMarginBand =
+  | "under_30"
+  | "30_50"
+  | "50_70"
+  | "70_85"
+  | "over_85";
+
+export const GROSS_MARGIN_BAND_LABELS: Record<GrossMarginBand, string> = {
+  under_30: "Under 30%",
+  "30_50": "30–50%",
+  "50_70": "50–70%",
+  "70_85": "70–85%",
+  over_85: "Over 85%",
+};
+
+export type SalesCycleBand =
+  | "under_1wk"
+  | "1_4wk"
+  | "1_3mo"
+  | "3_6mo"
+  | "6_12mo"
+  | "over_12mo";
+
+export const SALES_CYCLE_BAND_LABELS: Record<SalesCycleBand, string> = {
+  under_1wk: "Under 1 week",
+  "1_4wk": "1–4 weeks",
+  "1_3mo": "1–3 months",
+  "3_6mo": "3–6 months",
+  "6_12mo": "6–12 months",
+  over_12mo: "Over 12 months",
+};
+
+// ──────────────────────────────────────────────────────────────────────────
 //  Investor depth (0015_profile_depth_investor.sql)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -417,6 +508,12 @@ export interface Database {
           website: string | null;
           /** Sprint 9.5.D: all sectors the founder selected (up to 3). */
           startup_sectors: string[];
+          /** 0035: Year company was founded (1900–2100). */
+          founded_year: number | null;
+          /** 0035: Product development status. */
+          product_status: ProductStatus | null;
+          /** 0035: Primary customer type. */
+          customer_type: CustomerType | null;
           created_at: string;
           updated_at: string;
         };
@@ -816,6 +913,10 @@ export interface Database {
           committed_amount_usd: number;
           use_of_funds_summary: string | null;
           instrument_terms_summary: string | null;
+          /** 0035: Expected runway in months after this round closes. */
+          runway_months_after_raise: number | null;
+          /** 0035: Key milestones planned with the raised capital. */
+          milestones_summary: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -955,6 +1056,74 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["startup_competitive_landscape"]["Insert"]>;
+      };
+      /**
+       * 0035: Wide table holding all pitch-narrative text fields, organized by
+       * investor question category. 1:1 with startups.
+       */
+      startup_narrative: {
+        Row: {
+          id: string;
+          startup_id: string;
+          // A. Problem
+          problem_statement: string | null;
+          target_customer: string | null;
+          current_alternatives: string | null;
+          why_alternatives_fail: string | null;
+          // B. Solution
+          product_summary: string | null;
+          key_features: string | null;
+          technical_moat: string | null;
+          roadmap: string | null;
+          // C. Market narrative
+          target_market: string | null;
+          market_trend: string | null;
+          beachhead_market: string | null;
+          why_now: string | null;
+          // D. Customer proof
+          notable_customers: string | null;
+          customer_proof: string | null;
+          retention_engagement: string | null;
+          // E. Business model
+          revenue_model: string | null;
+          pricing: string | null;
+          average_contract_value_band: AverageContractValueBand | null;
+          gross_margin_band: GrossMarginBand | null;
+          sales_cycle_band: SalesCycleBand | null;
+          // F. Go-to-market
+          acquisition_channels: string | null;
+          current_gtm: string | null;
+          planned_gtm: string | null;
+          why_channels_work: string | null;
+          // G. Competition narrative
+          why_we_win: string | null;
+          defensibility: string | null;
+          investor_misunderstanding: string | null;
+          // H. Team narrative
+          founder_background: string | null;
+          founder_market_fit: string | null;
+          technical_strengths: string | null;
+          business_strengths: string | null;
+          advisors: string | null;
+          key_hires_needed: string | null;
+          // J. Risks
+          technical_risk: string | null;
+          market_risk: string | null;
+          execution_risk: string | null;
+          biggest_unknown: string | null;
+          failure_scenario: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["startup_narrative"]["Row"],
+          "id" | "created_at" | "updated_at"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["startup_narrative"]["Insert"]>;
       };
       investor_check_bands: {
         Row: {

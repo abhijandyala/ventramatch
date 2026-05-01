@@ -106,6 +106,10 @@ export function projectStartupTier2(row: StartupRow): StartupFull {
     deck_uploaded_at: row.deck_uploaded_at,
     website: row.website,
     startup_sectors: row.startup_sectors,
+    // 0035: New basics fields
+    founded_year: row.founded_year,
+    product_status: row.product_status,
+    customer_type: row.customer_type,
   };
 }
 
@@ -276,6 +280,8 @@ type StartupMarketAnalysisRow =
   Database["public"]["Tables"]["startup_market_analysis"]["Row"];
 type StartupCompetitorRow =
   Database["public"]["Tables"]["startup_competitive_landscape"]["Row"];
+type StartupNarrativeRow =
+  Database["public"]["Tables"]["startup_narrative"]["Row"];
 
 type InvestorTeamMemberRow =
   Database["public"]["Tables"]["investor_team_members"]["Row"];
@@ -322,6 +328,8 @@ export type StartupRoundDetailsView = Pick<
   | "committed_amount_usd"
   | "use_of_funds_summary"
   | "instrument_terms_summary"
+  | "runway_months_after_raise"
+  | "milestones_summary"
 >;
 
 export type StartupCapTableSummaryView = Pick<
@@ -365,6 +373,52 @@ export type StartupCompetitorView = Pick<
   "id" | "competitor_name" | "differentiation" | "link_url" | "display_order"
 >;
 
+/**
+ * 0035: Investor-grade narrative fields. All fields pass through at
+ * "verified" tier (narrative is non-sensitive investor content).
+ */
+export type StartupNarrativeView = Pick<
+  StartupNarrativeRow,
+  | "problem_statement"
+  | "target_customer"
+  | "current_alternatives"
+  | "why_alternatives_fail"
+  | "product_summary"
+  | "key_features"
+  | "technical_moat"
+  | "roadmap"
+  | "target_market"
+  | "market_trend"
+  | "beachhead_market"
+  | "why_now"
+  | "notable_customers"
+  | "customer_proof"
+  | "retention_engagement"
+  | "revenue_model"
+  | "pricing"
+  | "average_contract_value_band"
+  | "gross_margin_band"
+  | "sales_cycle_band"
+  | "acquisition_channels"
+  | "current_gtm"
+  | "planned_gtm"
+  | "why_channels_work"
+  | "why_we_win"
+  | "defensibility"
+  | "investor_misunderstanding"
+  | "founder_background"
+  | "founder_market_fit"
+  | "technical_strengths"
+  | "business_strengths"
+  | "advisors"
+  | "key_hires_needed"
+  | "technical_risk"
+  | "market_risk"
+  | "execution_risk"
+  | "biggest_unknown"
+  | "failure_scenario"
+>;
+
 export type StartupDepthView = {
   team: StartupTeamMemberView[];
   round: StartupRoundDetailsView | null;
@@ -373,6 +427,8 @@ export type StartupDepthView = {
   traction: StartupTractionSignalView[];
   market: StartupMarketAnalysisView | null;
   competitors: StartupCompetitorView[];
+  /** 0035: Investor-grade narrative fields. */
+  narrative: StartupNarrativeView | null;
   /** Tier-2-only fields surface here so the UI can show a single locked card. */
   matchOnly: {
     deckUrl: string | null;
@@ -482,6 +538,8 @@ export type StartupDepthInput = {
   traction: StartupTractionSignalRow[];
   market: StartupMarketAnalysisRow | null;
   competitors: StartupCompetitorRow[];
+  /** 0035: Investor-grade narrative fields. */
+  narrative: StartupNarrativeRow | null;
   /** Pulled from the parent `startups` row. */
   parent: {
     /** Used to build the authed deck route /api/deck/[startupId]. */
@@ -551,6 +609,8 @@ export function projectStartupDepth(
           committed_amount_usd: input.round.committed_amount_usd,
           use_of_funds_summary: input.round.use_of_funds_summary,
           instrument_terms_summary: input.round.instrument_terms_summary,
+          runway_months_after_raise: input.round.runway_months_after_raise,
+          milestones_summary: input.round.milestones_summary,
         }
       : null,
     capTable: input.capTable
@@ -598,6 +658,48 @@ export function projectStartupDepth(
       link_url: row.link_url,
       display_order: row.display_order,
     })),
+    narrative: input.narrative
+      ? {
+          problem_statement: input.narrative.problem_statement,
+          target_customer: input.narrative.target_customer,
+          current_alternatives: input.narrative.current_alternatives,
+          why_alternatives_fail: input.narrative.why_alternatives_fail,
+          product_summary: input.narrative.product_summary,
+          key_features: input.narrative.key_features,
+          technical_moat: input.narrative.technical_moat,
+          roadmap: input.narrative.roadmap,
+          target_market: input.narrative.target_market,
+          market_trend: input.narrative.market_trend,
+          beachhead_market: input.narrative.beachhead_market,
+          why_now: input.narrative.why_now,
+          notable_customers: input.narrative.notable_customers,
+          customer_proof: input.narrative.customer_proof,
+          retention_engagement: input.narrative.retention_engagement,
+          revenue_model: input.narrative.revenue_model,
+          pricing: input.narrative.pricing,
+          average_contract_value_band: input.narrative.average_contract_value_band,
+          gross_margin_band: input.narrative.gross_margin_band,
+          sales_cycle_band: input.narrative.sales_cycle_band,
+          acquisition_channels: input.narrative.acquisition_channels,
+          current_gtm: input.narrative.current_gtm,
+          planned_gtm: input.narrative.planned_gtm,
+          why_channels_work: input.narrative.why_channels_work,
+          why_we_win: input.narrative.why_we_win,
+          defensibility: input.narrative.defensibility,
+          investor_misunderstanding: input.narrative.investor_misunderstanding,
+          founder_background: input.narrative.founder_background,
+          founder_market_fit: input.narrative.founder_market_fit,
+          technical_strengths: input.narrative.technical_strengths,
+          business_strengths: input.narrative.business_strengths,
+          advisors: input.narrative.advisors,
+          key_hires_needed: input.narrative.key_hires_needed,
+          technical_risk: input.narrative.technical_risk,
+          market_risk: input.narrative.market_risk,
+          execution_risk: input.narrative.execution_risk,
+          biggest_unknown: input.narrative.biggest_unknown,
+          failure_scenario: input.narrative.failure_scenario,
+        }
+      : null,
     matchOnly: {
       deckUrl: includeMatchOnly
         ? effectiveDeckUrl(
@@ -752,6 +854,7 @@ export function emptyStartupDepth(): StartupDepthView {
     traction: [],
     market: null,
     competitors: [],
+    narrative: null,
     matchOnly: { deckUrl: null, rawTraction: null },
   };
 }

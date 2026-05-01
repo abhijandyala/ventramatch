@@ -10,6 +10,7 @@ import {
   type InvestorDepthView,
 } from "@/lib/profile/visibility";
 import type { OwnVerification, OwnReference } from "@/components/profile/verification-panel";
+import { getLinkedInStatusAction } from "./connect-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -73,9 +74,10 @@ export default async function InvestorBuildPage() {
     depthView = emptyInvestorDepth();
   }
 
-  const [rawVerifications, rawReferences] = await Promise.all([
+  const [rawVerifications, rawReferences, linkedInStatus] = await Promise.all([
     fetchOwnVerifications(userId),
     fetchOwnReferences(userId),
+    getLinkedInStatusAction(),
   ]);
 
   const ownVerifications: OwnVerification[] = rawVerifications.map((v) => ({
@@ -139,6 +141,7 @@ export default async function InvestorBuildPage() {
       depthView={depthView}
       ownVerifications={ownVerifications}
       ownReferences={ownReferences}
+      linkedInStatus={linkedInStatus}
     />
   );
 }

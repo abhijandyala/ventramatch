@@ -4,14 +4,16 @@ import {
   useCallback,
   useState,
   useTransition,
+  useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Loader2, X, ArrowLeft, Linkedin } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
-import { ProfileWelcomeCard } from "@/components/profile/welcome-card";
 import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import type { InvestorDepthView } from "@/lib/profile/visibility";
 import type {
@@ -23,6 +25,12 @@ import {
   saveInvestorDraftAction,
   submitInvestorApplicationAction,
 } from "./actions";
+import {
+  connectLinkedInAction,
+  applyLinkedInDataAction,
+  type LinkedInConnectionStatus,
+} from "./connect-actions";
+import { LinkedInFillModal } from "@/components/profile/linkedin-fill-modal";
 
 function isReadOnly(label: AccountLabel): boolean {
   return label === "in_review";
@@ -201,6 +209,7 @@ export function InvestorBuilder({
   depthView,
   ownVerifications = [],
   ownReferences = [],
+  linkedInStatus,
 }: {
   initial: InvestorUiDraft;
   accountLabel: AccountLabel;
@@ -208,6 +217,7 @@ export function InvestorBuilder({
   depthView?: InvestorDepthView | null;
   ownVerifications?: OwnVerification[];
   ownReferences?: OwnReference[];
+  linkedInStatus?: LinkedInConnectionStatus;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -216,7 +226,18 @@ export function InvestorBuilder({
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
   const [isPublishing, startPublishing] = useTransition();
+  const [isConnecting, startConnecting] = useTransition();
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showLinkedInModal, setShowLinkedInModal] = useState(false);
+
+  useEffect(() => {
+    if (savedAt) {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSavedAt(null), 5000);
+    }
+    return () => { if (savedTimer.current) clearTimeout(savedTimer.current); };
+  }, [savedAt]);
 
   const total = STEPS.length;
   const t = STEP_HEADERS[step];
@@ -282,194 +303,191 @@ export function InvestorBuilder({
     router.push("/dashboard");
   }
 
+  function handleFillLinkedIn() {
+    if (linkedInStatus?.connected) {
+      setShowLinkedInModal(true);
+    } else {
+      startConnecting(async () => {
+        await connectLinkedInAction();
+      });
+    }
+  }
+
+  async function handleApplyLinkedIn(selectedFields: {
+    name: boolean;
+    picture: boolean;
+    email: boolean;
+  }) {
+    const result = await applyLinkedInDataAction(selectedFields);
+    if (result.ok && result.appliedFields && result.appliedFields.length > 0) {
+      if (result.appliedFields.includes("name") && linkedInStatus?.profile?.name) {
+        patchIdentity({ fullName: linkedInStatus.profile.name });
+      }
+      router.refresh();
+    }
+    return result;
+  }
+
   return (
-    <main className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 px-5 backdrop-blur md:px-8">
-        <div className="flex items-center gap-4">
+    <main className="min-h-screen bg-[color:var(--color-bg)]">
+      {/* LinkedIn Fill Modal */}
+      {showLinkedInModal && linkedInStatus && (
+        <LinkedInFillModal
+          status={linkedInStatus}
+          onApply={handleApplyLinkedIn}
+          onClose={() => setShowLinkedInModal(false)}
+          currentValues={{
+            name: draft.identity.fullName,
+            picture: "",
+            email: draft.identity.workEmail,
+          }}
+        />
+      )}
+
+      {/* Clean header */}
+      <header className="sticky top-0 z-30 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-[800px] items-center justify-between px-6">
           <Wordmark size="sm" />
-          <span aria-hidden className="hidden h-4 w-px bg-[color:var(--color-border)] sm:block" />
-          <span className="hidden font-mono text-[11px] uppercase tracking-[0.18em] text-[color:var(--color-text-muted)] sm:inline">
-            Build profile · Investor
-          </span>
-        </div>
-        <div className="flex items-center gap-5">
-          <button
-            type="button"
-            onClick={() => save()}
-            disabled={isSaving || readOnly}
-            className="inline-flex items-center gap-1.5 text-[12.5px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
-          >
-            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-            {readOnly ? "Read-only" : isSaving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Save draft"}
-          </button>
-          <button
-            type="button"
-            onClick={handleSaveAndExit}
-            disabled={isSaving || readOnly}
-            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
-          >
-            Save &amp; exit
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={handleFillLinkedIn}
+              disabled={isConnecting}
+              className="inline-flex h-9 items-center gap-2 rounded-[8px] border border-[color:var(--color-border)] bg-white px-3.5 text-[13px] font-medium text-[color:var(--color-text)] transition-colors hover:border-[color:var(--color-text-faint)] hover:shadow-sm disabled:opacity-50"
+            >
+              {isConnecting ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <Linkedin className="h-4 w-4 text-[#0A66C2]" strokeWidth={0} fill="#0A66C2" />
+              )}
+              {linkedInStatus?.connected ? "Fill with LinkedIn" : "Connect LinkedIn"}
+            </button>
+
+            <span className="h-5 w-px bg-[color:var(--color-border)]" />
+
+            <button
+              type="button"
+              onClick={() => save()}
+              disabled={isSaving || readOnly}
+              className="text-[13px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)] disabled:opacity-50"
+            >
+              {isSaving ? "Saving..." : savedAt ? `Saved ${savedAt}` : "Save draft"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAndExit}
+              disabled={isSaving || readOnly}
+              className="text-[13px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)] disabled:opacity-50"
+            >
+              Save & exit
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]">
-        <div className="mx-auto max-w-[960px] px-5 py-7 md:px-8 md:py-8">
-          <Stepper step={step} setStep={setStep} />
-        </div>
-      </div>
-
       <BuilderBanner accountLabel={accountLabel} />
 
-      <ProfileWelcomeCard profileState={profileState} />
+      <div className="mx-auto w-full max-w-[600px] px-6 py-12 md:py-16">
+        {/* Progress bar */}
+        <div className="mb-10 h-[3px] w-full overflow-hidden rounded-full bg-[color:var(--color-border)]">
+          <div
+            className="h-full rounded-full bg-[color:var(--color-brand)] transition-all duration-500"
+            style={{ width: `${((step + 1) / total) * 100}%`, transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
+          />
+        </div>
 
-      <section className="mx-auto w-full max-w-[760px] px-5 py-12 md:px-8 md:py-16">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[color:var(--color-text-faint)]">
-          Step {String(step + 1).padStart(2, "0")} of {String(total).padStart(2, "0")}
-          <span aria-hidden className="mx-2 text-[color:var(--color-border-strong)]">·</span>
-          {STEPS[step].title}
-        </p>
+        {/* Step heading */}
         <h1
-          className="mt-3 text-balance font-semibold tracking-[-0.014em] text-[color:var(--color-text-strong)]"
-          style={{ fontSize: "clamp(26px, 3vw, 34px)", lineHeight: 1.12 }}
+          className="font-serif font-semibold leading-[1.08] tracking-tight text-[color:var(--color-text)]"
+          style={{ fontSize: "clamp(28px, 4vw, 38px)" }}
         >
           {t.title}
         </h1>
-        <p className="mt-3 max-w-[58ch] text-[14.5px] leading-[1.6] text-[color:var(--color-text-muted)]">
+        <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-[color:var(--color-text-muted)]">
           {t.sub}
         </p>
 
+        {/* Animated step content */}
         <div className="mt-10">
-          {step === 0 && <IdentityStep draft={draft} patch={patchIdentity} errors={errors} />}
-          {step === 1 && <TypeStep draft={draft} setType={(t) => setDraft((d) => ({ ...d, type: t }))} />}
-          {step === 2 && <SectorsStep draft={draft} patch={patchSectors} />}
-          {step === 3 && <StagesStep draft={draft} setStages={(s) => setDraft((d) => ({ ...d, stages: s }))} />}
-          {step === 4 && <CheckStep draft={draft} patch={patchCheck} errors={errors} />}
-          {step === 5 && <GeoStep draft={draft} patch={patchGeo} />}
-          {step === 6 && <TrackStep draft={draft} patch={patchTrack} />}
-          {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {step === 0 && <IdentityStep draft={draft} patch={patchIdentity} errors={errors} />}
+              {step === 1 && <TypeStep draft={draft} setType={(t) => setDraft((d) => ({ ...d, type: t }))} />}
+              {step === 2 && <SectorsStep draft={draft} patch={patchSectors} />}
+              {step === 3 && <StagesStep draft={draft} setStages={(s) => setDraft((d) => ({ ...d, stages: s }))} />}
+              {step === 4 && <CheckStep draft={draft} patch={patchCheck} errors={errors} />}
+              {step === 5 && <GeoStep draft={draft} patch={patchGeo} />}
+              {step === 6 && <TrackStep draft={draft} patch={patchTrack} />}
+              {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {formError ? (
-          <p
-            role="alert"
-            className="mt-6 rounded-[10px] border border-[color:var(--color-danger)] bg-[color:var(--color-bg)] px-4 py-3 text-[13px] text-[color:var(--color-danger)]"
-          >
+          <p role="alert" className="mt-5 text-[13px] text-[color:var(--color-danger)]">
             {formError}
           </p>
         ) : null}
-      </section>
 
-      <footer className="sticky bottom-0 border-t border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[760px] items-center justify-between px-5 py-4 md:px-8 md:py-5">
+        {/* Navigation */}
+        <div className="mt-10 flex items-center justify-between gap-4">
           <button
             type="button"
             onClick={() => setStep((s) => Math.max(0, s - 1))}
             disabled={step === 0 || isSaving || isPublishing}
-            className="text-[13px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-11 items-center gap-1.5 rounded-[10px] px-3 text-[14px] font-medium text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            ← Back
+            <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+            Back
           </button>
-          <span className="hidden font-mono text-[11px] uppercase tracking-[0.16em] text-[color:var(--color-text-faint)] sm:inline">
-            {step + 1} / {total}
-          </span>
+
           {!isReview ? (
             <button
               type="button"
               onClick={handleContinue}
               disabled={isSaving || readOnly}
-              className="inline-flex items-center gap-2 rounded-[10px] bg-[color:var(--color-text-strong)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-text)] disabled:opacity-60"
+              className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-6 text-[15px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
             >
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Continue →
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
+              Continue
             </button>
           ) : (
             <button
               type="button"
               onClick={handlePublish}
               disabled={isPublishing || readOnly}
-              className="inline-flex items-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-5 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
+              className="inline-flex h-11 min-w-[140px] items-center justify-center gap-2 rounded-[10px] bg-[color:var(--color-brand)] px-6 text-[15px] font-medium text-white transition-colors hover:bg-[color:var(--color-brand-strong)] disabled:opacity-60"
             >
-              {isPublishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> : null}
               Publish profile
             </button>
           )}
         </div>
-      </footer>
+
+        <p className="mt-8 text-center text-[11px] leading-5 text-[color:var(--color-text-faint)]">
+          Informational only — not investment advice. You can refine your profile at any time.
+        </p>
+      </div>
 
       {depthView ? (
-        <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+        <section className="mx-auto w-full max-w-[600px] border-t border-[color:var(--color-border)] px-6 py-10">
           <InvestorDepthEditor depth={depthView} />
         </section>
       ) : null}
 
-      <section className="mx-auto w-full max-w-[760px] border-t border-[color:var(--color-border)] px-5 py-10 md:px-8 md:py-12">
+      <section className="mx-auto w-full max-w-[600px] border-t border-[color:var(--color-border)] px-6 py-10">
         <VerificationPanel
           ownVerifications={ownVerifications}
           ownReferences={ownReferences}
         />
       </section>
     </main>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-//  Stepper
-// ──────────────────────────────────────────────────────────────────────────
-
-function Stepper({ step, setStep }: { step: number; setStep: (i: number) => void }) {
-  return (
-    <ol className="flex items-start">
-      {STEPS.map((s, i) => {
-        const isActive = i === step;
-        const isComplete = i < step;
-        return (
-          <li key={s.key} className="flex min-w-0 flex-1 flex-col items-center">
-            <div className="flex w-full items-center">
-              <span
-                aria-hidden
-                className={[
-                  "h-[2px] flex-1 transition-colors",
-                  i === 0 ? "bg-transparent" : i <= step ? "bg-[color:var(--color-brand)]" : "bg-[color:var(--color-border)]",
-                ].join(" ")}
-              />
-              <button
-                type="button"
-                onClick={() => setStep(i)}
-                aria-current={isActive ? "step" : undefined}
-                className={[
-                  "grid h-7 w-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold transition-colors",
-                  isActive
-                    ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand)] text-white"
-                    : isComplete
-                      ? "border-[color:var(--color-brand)] bg-[color:var(--color-brand-tint)] text-[color:var(--color-brand-strong)]"
-                      : "border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text-faint)]",
-                ].join(" ")}
-              >
-                {isComplete ? "✓" : i + 1}
-              </button>
-              <span
-                aria-hidden
-                className={[
-                  "h-[2px] flex-1 transition-colors",
-                  i === STEPS.length - 1 ? "bg-transparent" : i < step ? "bg-[color:var(--color-brand)]" : "bg-[color:var(--color-border)]",
-                ].join(" ")}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setStep(i)}
-              className={[
-                "mt-2.5 max-w-full truncate px-1 text-[11.5px] font-medium transition-colors",
-                isActive ? "text-[color:var(--color-text-strong)]" : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]",
-              ].join(" ")}
-            >
-              {s.title}
-            </button>
-          </li>
-        );
-      })}
-    </ol>
   );
 }
 
