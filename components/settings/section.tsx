@@ -13,6 +13,7 @@ export function SettingsSection({
   id,
   title,
   description,
+  icon,
   children,
   variant = "default",
   fullWidth = false,
@@ -20,6 +21,7 @@ export function SettingsSection({
   id: string;
   title: string;
   description?: string;
+  icon?: React.ReactNode;
   children: React.ReactNode;
   variant?: "default" | "danger";
   fullWidth?: boolean;
@@ -35,16 +37,28 @@ export function SettingsSection({
       )}
     >
       <header className="mb-6 flex flex-col gap-1.5 md:max-w-[60ch]">
-        <h2
-          className={cn(
-            "text-[18px] font-semibold tracking-tight",
-            variant === "danger"
-              ? "text-[var(--color-danger)]"
-              : "text-[var(--color-text-strong)]",
+        <div className="flex items-center gap-2.5">
+          {icon && (
+            <span className={cn(
+              "shrink-0",
+              variant === "danger"
+                ? "text-[var(--color-danger)]"
+                : "text-[var(--color-text-muted)]",
+            )}>
+              {icon}
+            </span>
           )}
-        >
-          {title}
-        </h2>
+          <h2
+            className={cn(
+              "text-[18px] font-semibold tracking-tight",
+              variant === "danger"
+                ? "text-[var(--color-danger)]"
+                : "text-[var(--color-text-strong)]",
+            )}
+          >
+            {title}
+          </h2>
+        </div>
         {description ? (
           <p className="text-[13.5px] leading-[1.55] text-[var(--color-text-muted)]">
             {description}

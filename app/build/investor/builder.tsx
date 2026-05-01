@@ -11,7 +11,6 @@ import {
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, X, ArrowLeft, Linkedin } from "lucide-react";
-import { Wordmark } from "@/components/landing/wordmark";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
 import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
@@ -344,10 +343,9 @@ export function InvestorBuilder({
         />
       )}
 
-      {/* Clean header */}
-      <header className="sticky top-0 z-30 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-[800px] items-center justify-between px-6">
-          <Wordmark size="sm" />
+      {/* Action header — sits below the shared ProductNav from app/build/layout.tsx. */}
+      <header className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
+        <div className="mx-auto flex h-14 max-w-[800px] items-center justify-end px-6">
           <div className="flex items-center gap-4">
             <button
               type="button"

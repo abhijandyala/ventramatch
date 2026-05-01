@@ -1,12 +1,7 @@
 "use client";
 
-import type { Route } from "next";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
-import { Wordmark } from "@/components/landing/wordmark";
 import { PixelReveal } from "@/components/ui/pixel-reveal";
-import { ProfileDropdown } from "@/components/layout/ProfileDropdown";
+import { ProductNav } from "@/components/layout/product-nav";
 
 type Role = "founder" | "investor";
 
@@ -195,59 +190,6 @@ function GlassBand({ top, height, blur, opacity }: { top: string; height: number
         borderBottom: `1px solid rgba(255,255,255,${borderAlpha * 0.6})`,
       }}
     />
-  );
-}
-
-function navLinks(role: Role): Array<{ label: string; href: string }> {
-  const profileHref = role === "investor" ? "/build/investor" : "/build";
-  return [
-    { label: "Feed", href: "/feed" },
-    { label: "Matches", href: "/matches" },
-    { label: "Profile", href: profileHref },
-    { label: "Dashboard", href: "/dashboard" },
-  ];
-}
-
-function ProductNav({
-  role,
-  name,
-  userId,
-  avatarSrc,
-}: {
-  role: Role;
-  name: string;
-  userId?: string;
-  avatarSrc?: string | null;
-}) {
-  const pathname = usePathname();
-  const links = navLinks(role);
-
-  return (
-    <header className="sticky top-0 z-40 border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]/85 backdrop-blur supports-[backdrop-filter]:bg-[color:var(--color-bg)]/70">
-      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-6 px-4 sm:px-6">
-        <div className="flex items-center gap-8">
-          <Wordmark size="md" />
-          <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href as Route}
-                className={cn(
-                  "text-[14px] transition-colors duration-[120ms]",
-                  pathname === link.href || pathname.startsWith(`${link.href}/`)
-                    ? "font-semibold text-[var(--color-text)]"
-                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
-
-        <ProfileDropdown role={role} name={name} userId={userId} avatarSrc={avatarSrc} />
-      </div>
-    </header>
   );
 }
 
