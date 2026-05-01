@@ -36,6 +36,10 @@ export function ConnectedAccounts({
     });
   }
 
+  // True when the user has only one OAuth provider and no password — removing
+  // it would lock them out of their account.
+  const onlyMethodIsOAuth = !hasPassword && connected.length === 1;
+
   return (
     <div className="flex flex-col gap-4">
       <ul className="flex flex-col">
@@ -80,6 +84,16 @@ export function ConnectedAccounts({
           );
         })}
       </ul>
+
+      {/* Visible lockout warning — shown whenever removing any connected provider
+          would leave the user with no sign-in method. */}
+      {onlyMethodIsOAuth ? (
+        <p className="border-l-2 border-[var(--color-warn)] pl-3 text-[12.5px] leading-[1.55] text-[var(--color-text-muted)]">
+          Add a password before disconnecting your only sign-in method, or you
+          won&apos;t be able to log back in.
+        </p>
+      ) : null}
+
       {error ? (
         <p role="alert" className="border-l-2 border-[var(--color-danger)] pl-3 text-[12.5px] text-[var(--color-danger)]">
           {error}

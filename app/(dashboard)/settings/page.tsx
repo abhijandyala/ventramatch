@@ -16,6 +16,9 @@ import { DataExportButton } from "@/components/settings/data-export-button";
 import { BlockedUsersList } from "@/components/settings/blocked-users-list";
 import { CalendarSection } from "@/components/settings/calendar-section";
 import { AvatarSection } from "@/components/settings/avatar-section";
+import { AccountStatusCard } from "@/components/settings/account-status-card";
+import { DiscoveryStatusCard } from "@/components/settings/discovery-status-card";
+import { SettingsMobileNav } from "@/components/settings/settings-mobile-nav";
 import { fetchBlockedUsers } from "@/lib/safety/query";
 import { resolveAvatarUrl } from "@/lib/profile/avatar";
 import {
@@ -29,14 +32,13 @@ export const dynamic = "force-dynamic";
 type Provider = "google" | "linkedin" | "github" | "microsoft-entra-id";
 
 const SECTIONS = [
-  { id: "account", label: "Account" },
+  { id: "account",       label: "Account" },
+  { id: "discovery",     label: "Discovery" },
   { id: "notifications", label: "Notifications" },
-  { id: "connected", label: "Connected accounts" },
-  { id: "calendar", label: "Calendar" },
-  { id: "password", label: "Password" },
-  { id: "blocked", label: "Blocked users" },
-  { id: "privacy", label: "Privacy & data" },
-  { id: "danger", label: "Pause / delete" },
+  { id: "security",      label: "Sign-in" },
+  { id: "integrations",  label: "Integrations" },
+  { id: "privacy",       label: "Privacy" },
+  { id: "danger",        label: "Danger zone" },
 ] as const;
 
 type UserRow = {
@@ -48,7 +50,6 @@ type UserRow = {
   password_hash: string | null;
   tos_accepted_at: Date | string | null;
   privacy_accepted_at: Date | string | null;
-  // Sprint 9.5.C — for the avatar uploader.
   image: string | null;
   avatar_storage_key: string | null;
   avatar_url: string | null;
@@ -59,6 +60,10 @@ export default async function SettingsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/sign-in");
   const userId = session.user.id;
+
+  // role comes from the JWT — no extra DB query needed.
+  const role = session.user.role;
+  const profileEditHref: string = role === "investor" ? "/build/investor" : "/build";
 
   const [data, blocked] = await Promise.all([
     withUserRls<{
@@ -115,12 +120,20 @@ export default async function SettingsPage() {
     oauthImage: user.image,
   });
 
+  const pausedAt = user.account_paused_at
+    ? new Date(user.account_paused_at).toISOString()
+    : null;
+  const deletionRequestedAt = user.deletion_requested_at
+    ? new Date(user.deletion_requested_at).toISOString()
+    : null;
+
   console.log(
     `[settings] userId=${userId} paused=${Boolean(user.account_paused_at)} deletion=${Boolean(user.deletion_requested_at)} providers=${providers.length}`,
   );
 
   return (
     <div className="bg-[var(--color-bg)]">
+      {/* Page header */}
       <header className="relative overflow-hidden border-b border-[var(--color-border)]">
         <div
           aria-hidden
@@ -143,7 +156,13 @@ export default async function SettingsPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1080px] grid-cols-1 gap-10 px-4 sm:px-6 py-8 lg:grid-cols-[200px_1fr]">
+      {/* Mobile section nav (hidden on lg) */}
+      <div className="mx-auto w-full max-w-[1080px] px-4 sm:px-6 lg:hidden">
+        <SettingsMobileNav sections={[...SECTIONS]} />
+      </div>
+
+      <div className="mx-auto grid w-full max-w-[1080px] grid-cols-1 gap-8 px-4 sm:px-6 py-8 lg:grid-cols-[200px_1fr]">
+        {/* Desktop sidebar */}
         <aside className="hidden lg:block">
           <nav className="sticky top-6 flex flex-col gap-1.5" aria-label="Settings sections">
             {SECTIONS.map((s) => (
@@ -164,8 +183,24 @@ export default async function SettingsPage() {
           </nav>
         </aside>
 
-        <main className="min-w-0">
-          <SettingsSection id="account" title="Account">
+        <main className="min-w-0 flex flex-col gap-5">
+          {/* At-a-glance status — above all sections */}
+          <AccountStatusCard
+            name={user.name}
+            email={user.email}
+            paused={Boolean(user.account_paused_at)}
+            deletionRequestedAt={deletionRequestedAt}
+            hasPassword={hasPassword}
+            providers={providers}
+            calendarConnected={data.calendarConnected}
+          />
+
+          {/* 1 · Account identity */}
+          <SettingsSection
+            id="account"
+            title="Account identity"
+            description="Your profile photo, display name, and sign-in email."
+          >
             <div className="flex flex-col gap-7">
               <AvatarSection
                 userId={userId}
@@ -179,89 +214,164 @@ export default async function SettingsPage() {
                 />
               </Suspense>
               <AccountNameForm initialName={user.name ?? ""} />
-            </div>
-          </SettingsSection>
-
-          <SettingsSection
-            id="notifications"
-            title="Notifications"
-            description="We only send transactional email — no spam. Toggle off anything you don't want."
-          >
-            <NotificationPrefsForm initial={prefs} />
-          </SettingsSection>
-
-          <SettingsSection
-            id="connected"
-            title="Connected accounts"
-            description="OAuth providers you've used to sign in."
-          >
-            <ConnectedAccounts connected={providers} hasPassword={hasPassword} />
-          </SettingsSection>
-
-          <SettingsSection
-            id="password"
-            title={hasPassword ? "Change password" : "Set a password"}
-            description={
-              hasPassword
-                ? "Use a fresh password you don't reuse anywhere else."
-                : "Adding one keeps you signed in even if your OAuth provider goes away."
-            }
-          >
-            <PasswordForm hasPassword={hasPassword} />
-          </SettingsSection>
-
-          <SettingsSection
-            id="calendar"
-            title="Calendar"
-            description="Auto-create calendar events when intro requests are accepted."
-          >
-            <CalendarSection connected={data.calendarConnected} />
-          </SettingsSection>
-
-          <SettingsSection
-            id="blocked"
-            title="Blocked users"
-            description="People you've blocked never appear in your feed or matches and can't reach your inbox."
-          >
-            <BlockedUsersList initial={blocked} />
-          </SettingsSection>
-
-          <SettingsSection
-            id="privacy"
-            title="Privacy & data"
-            description="Your data, your call."
-          >
-            <div className="flex flex-col gap-5">
-              <ConsentRow
-                label="Terms of Service"
-                date={user.tos_accepted_at}
-                href="/legal/tos"
-              />
-              <ConsentRow
-                label="Privacy Policy"
-                date={user.privacy_accepted_at}
-                href="/legal/privacy"
-              />
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <DataExportButton />
-                <ManageCookies />
+              <div className="pt-1 border-t border-[var(--color-border)]">
+                <Link
+                  href={profileEditHref as Route}
+                  className="mt-3 inline-block text-[12.5px] font-medium text-[var(--color-text-muted)] underline-offset-4 transition-colors hover:text-[var(--color-text-strong)] hover:underline"
+                >
+                  Edit matching profile →
+                </Link>
               </div>
             </div>
           </SettingsSection>
 
+          {/* 2 · Discovery & matching */}
+          <SettingsSection
+            id="discovery"
+            title="Discovery & matching"
+            description="Whether your profile is visible in the feed and how match scores are calculated."
+            fullWidth
+          >
+            <DiscoveryStatusCard
+              paused={Boolean(user.account_paused_at)}
+              deletionRequestedAt={deletionRequestedAt}
+              profileEditHref={profileEditHref}
+            />
+          </SettingsSection>
+
+          {/* 3 · Notifications */}
+          <SettingsSection
+            id="notifications"
+            title="Notifications"
+            description="Transactional email only — no spam. Toggle off anything you don't need."
+          >
+            <NotificationPrefsForm initial={prefs} />
+          </SettingsSection>
+
+          {/* 4 · Sign-in & security */}
+          <SettingsSection
+            id="security"
+            title="Sign-in & security"
+            description="Your password and connected OAuth providers. At least one sign-in method must remain active."
+          >
+            <div className="flex flex-col gap-8">
+              {/* Security summary pill */}
+              <div className="border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3">
+                <p className="text-[12.5px] text-[var(--color-text-muted)]">
+                  {hasPassword ? "Password set" : "No password set"}
+                  {" · "}
+                  {providers.length === 0
+                    ? "no OAuth providers connected"
+                    : `${providers.length} OAuth provider${providers.length !== 1 ? "s" : ""} connected`}
+                </p>
+                {!hasPassword ? (
+                  <p className="mt-1 text-[12px] text-[var(--color-text-faint)]">
+                    Adding a password keeps you signed in if your OAuth provider becomes unavailable.
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Password */}
+              <div>
+                <p className="mb-4 text-[14px] font-semibold text-[var(--color-text-strong)]">
+                  {hasPassword ? "Change password" : "Set a password"}
+                </p>
+                <PasswordForm hasPassword={hasPassword} />
+              </div>
+
+              {/* Connected accounts */}
+              <div>
+                <p className="mb-1 text-[14px] font-semibold text-[var(--color-text-strong)]">
+                  Connected accounts
+                </p>
+                <p className="mb-4 text-[12.5px] text-[var(--color-text-muted)]">
+                  OAuth providers you&apos;ve used to sign in.
+                </p>
+                <ConnectedAccounts connected={providers} hasPassword={hasPassword} />
+              </div>
+            </div>
+          </SettingsSection>
+
+          {/* 5 · Integrations */}
+          <SettingsSection
+            id="integrations"
+            title="Integrations"
+            description="Third-party connections that extend VentraMatch."
+          >
+            <div className="flex flex-col gap-2">
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.09em] text-[var(--color-text-faint)]">
+                Google Calendar
+              </p>
+              <CalendarSection connected={data.calendarConnected} />
+            </div>
+          </SettingsSection>
+
+          {/* 6 · Privacy & safety */}
+          <SettingsSection
+            id="privacy"
+            title="Privacy & safety"
+            description="Blocked users, data export, cookie consent, and legal acceptance."
+            fullWidth
+          >
+            <div className="flex flex-col gap-9 max-w-[60ch]">
+              {/* Blocked users */}
+              <div>
+                <p className="mb-1 text-[14px] font-semibold text-[var(--color-text-strong)]">
+                  Blocked users
+                </p>
+                <p className="mb-4 text-[12.5px] text-[var(--color-text-muted)]">
+                  Blocked users never appear in your feed, matches, or inbox — and
+                  they can&apos;t reach you.
+                </p>
+                <BlockedUsersList initial={blocked} />
+              </div>
+
+              {/* Legal acceptance */}
+              <div>
+                <p className="mb-4 text-[14px] font-semibold text-[var(--color-text-strong)]">
+                  Legal
+                </p>
+                <div className="flex flex-col">
+                  <ConsentRow
+                    label="Terms of Service"
+                    date={user.tos_accepted_at}
+                    href="/legal/tos"
+                  />
+                  <ConsentRow
+                    label="Privacy Policy"
+                    date={user.privacy_accepted_at}
+                    href="/legal/privacy"
+                  />
+                </div>
+              </div>
+
+              {/* Data controls */}
+              <div>
+                <p className="mb-1 text-[14px] font-semibold text-[var(--color-text-strong)]">
+                  Your data
+                </p>
+                <p className="mb-4 text-[12.5px] text-[var(--color-text-muted)]">
+                  Export your account data and manage consent settings.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <DataExportButton />
+                  <ManageCookies />
+                </div>
+              </div>
+            </div>
+          </SettingsSection>
+
+          {/* 7 · Danger zone */}
           <SettingsSection
             id="danger"
-            title="Pause or delete"
-            description="The lighter option first."
+            title="Danger zone"
+            description="Pause removes you from discovery but keeps matches and inbox intact. Delete schedules permanent removal after 30 days."
+            variant="danger"
           >
             <PauseAndDelete
               email={user.email}
-              paused={Boolean(user.account_paused_at)}
-              deletionRequestedAt={
-                user.deletion_requested_at
-                  ? new Date(user.deletion_requested_at).toISOString()
-                  : null
-              }
+              paused={Boolean(pausedAt)}
+              deletionRequestedAt={deletionRequestedAt}
             />
           </SettingsSection>
         </main>
@@ -281,7 +391,7 @@ function ConsentRow({
 }) {
   const accepted = date ? new Date(date) : null;
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-4 last:border-none last:pb-0">
+    <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] py-4 last:border-none last:pb-0">
       <div>
         <p className="text-[13.5px] font-medium text-[var(--color-text-strong)]">
           {label}
