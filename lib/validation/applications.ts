@@ -30,6 +30,26 @@ const positiveBigInt = z
   .int({ message: "Use a whole number." })
   .min(0, { message: "Cannot be negative." });
 
+// 0035: Product development status (Basics tab)
+const productStatusValues = [
+  "idea",
+  "prototype",
+  "beta",
+  "launched",
+  "revenue_generating",
+] as const;
+
+// 0035: Primary customer type (Basics tab)
+const customerTypeValues = [
+  "consumer",
+  "smb",
+  "enterprise",
+  "developer",
+  "government",
+  "marketplace",
+  "other",
+] as const;
+
 export const submitFounderSchema = z.object({
   companyName: z
     .string()
@@ -52,6 +72,15 @@ export const submitFounderSchema = z.object({
   location: z.string().trim().max(120, "Location is too long.").optional(),
   deckUrl: optionalHttpUrl,
   website: optionalHttpUrl,
+  // 0035: New Basics fields
+  foundedYear: z
+    .number()
+    .int()
+    .min(1900, "Year must be 1900 or later.")
+    .max(2100, "Year must be 2100 or earlier.")
+    .optional(),
+  productStatus: z.enum(productStatusValues).optional(),
+  customerType: z.enum(customerTypeValues).optional(),
 });
 export type SubmitFounderInput = z.infer<typeof submitFounderSchema>;
 

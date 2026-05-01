@@ -28,6 +28,9 @@ export type StartupDepthCounts = {
   hasMarketAnalysis?: boolean;
   competitors?: number;
   useOfFundsLines?: number;
+  // 0035: Narrative depth — investor-grade pitch content.
+  hasNarrative?: boolean;
+  narrativeFieldsFilled?: number;
 };
 
 export type InvestorDepthCounts = {
@@ -143,6 +146,30 @@ export function founderCompletion(
       weight: 5,
     },
     {
+      id: "foundedYear",
+      label: "Add founded year",
+      href: "/build",
+      done: row ? filledNum(row.founded_year) : false,
+      weight: 2,
+      base: false,
+    },
+    {
+      id: "productStatus",
+      label: "Select product status",
+      href: "/build",
+      done: row ? filledStr(row.product_status) : false,
+      weight: 3,
+      base: false,
+    },
+    {
+      id: "customerType",
+      label: "Select customer type",
+      href: "/build",
+      done: row ? filledStr(row.customer_type) : false,
+      weight: 3,
+      base: false,
+    },
+    {
       id: "traction",
       label: "Add at least one traction signal",
       href: "/build",
@@ -208,6 +235,14 @@ export function founderCompletion(
       href: "/build#competitors",
       done: depth ? (depth.competitors ?? 0) > 0 : false,
       weight: 3,
+      base: false,
+    },
+    {
+      id: "narrative",
+      label: "Fill in your investor pitch narrative",
+      href: "/build#narrative",
+      done: depth?.hasNarrative === true,
+      weight: 5,
       base: false,
     },
   ];

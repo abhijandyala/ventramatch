@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
-import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
+import type { StartupStage, AccountLabel, ProfileState, ProductStatus, CustomerType } from "@/types/database";
 import { FounderBuilder, type FounderUiDraft, EMPTY_FOUNDER_DRAFT } from "./builder";
 import { fetchStartupDepth, fetchOwnVerifications, fetchOwnReferences } from "@/lib/profile/depth";
 import {
@@ -10,6 +10,7 @@ import {
   type StartupDepthView,
 } from "@/lib/profile/visibility";
 import type { OwnVerification, OwnReference } from "@/components/profile/verification-panel";
+import { getLinkedInStatusAction } from "./connect-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,9 @@ type StartupRow = {
   deck_filename: string | null;
   deck_uploaded_at: string | null;
   website: string | null;
+  founded_year: number | null;
+  product_status: ProductStatus | null;
+  customer_type: CustomerType | null;
 };
 
 type UserRow = {
@@ -50,7 +54,8 @@ export default async function BuildPage() {
       sql<StartupRow[]>`
         select id, name, one_liner, industry, stage, raise_amount,
                traction, location, deck_url, deck_storage_key,
-               deck_filename, deck_uploaded_at, website
+               deck_filename, deck_uploaded_at, website,
+               founded_year, product_status, customer_type
         from public.startups
         where user_id = ${userId}
         limit 1
@@ -90,9 +95,11 @@ export default async function BuildPage() {
   }
 
   // Load verifications + references for the panel (own-only reads).
-  const [rawVerifications, rawReferences] = await Promise.all([
+  // Also fetch LinkedIn connection status for the "Fill with LinkedIn" feature.
+  const [rawVerifications, rawReferences, linkedInStatus] = await Promise.all([
     fetchOwnVerifications(userId),
     fetchOwnReferences(userId),
+    getLinkedInStatusAction(),
   ]);
 
   const ownVerifications: OwnVerification[] = rawVerifications.map((v) => ({
@@ -123,6 +130,9 @@ export default async function BuildPage() {
       description: both.startup?.one_liner ?? both.user?.bio ?? "",
       website: both.startup?.website ?? "",
       city: both.startup?.location ?? "",
+      foundedYear: both.startup?.founded_year ?? null,
+      productStatus: both.startup?.product_status ?? null,
+      customerType: both.startup?.customer_type ?? null,
     },
     sectors: both.startup?.industry ? [both.startup.industry] : [],
     stage: both.startup?.stage ?? null,
@@ -157,6 +167,7 @@ export default async function BuildPage() {
       depthView={depthView}
       ownVerifications={ownVerifications}
       ownReferences={ownReferences}
+      linkedInStatus={linkedInStatus}
     />
   );
 }

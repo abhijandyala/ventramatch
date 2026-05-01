@@ -37,6 +37,10 @@ function inputAsRow(userId: string, data: SubmitFounderInput): StartupRow {
     deck_uploaded_at: null,
     website: data.website ?? null,
     startup_sectors: data.startupSectors ?? [data.industry],
+    // 0035: New basics fields
+    founded_year: data.foundedYear ?? null,
+    product_status: data.productStatus ?? null,
+    customer_type: data.customerType ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -130,7 +134,8 @@ export async function submitFounderApplicationAction(
       await sql`
         insert into public.startups (
           user_id, name, one_liner, industry, startup_sectors, stage,
-          raise_amount, traction, location, deck_url, website
+          raise_amount, traction, location, deck_url, website,
+          founded_year, product_status, customer_type
         ) values (
           ${userId},
           ${data.companyName},
@@ -142,7 +147,10 @@ export async function submitFounderApplicationAction(
           ${data.traction ?? null},
           ${data.location ?? null},
           ${data.deckUrl ?? null},
-          ${data.website ?? null}
+          ${data.website ?? null},
+          ${data.foundedYear ?? null},
+          ${data.productStatus ?? null},
+          ${data.customerType ?? null}
         )
         on conflict (user_id) do update set
           name             = excluded.name,
@@ -154,7 +162,10 @@ export async function submitFounderApplicationAction(
           traction         = excluded.traction,
           location         = excluded.location,
           deck_url         = excluded.deck_url,
-          website          = excluded.website
+          website          = excluded.website,
+          founded_year     = excluded.founded_year,
+          product_status   = excluded.product_status,
+          customer_type    = excluded.customer_type
       `;
 
       await sql`
@@ -266,7 +277,10 @@ export async function saveFounderDraftAction(
     data.traction !== undefined ||
     data.location !== undefined ||
     data.deckUrl !== undefined ||
-    data.website !== undefined;
+    data.website !== undefined ||
+    data.foundedYear !== undefined ||
+    data.productStatus !== undefined ||
+    data.customerType !== undefined;
 
   try {
     await withUserRls(userId, async (sql) => {
@@ -292,7 +306,8 @@ export async function saveFounderDraftAction(
         await sql`
           insert into public.startups (
             user_id, name, one_liner, industry, startup_sectors, stage,
-            raise_amount, traction, location, deck_url, website
+            raise_amount, traction, location, deck_url, website,
+            founded_year, product_status, customer_type
           ) values (
             ${userId},
             ${safeName},
@@ -304,7 +319,10 @@ export async function saveFounderDraftAction(
             ${data.traction ?? null},
             ${data.location ?? null},
             ${data.deckUrl ?? null},
-            ${data.website ?? null}
+            ${data.website ?? null},
+            ${data.foundedYear ?? null},
+            ${data.productStatus ?? null},
+            ${data.customerType ?? null}
           )
           on conflict (user_id) do update set
             name             = coalesce(${data.companyName ?? null}, public.startups.name),
@@ -320,7 +338,10 @@ export async function saveFounderDraftAction(
             traction         = coalesce(${data.traction ?? null}, public.startups.traction),
             location         = coalesce(${data.location ?? null}, public.startups.location),
             deck_url         = coalesce(${data.deckUrl ?? null}, public.startups.deck_url),
-            website          = coalesce(${data.website ?? null}, public.startups.website)
+            website          = coalesce(${data.website ?? null}, public.startups.website),
+            founded_year     = coalesce(${data.foundedYear ?? null}, public.startups.founded_year),
+            product_status   = coalesce(${data.productStatus ?? null}, public.startups.product_status),
+            customer_type    = coalesce(${data.customerType ?? null}, public.startups.customer_type)
         `;
       }
 
