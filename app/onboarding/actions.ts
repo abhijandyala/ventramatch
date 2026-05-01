@@ -38,12 +38,19 @@ export async function saveOnboardingAction(input: OnboardingInput): Promise<Acti
       const investorType =
         data.profile.role === "investor" ? data.profile.investorType : null;
 
+      // `goals` stores the optional "what are you looking for?" preference
+      // text from onboarding step 2. Normalise blank to null so a returning
+      // user with an empty textarea doesn't overwrite a previously-saved
+      // value with an empty string.
+      const lookingFor = data.profile.lookingFor?.trim() || null;
+
       const rows = await sql<{ profile_state: ProfileState }[]>`
         update public.users
         set role = ${data.role}::public.user_role,
             company_name = ${companyName},
             investor_type = ${investorType},
             bio = ${data.profile.description},
+            goals = coalesce(${lookingFor}, goals),
             onboarding_completed = true,
             profile_state = case
               when profile_state in ('partial','complete','pending_review','verified','rejected')

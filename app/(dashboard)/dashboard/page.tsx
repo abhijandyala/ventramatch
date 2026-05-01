@@ -47,6 +47,7 @@ import { withUserRls } from "@/lib/db";
 import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { AccountActions } from "@/components/account/account-actions";
+import { InterestedProfilesRail } from "@/components/dashboard/InterestedProfilesRail";
 
 export const dynamic = "force-dynamic";
 
@@ -176,6 +177,7 @@ function FounderDashboard({
           accountLabel={accountLabel}
           ctaHref="/build"
         />
+        <InterestedProfilesRail />
         <RealRecommendedRail kind="founder" items={feedItems} stats={stats} />
         <RecentViewersRail viewers={recentViewers} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
@@ -296,6 +298,7 @@ function InvestorDashboard({
           accountLabel={accountLabel}
           ctaHref="/build/investor"
         />
+        <InterestedProfilesRail />
         <RealRecommendedRail kind="investor" items={feedItems} stats={stats} />
         <RecentViewersRail viewers={recentViewers} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">

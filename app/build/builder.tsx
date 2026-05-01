@@ -32,6 +32,7 @@ import {
   type LinkedInConnectionStatus,
 } from "./connect-actions";
 import { LinkedInFillModal } from "@/components/profile/linkedin-fill-modal";
+import { switchRoleAction } from "./switch-role-action";
 
 const READ_ONLY_LABELS: AccountLabel[] = ["in_review"];
 
@@ -92,6 +93,7 @@ export const EMPTY_FOUNDER_DRAFT: FounderUiDraft = {
 // ──────────────────────────────────────────────────────────────────────────
 
 function buildTractionString(t: FounderUiDraft["traction"]): string | undefined {
+  if (!t) return undefined;
   const parts: string[] = [];
   if (t.mrr) parts.push(`MRR: $${t.mrr.toLocaleString()}`);
   if (t.customers) parts.push(`Customers: ${t.customers.toLocaleString()}`);
@@ -102,44 +104,44 @@ function buildTractionString(t: FounderUiDraft["traction"]): string | undefined 
   return result || undefined;
 }
 
-function urlOrUndef(v: string): string | undefined {
-  const trimmed = v.trim();
-  return trimmed ? trimmed : undefined;
+function urlOrUndef(v: string | undefined | null): string | undefined {
+  const trimmed = (v ?? "").trim();
+  return trimmed || undefined;
 }
 
 function toSubmitInput(d: FounderUiDraft): SubmitFounderInput {
   return {
-    companyName: d.company.name.trim(),
-    oneLiner: d.company.description.trim(),
-    industry: d.sectors[0] ?? "",
-    startupSectors: d.sectors.length > 0 ? d.sectors : undefined,
+    companyName: d.company?.name?.trim() ?? "",
+    oneLiner: d.company?.description?.trim() ?? "",
+    industry: d.sectors?.[0] ?? "",
+    startupSectors: d.sectors?.length ? d.sectors : undefined,
     stage: (d.stage ?? "idea") as StartupStage,
-    raiseAmount: d.round.targetRaise ?? undefined,
+    raiseAmount: d.round?.targetRaise ?? undefined,
     traction: buildTractionString(d.traction),
-    location: d.company.city.trim() || undefined,
-    deckUrl: urlOrUndef(d.deck.url),
-    website: urlOrUndef(d.company.website),
-    foundedYear: d.company.foundedYear ?? undefined,
-    productStatus: d.company.productStatus ?? undefined,
-    customerType: d.company.customerType ?? undefined,
+    location: d.company?.city?.trim() || undefined,
+    deckUrl: urlOrUndef(d.deck?.url),
+    website: urlOrUndef(d.company?.website),
+    foundedYear: d.company?.foundedYear ?? undefined,
+    productStatus: d.company?.productStatus ?? undefined,
+    customerType: d.company?.customerType ?? undefined,
   };
 }
 
 function toDraftInput(d: FounderUiDraft): DraftFounderInput {
   return {
-    companyName: d.company.name.trim() || undefined,
-    oneLiner: d.company.description.trim() || undefined,
-    industry: d.sectors[0]?.trim() || undefined,
-    startupSectors: d.sectors.length > 0 ? d.sectors : undefined,
+    companyName: d.company?.name?.trim() || undefined,
+    oneLiner: d.company?.description?.trim() || undefined,
+    industry: d.sectors?.[0]?.trim() || undefined,
+    startupSectors: d.sectors?.length ? d.sectors : undefined,
     stage: d.stage ?? undefined,
-    raiseAmount: d.round.targetRaise ?? undefined,
+    raiseAmount: d.round?.targetRaise ?? undefined,
     traction: buildTractionString(d.traction),
-    location: d.company.city.trim() || undefined,
-    deckUrl: urlOrUndef(d.deck.url),
-    website: urlOrUndef(d.company.website),
-    foundedYear: d.company.foundedYear ?? undefined,
-    productStatus: d.company.productStatus ?? undefined,
-    customerType: d.company.customerType ?? undefined,
+    location: d.company?.city?.trim() || undefined,
+    deckUrl: urlOrUndef(d.deck?.url),
+    website: urlOrUndef(d.company?.website),
+    foundedYear: d.company?.foundedYear ?? undefined,
+    productStatus: d.company?.productStatus ?? undefined,
+    customerType: d.company?.customerType ?? undefined,
   };
 }
 
@@ -321,14 +323,20 @@ export function FounderBuilder({
   }
 
   const completion = founderCompletion({
-    id: "", user_id: "", name: draft.company.name, one_liner: draft.company.description,
-    industry: draft.sectors[0] ?? "", stage: draft.stage ?? "idea",
-    raise_amount: draft.round.targetRaise, traction: draft.traction.notableSignals || null,
-    location: draft.company.city || null, deck_url: draft.deck.url || null,
-    deck_storage_key: draft.deck.fileName ? "present" : null,
-    deck_filename: draft.deck.fileName || null, deck_uploaded_at: null,
-    website: draft.company.website || null, startup_sectors: draft.sectors,
-    // 0035: New basics fields (for completion calc; values from draft if wired)
+    id: "", user_id: "",
+    name: draft.company?.name ?? "",
+    one_liner: draft.company?.description ?? "",
+    industry: draft.sectors?.[0] ?? "",
+    stage: draft.stage ?? "idea",
+    raise_amount: draft.round?.targetRaise ?? null,
+    traction: draft.traction?.notableSignals || null,
+    location: draft.company?.city || null,
+    deck_url: draft.deck?.url || null,
+    deck_storage_key: draft.deck?.fileName ? "present" : null,
+    deck_filename: draft.deck?.fileName || null,
+    deck_uploaded_at: null,
+    website: draft.company?.website || null,
+    startup_sectors: draft.sectors ?? [],
     founded_year: null, product_status: null, customer_type: null,
     created_at: "", updated_at: "",
   });
@@ -342,16 +350,28 @@ export function FounderBuilder({
           onApply={handleApplyLinkedIn}
           onClose={() => setShowLinkedInModal(false)}
           currentValues={{
-            name: draft.founder.fullName,
+            name: draft.founder?.fullName ?? "",
             picture: "",
-            email: draft.founder.workEmail,
+            email: draft.founder?.workEmail ?? "",
           }}
         />
       )}
 
       {/* Header — sits below the shared ProductNav from app/build/layout.tsx. */}
       <header className="border-b border-[color:var(--color-border)] bg-[color:var(--color-bg)]">
-        <div className="flex h-14 items-center justify-end px-6">
+        <div className="flex h-14 items-center justify-between px-6">
+          <button
+            type="button"
+            onClick={() => {
+              startSaving(async () => {
+                const res = await switchRoleAction("investor");
+                if (res.ok) window.location.href = "/build/investor";
+              });
+            }}
+            className="text-[12px] text-[color:var(--color-text-faint)] transition-colors hover:text-[color:var(--color-text-muted)]"
+          >
+            Switch to Investor
+          </button>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -805,8 +825,8 @@ function FounderStep({ draft, patch, errors }: { draft: FounderUiDraft; patch: (
 
 function ReviewStep({ draft, fieldErrors }: { draft: FounderUiDraft; fieldErrors: Record<string, string> }) {
   const hasErrors = Object.keys(fieldErrors).length > 0;
-  const hasDeck = draft.deck.url || draft.deck.fileName;
-  const hasFounder = draft.founder.fullName.trim().length > 0;
+  const hasDeck = draft.deck?.url || draft.deck?.fileName;
+  const hasFounder = (draft.founder?.fullName?.trim()?.length ?? 0) > 0;
   
   return (
     <div className="space-y-6">
@@ -860,7 +880,7 @@ function ReviewStep({ draft, fieldErrors }: { draft: FounderUiDraft; fieldErrors
             {hasFounder ? "✓" : "—"}
           </span>
           <span className={["text-[13px]", hasFounder ? "text-[color:var(--color-text)]" : "text-[color:var(--color-text-muted)]"].join(" ")}>
-            {hasFounder ? draft.founder.fullName : "Founder details missing"}
+            {hasFounder ? (draft.founder?.fullName ?? "") : "Founder details missing"}
           </span>
         </div>
       </div>

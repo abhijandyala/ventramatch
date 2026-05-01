@@ -468,6 +468,12 @@ export interface Database {
           avatar_storage_key: string | null;
           avatar_url: string | null;
           avatar_updated_at: string | null;
+          /**
+           * Open-ended "what are you looking for?" preference text captured
+           * at onboarding step 2. Strongest single intent signal for the
+           * future ML/LLM recommendation model. Migration 0004.
+           */
+          goals: string | null;
           created_at: string;
           updated_at: string;
         };

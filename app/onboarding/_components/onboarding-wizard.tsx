@@ -13,19 +13,23 @@ import { cn } from "@/lib/utils";
 import { saveOnboardingAction } from "../actions";
 import { RoleStep } from "./role-step";
 import { ProfileStep, type ProfileData } from "./profile-step";
+import { RecommendationsStep } from "./recommendations-step";
 import { ConnectStep } from "./connect-step";
 import { ReadyInterstitial } from "./ready-interstitial";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 type FieldErrors = Partial<Record<string, string>>;
 
-const DRAFT_KEY = "vm:onboarding-draft";
+// v2 = added "What are you looking for?" + 4-step recommendations preview.
+// Old v1 drafts are silently ignored; users restart cleanly.
+const DRAFT_KEY = "vm:onboarding-draft-v2";
 
 const PROFILE_DEFAULTS: ProfileData = {
   companyName: "",
   investorType: "firm" as InvestorType,
   firmName: "",
   description: "",
+  lookingFor: "",
 };
 
 type Draft = { role: Role | null; profile: ProfileData; step: Step };
@@ -59,7 +63,7 @@ function clearDraft() {
   }
 }
 
-const STEP_LABELS = ["Your role", "About you", "Connect"] as const;
+const STEP_LABELS = ["Your role", "About you", "You might like", "Connect"] as const;
 
 export function OnboardingWizard() {
   const router = useRouter();
@@ -68,21 +72,21 @@ export function OnboardingWizard() {
 
   // Lazy initial state restores any draft saved before an OAuth bounce so
   // step state isn't lost when the user comes back from connecting LinkedIn.
-  // If they're returning with ?connected=…, prefer step 3 (the connect screen).
+  // If they're returning with ?connected=…, pin to the connect step (step 4).
   const [{ role: initialRole, profile: initialProfile, step: initialStep }] =
     useState<Draft>(() => {
       const draft = readDraft();
       if (draft) {
         return {
           role: draft.role,
-          profile: draft.profile,
-          step: connectedProvider ? 3 : draft.step,
+          profile: { ...PROFILE_DEFAULTS, ...draft.profile },
+          step: connectedProvider ? 4 : draft.step,
         };
       }
       return {
         role: null,
         profile: PROFILE_DEFAULTS,
-        step: connectedProvider ? 3 : 1,
+        step: connectedProvider ? 4 : 1,
       };
     });
 
@@ -123,15 +127,7 @@ export function OnboardingWizard() {
     setFormError(null);
     if (!role) return;
 
-    const profileInput =
-      role === "founder"
-        ? { role: "founder" as const, companyName: profile.companyName, description: profile.description }
-        : {
-            role: "investor" as const,
-            investorType: profile.investorType,
-            firmName: profile.investorType === "firm" ? profile.firmName : undefined,
-            description: profile.description,
-          };
+    const profileInput = buildProfileInput(role, profile);
 
     const parsed = profileInfoSchema.safeParse(profileInput);
     if (!parsed.success) {
@@ -142,7 +138,15 @@ export function OnboardingWizard() {
     setStep(3);
   }
 
-  // Step 3 has two exits: "Finish" and "Skip for now". Both call the
+  // Step 3 ("You might be interested in") is preview-only — no validation,
+  // no required selection, just advance.
+  function handleStep3Continue() {
+    setFormError(null);
+    setDirection(1);
+    setStep(4);
+  }
+
+  // Step 4 has two exits: "Finish" and "Skip for now". Both call the
   // server to mark onboarding complete; the difference is purely UX
   // signalling.
   function handleFinish() {
@@ -153,15 +157,7 @@ export function OnboardingWizard() {
     startTransition(async () => {
       const result = await saveOnboardingAction({
         role,
-        profile:
-          role === "founder"
-            ? { role: "founder", companyName: profile.companyName, description: profile.description }
-            : {
-                role: "investor",
-                investorType: profile.investorType,
-                firmName: profile.investorType === "firm" ? profile.firmName : undefined,
-                description: profile.description,
-              },
+        profile: buildProfileInput(role, profile),
       });
       if (!result.ok) {
         setFormError(result.error);
@@ -175,22 +171,26 @@ export function OnboardingWizard() {
   const questions: Record<Step, string> = {
     1: "What brings you to VentraMatch?",
     2: role === "founder" ? "Tell us about your startup." : "Tell us about your investing.",
-    3: "Add verified signal in one click.",
+    3: "You might be interested in these.",
+    4: "Add verified signal in one click.",
   };
 
   const subtitles: Record<Step, string> = {
     1: "This takes about a minute. You can update everything later.",
     2: role === "founder"
-      ? "Just the basics — name and a quick description."
+      ? "Just the basics — name, a quick description, and what you want from VentraMatch."
       : "Are you with a firm or investing independently?",
-    3: "Connect a profile so investors can trust the basics, or skip and add it later.",
+    3: role === "founder"
+      ? "A preview of investors that match your stage and sectors. Tap any card to see more."
+      : "A preview of startups that match your check size and thesis. Tap any card to see more.",
+    4: "Connect a profile so investors can trust the basics, or skip and add it later.",
   };
 
   if (showInterstitial) {
-    // After the 3-step wizard the profile is `basic` — the real product
-    // surfaces (homepage / feed / matches) assume a built profile, so push
-    // the user straight into the /build wizard. Founder vs investor have
-    // different routes; role is required to reach this branch.
+    // After the wizard the profile is `basic` — the real product surfaces
+    // (homepage / feed / matches) assume a built profile, so push the user
+    // straight into the /build wizard. Founder vs investor have different
+    // routes; role is required to reach this branch.
     const buildPath = role === "investor" ? "/build/investor" : "/build";
     return (
       <ReadyInterstitial
@@ -202,10 +202,14 @@ export function OnboardingWizard() {
     );
   }
 
-  const isFinalStep = step === 3;
+  const isFinalStep = step === 4;
+
+  // Step 3 is the recommendation grid — needs more horizontal room than the
+  // narrow text-form steps. Other steps stay at the original 580px.
+  const containerMaxWidth = step === 3 ? "max-w-[1100px]" : "max-w-[580px]";
 
   return (
-    <div className="w-full max-w-[580px]">
+    <div className={cn("w-full", containerMaxWidth)}>
       <StepProgress step={step} />
 
       <div className="mt-10 mb-8">
@@ -233,6 +237,12 @@ export function OnboardingWizard() {
           ) : step === 2 && role ? (
             <ProfileStep role={role} value={profile} onChange={setProfile} errors={errors} />
           ) : step === 3 && role ? (
+            <RecommendationsStep
+              role={role}
+              lookingFor={profile.lookingFor}
+              description={profile.description}
+            />
+          ) : step === 4 && role ? (
             <ConnectStep role={role} connected={connectedProvider} />
           ) : null}
         </motion.div>
@@ -288,7 +298,9 @@ export function OnboardingWizard() {
                 ? handleStep1Continue
                 : step === 2
                   ? handleStep2Continue
-                  : handleFinish
+                  : step === 3
+                    ? handleStep3Continue
+                    : handleFinish
             }
             disabled={isPending || (step === 1 && !role)}
             className={cn(
@@ -313,21 +325,25 @@ export function OnboardingWizard() {
 
 function StepProgress({ step }: { step: Step }) {
   return (
-    <div className="flex items-start gap-3" aria-label={`Step ${step} of 3`}>
+    <div className="flex items-start gap-3" aria-label={`Step ${step} of 4`}>
       <StepNode index={1} active={step >= 1} done={step > 1} label={STEP_LABELS[0]} />
-      <div
-        aria-hidden="true"
-        className="mt-4 h-px flex-1 transition-colors duration-300"
-        style={{ background: step > 1 ? "var(--color-brand-ink)" : "var(--color-border)" }}
-      />
+      <StepConnector lit={step > 1} />
       <StepNode index={2} active={step >= 2} done={step > 2} label={STEP_LABELS[1]} />
-      <div
-        aria-hidden="true"
-        className="mt-4 h-px flex-1 transition-colors duration-300"
-        style={{ background: step > 2 ? "var(--color-brand-ink)" : "var(--color-border)" }}
-      />
-      <StepNode index={3} active={step >= 3} done={false} label={STEP_LABELS[2]} />
+      <StepConnector lit={step > 2} />
+      <StepNode index={3} active={step >= 3} done={step > 3} label={STEP_LABELS[2]} />
+      <StepConnector lit={step > 3} />
+      <StepNode index={4} active={step >= 4} done={false} label={STEP_LABELS[3]} />
     </div>
+  );
+}
+
+function StepConnector({ lit }: { lit: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="mt-4 h-px flex-1 transition-colors duration-300"
+      style={{ background: lit ? "var(--color-brand-ink)" : "var(--color-border)" }}
+    />
   );
 }
 
@@ -378,4 +394,28 @@ function toFieldErrors(issues: { path: PropertyKey[]; message: string }[]): Fiel
     }
   }
   return out;
+}
+
+/**
+ * Project the wizard's local ProfileData into the discriminated-union input
+ * the Zod schema and server action expect. Pure function, no I/O.
+ */
+function buildProfileInput(role: Role, profile: ProfileData) {
+  const lookingFor = profile.lookingFor.trim();
+  const looking = lookingFor.length > 0 ? lookingFor : undefined;
+  if (role === "founder") {
+    return {
+      role: "founder" as const,
+      companyName: profile.companyName,
+      description: profile.description,
+      lookingFor: looking,
+    };
+  }
+  return {
+    role: "investor" as const,
+    investorType: profile.investorType,
+    firmName: profile.investorType === "firm" ? profile.firmName : undefined,
+    description: profile.description,
+    lookingFor: looking,
+  };
 }

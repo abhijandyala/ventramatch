@@ -39,6 +39,9 @@ type UserRow = {
 export default async function InvestorBuildPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/sign-in");
+
+  if (session.user.role === "founder") redirect("/build");
+
   const userId = session.user.id;
 
   console.log(`[build:investor:page] userId=${userId}`);

@@ -2,15 +2,16 @@ import { auth } from "@/auth";
 import { withUserRls } from "@/lib/db";
 import { ProductNav } from "@/components/layout/product-nav";
 import { resolveAvatarUrl } from "@/lib/profile/avatar";
-import type { UserRole } from "@/types/database";
+import type { ProfileState, UserRole } from "@/types/database";
+import { NEEDS_BUILD_STATES } from "@/types/database";
 
 /**
- * Layout for /build and /build/investor. Renders the shared ProductNav
- * above each builder so users can navigate elsewhere mid-flow without
- * losing draft state (each builder auto-saves drafts).
+ * Layout for /build and /build/investor.
  *
- * The builder pages keep their own action header (LinkedIn, Save draft,
- * Save & exit) below the nav.
+ * First-time visitors (profile_state = none | basic) see a focused,
+ * distraction-free builder — no top nav. Once they save & exit or
+ * complete the builder (profile_state moves to partial or higher),
+ * the ProductNav appears so they can navigate freely.
  */
 export default async function BuildLayout({
   children,
@@ -22,6 +23,9 @@ export default async function BuildLayout({
   const navRole: "founder" | "investor" | null =
     role === "founder" || role === "investor" ? role : null;
 
+  // Determine profile state from session first, then trust DB if available.
+  let profileState: ProfileState =
+    (session?.user?.profileState ?? "none") as ProfileState;
   let avatarSrc: string | null = session?.user?.image ?? null;
 
   if (session?.user?.id) {
@@ -31,12 +35,14 @@ export default async function BuildLayout({
         avatar_url: string | null;
         avatar_updated_at: Date | string | null;
         image: string | null;
+        profile_state: ProfileState | null;
       };
       const row = await withUserRls<Row | null>(
         session.user.id,
         async (sql) => {
           const rows = await sql<Row[]>`
-            select avatar_storage_key, avatar_url, avatar_updated_at, image
+            select avatar_storage_key, avatar_url, avatar_updated_at, image,
+                   profile_state
             from public.users
             where id = ${session.user.id}
             limit 1
@@ -45,6 +51,7 @@ export default async function BuildLayout({
         },
       );
       if (row) {
+        profileState = row.profile_state ?? profileState;
         avatarSrc = await resolveAvatarUrl({
           storageKey: row.avatar_storage_key,
           cachedUrl: row.avatar_url,
@@ -57,9 +64,11 @@ export default async function BuildLayout({
     }
   }
 
+  const isFirstVisit = NEEDS_BUILD_STATES.includes(profileState);
+
   return (
     <>
-      {session?.user && (
+      {session?.user && !isFirstVisit && (
         <ProductNav
           role={navRole}
           name={session.user.name ?? ""}

@@ -21,6 +21,10 @@ import { SaveSearchButton } from "@/components/feed/save-search-button";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
+import {
+  mockFeedForFounder,
+  mockFeedForInvestor,
+} from "@/lib/recommendations/mock-feed-adapter";
 
 export const dynamic = "force-dynamic";
 
@@ -46,12 +50,28 @@ export default async function FeedPage({
     `[feed] userId=${userId} role=${role} q=${filters.q ?? ""} sort=${filters.sort} industries=${filters.industries.length}`,
   );
 
-  const [introCounts, items] = await Promise.all([
+  const [introCounts, realItems] = await Promise.all([
     fetchIntroBadgeCounts(userId),
     role === "founder"
       ? fetchFeedForFounder(userId, { limit: 50, filters })
       : fetchFeedForInvestor(userId, { limit: 50, filters }),
   ]);
+
+  // When the real feed is empty (no verified users yet), backfill with
+  // mock profiles so the product is demo-able. Once real users populate
+  // the DB, mock items are never shown (real items take priority).
+  const founderItems =
+    role === "founder"
+      ? (realItems as FeedInvestorCard[]).length > 0
+        ? (realItems as FeedInvestorCard[])
+        : mockFeedForFounder()
+      : [];
+  const investorItems =
+    role !== "founder"
+      ? (realItems as FeedStartupCard[]).length > 0
+        ? (realItems as FeedStartupCard[])
+        : mockFeedForInvestor()
+      : [];
 
   return (
     <FeedShell
@@ -61,9 +81,9 @@ export default async function FeedPage({
       filters={filters}
     >
       {role === "founder" ? (
-        <FounderFeedBody items={items as FeedInvestorCard[]} filters={filters} />
+        <FounderFeedBody items={founderItems} filters={filters} />
       ) : (
-        <InvestorFeedBody items={items as FeedStartupCard[]} filters={filters} />
+        <InvestorFeedBody items={investorItems} filters={filters} />
       )}
     </FeedShell>
   );
