@@ -6,7 +6,6 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, X } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
@@ -278,6 +277,11 @@ export function InvestorBuilder({
     });
   }
 
+  async function handleSaveAndExit() {
+    await save();
+    router.push("/dashboard");
+  }
+
   return (
     <main className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 px-5 backdrop-blur md:px-8">
@@ -298,12 +302,14 @@ export function InvestorBuilder({
             {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
             {readOnly ? "Read-only" : isSaving ? "Saving…" : savedAt ? `Saved ${savedAt}` : "Save draft"}
           </button>
-          <Link
-            href="/dashboard"
-            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)]"
+          <button
+            type="button"
+            onClick={handleSaveAndExit}
+            disabled={isSaving || readOnly}
+            className="text-[12.5px] text-[color:var(--color-text-muted)] transition-colors hover:text-[color:var(--color-text-strong)] disabled:opacity-60"
           >
             Save &amp; exit
-          </Link>
+          </button>
         </div>
       </header>
 
