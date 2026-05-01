@@ -89,7 +89,7 @@ export function ProfileCompletionCard({
       </ul>
 
       <Link
-        href={"/profile" as Route}
+        href={"/build" as Route}
         className={cn(
           "mt-6 inline-flex w-full items-center justify-center gap-1.5",
           "h-10 px-4",

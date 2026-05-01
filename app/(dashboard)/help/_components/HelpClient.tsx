@@ -22,12 +22,15 @@ import { ProfileDropdown } from "@/components/layout/ProfileDropdown";
 
 type Role = "founder" | "investor" | null;
 
-const NAV_LINKS = [
-  { label: "Feed", href: "/feed" },
-  { label: "Matches", href: "/matches" },
-  { label: "Profiles", href: "/profile" },
-  { label: "Dashboard", href: "/dashboard" },
-];
+function navLinks(role: Role): Array<{ label: string; href: string }> {
+  const profileHref = role === "investor" ? "/build/investor" : "/build";
+  return [
+    { label: "Feed", href: "/feed" },
+    { label: "Matches", href: "/matches" },
+    { label: "Profile", href: profileHref },
+    { label: "Dashboard", href: "/dashboard" },
+  ];
+}
 
 const FAQS: Array<{ q: string; a: string }> = [
   {
@@ -69,7 +72,7 @@ const GUIDES = [
     icon: Users,
     title: "Complete your founder profile",
     desc: "The five fields that move your score the most, in order.",
-    href: "/profile",
+    href: "/build",
   },
   {
     icon: Zap,
@@ -87,7 +90,7 @@ const GUIDES = [
     icon: Lock,
     title: "Privacy and visibility",
     desc: "Who sees what, and how to control your exposure.",
-    href: "/profile?tab=settings",
+    href: "/settings",
   },
 ];
 
@@ -443,7 +446,7 @@ function AppNav({
         <div className="flex items-center gap-8">
           <Wordmark size="md" />
           <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
-            {NAV_LINKS.map((link) => (
+            {navLinks(role).map((link) => (
               <Link
                 key={link.href}
                 href={link.href as Route}

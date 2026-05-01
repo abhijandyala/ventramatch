@@ -10,7 +10,7 @@ import { NEEDS_BUILD_STATES } from "@/types/database";
 // stay out of the edge runtime.
 
 const PROTECTED_PATHS = [
-  "/dashboard", "/settings", "/profile", "/post-auth", "/homepage",
+  "/dashboard", "/settings", "/post-auth", "/homepage",
   "/feed", "/matches", "/p", "/build", "/inbox", "/searches", "/notifications", "/activity",
 ];
 const ONBOARDING_PATHS = ["/onboarding"];
