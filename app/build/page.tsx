@@ -28,9 +28,10 @@ type StartupRow = {
   deck_filename: string | null;
   deck_uploaded_at: string | null;
   website: string | null;
-  founded_year: number | null;
-  product_status: ProductStatus | null;
-  customer_type: CustomerType | null;
+  // 0035 fields - may not exist until migration is applied
+  founded_year?: number | null;
+  product_status?: ProductStatus | null;
+  customer_type?: CustomerType | null;
 };
 
 type UserRow = {
@@ -50,12 +51,14 @@ export default async function BuildPage() {
 
   type Both = { startup: StartupRow | null; user: UserRow | null };
   const both = await withUserRls<Both>(userId, async (sql) => {
+    // Base query without 0035 columns (founded_year, product_status, customer_type)
+    // to gracefully handle the case where migration 0035 hasn't been applied yet.
+    type BaseStartupRow = Omit<StartupRow, "founded_year" | "product_status" | "customer_type">;
     const [s, u] = await Promise.all([
-      sql<StartupRow[]>`
+      sql<BaseStartupRow[]>`
         select id, name, one_liner, industry, stage, raise_amount,
                traction, location, deck_url, deck_storage_key,
-               deck_filename, deck_uploaded_at, website,
-               founded_year, product_status, customer_type
+               deck_filename, deck_uploaded_at, website
         from public.startups
         where user_id = ${userId}
         limit 1
@@ -67,7 +70,29 @@ export default async function BuildPage() {
         limit 1
       `,
     ]);
-    return { startup: s[0] ?? null, user: u[0] ?? null };
+
+    // Try to fetch 0035 columns separately with graceful fallback.
+    let startup: StartupRow | null = s[0] ? { ...s[0], founded_year: null, product_status: null, customer_type: null } : null;
+    if (startup) {
+      try {
+        type ExtRow = { founded_year: number | null; product_status: ProductStatus | null; customer_type: CustomerType | null };
+        const extRows = await sql<ExtRow[]>`
+          select founded_year, product_status, customer_type
+          from public.startups
+          where user_id = ${userId}
+          limit 1
+        `;
+        if (extRows[0]) {
+          startup.founded_year = extRows[0].founded_year;
+          startup.product_status = extRows[0].product_status;
+          startup.customer_type = extRows[0].customer_type;
+        }
+      } catch {
+        // Columns don't exist yet — gracefully degrade.
+      }
+    }
+
+    return { startup, user: u[0] ?? null };
   });
 
   // Always provide a depth view so the editor scaffold renders from first
