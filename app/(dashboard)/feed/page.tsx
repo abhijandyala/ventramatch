@@ -25,6 +25,10 @@ import {
   mockFeedForFounder,
   mockFeedForInvestor,
 } from "@/lib/recommendations/mock-feed-adapter";
+import { flag } from "@/lib/flags";
+import { logFeedImpressions } from "@/lib/feed/impression-log";
+import { computeShadowScores } from "@/lib/feed/shadow-score";
+import { rankFeedForViewer } from "@/lib/feed/ml-ranker";
 
 export const dynamic = "force-dynamic";
 
@@ -50,26 +54,88 @@ export default async function FeedPage({
     `[feed] userId=${userId} role=${role} q=${filters.q ?? ""} sort=${filters.sort} industries=${filters.industries.length}`,
   );
 
-  const [introCounts, realItems] = await Promise.all([
+  const [introCounts, rawItems] = await Promise.all([
     fetchIntroBadgeCounts(userId),
     role === "founder"
       ? fetchFeedForFounder(userId, { limit: 50, filters })
       : fetchFeedForInvestor(userId, { limit: 50, filters }),
   ]);
 
+  // ── Phase 16: ML ranking (flag-gated, synchronous path before render) ────────
+  // When feed_ml_ranking is on, items are re-ranked by the Phase 11c LogReg model.
+  // When off, the original scoreMatch order from query.ts is preserved exactly.
+  // rankFeedForViewer never throws — any failure returns scoreMatch order.
+  // It is awaited before render so the rendered list reflects the chosen order.
+  const actorRole = (role ?? "investor") as "investor" | "founder";
+  const [mlFlagEnabled, personalizationEnabled] = await Promise.all([
+    flag("feed_ml_ranking", userId).catch(() => false),
+    flag("feed_personalization", userId).catch(() => false),
+  ]);
+  // Cast to the union explicitly so TypeScript can infer T from the generic.
+  // Downstream code already casts to FeedStartupCard[] / FeedInvestorCard[] as before.
+  type AnyFeedCard = FeedStartupCard | FeedInvestorCard;
+  const { items: realItems, ranker: activeRanker, shadowScores: rankShadowScores } =
+    await rankFeedForViewer({
+      actorUserId:            userId,
+      actorRole,
+      items:                  rawItems as AnyFeedCard[],
+      flagEnabled:            mlFlagEnabled,
+      personalizationEnabled,
+    });
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Phase 14d / 15 / 16: impression logging (fire-and-forget) ───────────────
+  // Logs only the REAL items (not mock backfill).  Failures are swallowed
+  // by the helper — this block never affects feed rendering or ranking.
+  // When ML ranking ran, ranker and shadowScores come from the ranker wrapper.
+  // When ML ranking is off, activeRanker="scorematch" and rankShadowScores=null.
+  // The shadow logging flag may still supply additional shadow scores when
+  // feed_model_shadow_scoring is on but feed_ml_ranking is off.
+  if (realItems.length > 0) {
+    const sessionId = crypto.randomUUID();
+
+    void flag("feed_impression_logging", userId)
+      .catch(() => false)
+      .then(async (loggingEnabled) => {
+        if (!loggingEnabled) return;
+
+        // When ML ranking already ran, shadow scores are already available.
+        // When ML ranking is off, optionally fetch shadow scores for logging only.
+        let shadowScores = rankShadowScores;
+        if (!shadowScores) {
+          const shadowEnabled = await flag("feed_model_shadow_scoring", userId).catch(() => false);
+          if (shadowEnabled) {
+            const targetUserIds = realItems.map((it) => it.card.userId);
+            shadowScores = await computeShadowScores({ actorUserId: userId, actorRole, targetUserIds });
+          }
+        }
+
+        return logFeedImpressions({
+          actorUserId:     userId,
+          items:           realItems,
+          surface:         "feed_main",
+          ranker:          activeRanker,
+          renderSessionId: sessionId,
+          filterContext:   filters as Record<string, unknown>,
+          shadowScores,
+        });
+      });
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // When the real feed is empty (no verified users yet), backfill with
   // mock profiles so the product is demo-able. Once real users populate
   // the DB, mock items are never shown (real items take priority).
   const founderItems =
     role === "founder"
-      ? (realItems as FeedInvestorCard[]).length > 0
-        ? (realItems as FeedInvestorCard[])
+      ? (realItems as unknown as FeedInvestorCard[]).length > 0
+        ? (realItems as unknown as FeedInvestorCard[])
         : mockFeedForFounder()
       : [];
   const investorItems =
     role !== "founder"
-      ? (realItems as FeedStartupCard[]).length > 0
-        ? (realItems as FeedStartupCard[])
+      ? (realItems as unknown as FeedStartupCard[]).length > 0
+        ? (realItems as unknown as FeedStartupCard[])
         : mockFeedForInvestor()
       : [];
 

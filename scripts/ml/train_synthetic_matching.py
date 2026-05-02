@@ -16,9 +16,22 @@ NOTICE: This script is for algorithm development only.
     without separate validation on real post-launch interaction data.
   • scoreMatch in lib/matching/score.ts remains the safe production baseline.
 
+Phase 10 changes (hard eligibility layer):
+  • Default training mode is now "eligible-only" (was implicitly "full" in
+    Phases 7–9).  Use --training-mode full to reproduce pre-Phase-10 runs.
+  • A hard eligibility gate (lib/matching/eligibility.ts / scripts/ml/
+    eligibility.py) separates pairs eligible for model ranking from those
+    blocked by hard mandate constraints.  Ineligible pairs are used as a
+    safety diagnostic — not as training examples.
+  • New artifacts: eligibility_summary.json, predictions_ineligible.csv.
+  • predictions.csv now includes eligible_for_model_ranking and
+    hard_filter_reasons columns.
+
 Usage (run from repo root):
     python3 scripts/ml/train_synthetic_matching.py
     python3 scripts/ml/train_synthetic_matching.py --validate-only
+    python3 scripts/ml/train_synthetic_matching.py --training-mode full
+    python3 scripts/ml/train_synthetic_matching.py --training-mode eligible-train-full-eval
     python3 scripts/ml/train_synthetic_matching.py --output-dir /custom/path
 
 See scripts/ml/README.md for setup instructions.
@@ -31,13 +44,28 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+# ── Phase 10: import eligibility mirror (same directory) ──────────────────────
+# eligibility.py mirrors lib/matching/eligibility.ts. It is imported via a
+# sys.path insert so this script works regardless of working directory.
+_ML_DIR = Path(__file__).resolve().parent
+if str(_ML_DIR) not in sys.path:
+    sys.path.insert(0, str(_ML_DIR))
+
+try:
+    from eligibility import evaluate_eligibility as _evaluate_eligibility
+    from eligibility import ANTI_THESIS_MAX, STAGE_MIN, CHECK_SIZE_MIN
+    _ELIGIBILITY_AVAILABLE = True
+except ImportError:
+    _ELIGIBILITY_AVAILABLE = False
+    _evaluate_eligibility = None  # type: ignore[assignment]
+    ANTI_THESIS_MAX = STAGE_MIN = CHECK_SIZE_MIN = None  # type: ignore[assignment]
+
 # ── Dependency guard ──────────────────────────────────────────────────────────
-# Checked up-front so the error message is actionable, not a raw ImportError
-# buried in a stack trace.
 
 _MISSING: list[str] = []
 
@@ -55,7 +83,7 @@ except ImportError:
 
 try:
     import matplotlib
-    matplotlib.use("Agg")  # non-interactive — never opens a window
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
 except ImportError:
@@ -108,9 +136,6 @@ DEFAULT_ARTIFACTS_DIR = REPO_ROOT / "data" / "synthetic-matching" / "artifacts"
 
 LABEL_NAMES = ["poor fit", "weak fit", "possible fit", "strong fit", "excellent fit"]
 
-# The 12 numeric features from MatchFeatures in lib/matching/features.ts.
-# semantic_similarity_score is null when compute_embeddings.py has not been run;
-# null values are imputed to 0.0 at load time (see load_and_validate).
 FEATURE_COLS: list[str] = [
     "sector_overlap_score",
     "stage_match_score",
@@ -123,15 +148,9 @@ FEATURE_COLS: list[str] = [
     "lead_follow_score",
     "traction_strength_score",
     "profile_completeness_score",
-    "semantic_similarity_score",   # Phase 7: cosine similarity from MiniLM-L6-v2
+    "semantic_similarity_score",
 ]
 
-# Labeling formula weights from generate-synthetic-match-pairs.ts, listed for
-# comparison against model-learned feature importances.
-# anti_thesis is a penalty so its "expected importance" ≈ 0.40.
-# profile_completeness has zero weight in the score formula (zero variance in synthetic data).
-# semantic_similarity_score has zero labeling weight — labels are derived from
-# structured features only. The model may still learn this feature as predictive.
 LABELING_WEIGHTS: dict[str, float] = {
     "sector_overlap_score": 0.20,
     "stage_match_score": 0.18,
@@ -142,12 +161,16 @@ LABELING_WEIGHTS: dict[str, float] = {
     "geography_score": 0.07,
     "lead_follow_score": 0.05,
     "traction_strength_score": 0.05,
-    "anti_thesis_conflict_score": 0.40,  # shown as absolute value for importance chart
+    "anti_thesis_conflict_score": 0.40,
     "profile_completeness_score": 0.00,
-    "semantic_similarity_score": 0.00,   # not in labeling formula (Phase 7)
+    "semantic_similarity_score": 0.00,
 }
 
 RANDOM_SEED = 42
+
+# Phase 11c: multi-seed model selection constants.
+MULTISEED_SEEDS: list[int] = [42, 7, 19, 51, 73]
+LOGREG_C_GRID: list[float] = [0.5, 1.0, 2.0]
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
@@ -169,6 +192,26 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_ARTIFACTS_DIR,
         help=f"Directory for output artifacts (default: {DEFAULT_ARTIFACTS_DIR})",
     )
+    p.add_argument(
+        "--multiseed",
+        action="store_true",
+        help=(
+            "Run multi-seed OOF for LogReg C-grid + reference models (Phase 11c). "
+            "Requires --training-mode eligible-only (default). Adds ~30 s to the run."
+        ),
+    )
+    p.add_argument(
+        "--training-mode",
+        choices=["eligible-only", "full", "eligible-train-full-eval"],
+        default="eligible-only",
+        help=(
+            "eligible-only (default, Phase 10+): train and evaluate on eligible pairs only; "
+            "apply models to ineligible pairs as a safety diagnostic. "
+            "full: legacy behavior — train and evaluate on all 595 pairs. "
+            "eligible-train-full-eval: train on eligible pairs, primary eval on eligible "
+            "test split, plus full-dataset prediction export."
+        ),
+    )
     return p.parse_args()
 
 
@@ -176,7 +219,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_and_validate(path: Path) -> "pd.DataFrame":
-    """Load pairs.json, validate schema, and return a flat DataFrame."""
+    """Load pairs.json, validate schema, load eligibility fields, return DataFrame.
+
+    Phase 10 additions:
+      - Loads eligible_for_model_ranking and hard_filter_reasons from each pair.
+      - If those fields are missing (pre-Phase-10 pairs.json), recomputes them
+        from features using eligibility.py and prints a back-compat warning.
+      - Validates that stored eligibility is consistent with recomputed values.
+    """
     if not path.exists():
         print(f"ERROR: {path} not found.")
         print("Run:  npm run generate:synthetic-matches")
@@ -189,7 +239,6 @@ def load_and_validate(path: Path) -> "pd.DataFrame":
         print("ERROR: pairs.json is empty.")
         sys.exit(1)
 
-    # Schema check
     required_keys = {"startup_id", "investor_id", "features", "label", "label_name"}
     missing_top = required_keys - set(pairs[0].keys())
     if missing_top:
@@ -201,8 +250,28 @@ def load_and_validate(path: Path) -> "pd.DataFrame":
         print(f"ERROR: feature fields missing from pairs.json: {missing_feat}")
         sys.exit(1)
 
+    # Detect whether pairs.json has Phase 10 eligibility fields.
+    has_eligibility_fields = (
+        "eligible_for_model_ranking" in pairs[0]
+        and "hard_filter_reasons" in pairs[0]
+    )
+    if not has_eligibility_fields:
+        if _ELIGIBILITY_AVAILABLE:
+            print(
+                "  ⚠  pairs.json is pre-Phase-10; recomputing eligibility from features.\n"
+                "     Run: npm run generate:synthetic-matches  to persist eligibility fields.\n"
+            )
+        else:
+            print(
+                "  ⚠  pairs.json is pre-Phase-10 AND eligibility.py not found.\n"
+                "     Cannot recompute eligibility — all pairs treated as eligible (conservative).\n"
+                "     Run: npm run generate:synthetic-matches  and ensure eligibility.py exists.\n"
+            )
+
     rows: list[dict[str, Any]] = []
-    n_sem_null = 0  # count null semantic_similarity_score values
+    n_sem_null = 0
+    n_elig_recomputed = 0
+    n_elig_mismatch = 0
 
     for p in pairs:
         row: dict[str, Any] = {
@@ -220,58 +289,162 @@ def load_and_validate(path: Path) -> "pd.DataFrame":
                     n_sem_null += 1
             else:
                 row[col] = float(val)
+
+        # ── Eligibility (Phase 10) ────────────────────────────────────────────
+        feat_dict = {col: row[col] for col in FEATURE_COLS}
+
+        if has_eligibility_fields:
+            stored_eligible = bool(p["eligible_for_model_ranking"])
+            stored_reasons: list[str] = list(p["hard_filter_reasons"])
+            row["eligible_for_model_ranking"] = stored_eligible
+            row["hard_filter_reasons"] = stored_reasons
+
+            # Validate against recomputed values when eligibility.py is available.
+            if _ELIGIBILITY_AVAILABLE:
+                recomputed = _evaluate_eligibility(feat_dict)
+                if recomputed["eligible_for_model_ranking"] != stored_eligible:
+                    n_elig_mismatch += 1
+        else:
+            # Back-compat: recompute from features.
+            if _ELIGIBILITY_AVAILABLE:
+                recomputed = _evaluate_eligibility(feat_dict)
+                row["eligible_for_model_ranking"] = recomputed["eligible_for_model_ranking"]
+                row["hard_filter_reasons"] = recomputed["hard_filter_reasons"]
+                n_elig_recomputed += 1
+            else:
+                # Conservative fallback: assume eligible.
+                row["eligible_for_model_ranking"] = True
+                row["hard_filter_reasons"] = []
+
         rows.append(row)
 
     df = pd.DataFrame(rows)
 
-    # Report null imputation for semantic similarity
+    # ── Reporting ─────────────────────────────────────────────────────────────
     if n_sem_null > 0:
         pct = n_sem_null / len(rows) * 100
         if n_sem_null == len(rows):
             print(
                 f"  ⚠  semantic_similarity_score: all {n_sem_null} values are null (imputed 0.0).\n"
                 "     Run: npm run embeddings:synthetic-matches  to compute embeddings first.\n"
-                "     The model will train without semantic signal this run.\n"
             )
         else:
             print(
-                f"  ⚠  semantic_similarity_score: {n_sem_null}/{len(rows)} ({pct:.1f}%) null values "
-                "imputed to 0.0. Partial embedding data — some pairs lack cosine similarity.\n"
+                f"  ⚠  semantic_similarity_score: {n_sem_null}/{len(rows)} ({pct:.1f}%) null "
+                "values imputed to 0.0.\n"
             )
     else:
         print(
-            f"  ✓  semantic_similarity_score: all {len(rows)} values present "
-            "(embeddings loaded from compute_embeddings.py).\n"
+            f"  ✓  semantic_similarity_score: all {len(rows)} values present.\n"
+        )
+
+    if n_elig_recomputed > 0:
+        print(f"  ⚠  Eligibility recomputed for {n_elig_recomputed} pairs (pre-Phase-10 data).\n")
+
+    if n_elig_mismatch > 0:
+        print(
+            f"  ⚠  {n_elig_mismatch} pairs: stored eligibility differs from recomputed values.\n"
+            "     Regenerate pairs.json with: npm run generate:synthetic-matches\n"
+        )
+    elif has_eligibility_fields and _ELIGIBILITY_AVAILABLE:
+        print(
+            f"  ✓  Eligibility consistency: stored values match recomputed values for all "
+            f"{len(rows)} pairs.\n"
         )
 
     return df
 
 
+# ── Dataset statistics ─────────────────────────────────────────────────────────
+
+
 def print_dataset_stats(df: "pd.DataFrame") -> None:
     n = len(df)
     print(f"\n{'─' * 72}")
-    print("DATASET STATISTICS")
+    print("DATASET STATISTICS  (full dataset)")
     print(f"{'─' * 72}")
     print(f"  Total pairs : {n}")
-    print(f"  Features    : {len(FEATURE_COLS)} numeric (semantic_similarity_placeholder excluded)")
+    print(f"  Features    : {len(FEATURE_COLS)} numeric")
     print()
-
-    print("  Label distribution:")
+    print("  Label distribution (all pairs):")
     for i, name in enumerate(LABEL_NAMES):
         count = int((df["label"] == i).sum())
         pct = count / n * 100
         bar = "█" * max(1, round(pct / 2))
         print(f"    {i}  {name:<14}  {count:3d}  ({pct:5.1f}%)  {bar}")
     print()
-
     print("  Feature ranges (min / mean / max):")
     for col in FEATURE_COLS:
         mn = df[col].min()
         mu = df[col].mean()
         mx = df[col].max()
-        null_n = df[col].isna().sum()
-        null_note = f"  [{null_n} null]" if null_n else ""
-        print(f"    {col:<38}  {mn:+.3f} / {mu:+.3f} / {mx:+.3f}{null_note}")
+        print(f"    {col:<38}  {mn:+.3f} / {mu:+.3f} / {mx:+.3f}")
+    print(f"{'─' * 72}\n")
+
+
+# ── Eligibility summary ────────────────────────────────────────────────────────
+
+
+def print_eligibility_summary(df: "pd.DataFrame") -> None:
+    """Print the Phase 10 hard eligibility summary for the full dataset."""
+    n = len(df)
+    n_eligible = int(df["eligible_for_model_ranking"].sum())
+    n_ineligible = n - n_eligible
+
+    reason_counts: dict[str, int] = {
+        "anti_thesis_conflict": 0,
+        "stage_mismatch": 0,
+        "check_size_mismatch": 0,
+    }
+    multi_reason_count = 0
+    for reasons in df[~df["eligible_for_model_ranking"]]["hard_filter_reasons"]:
+        for r in reasons:
+            if r in reason_counts:
+                reason_counts[r] += 1
+        if len(reasons) > 1:
+            multi_reason_count += 1
+
+    print(f"{'─' * 72}")
+    print("HARD ELIGIBILITY SUMMARY  (Phase 10)")
+    print(f"{'─' * 72}")
+    print(f"  Total pairs                : {n}")
+    print(f"  Eligible for model ranking : {n_eligible} ({n_eligible / n * 100:.1f}%)")
+    print(f"  Ineligible                 : {n_ineligible} ({n_ineligible / n * 100:.1f}%)")
+    print()
+    print("  Hard filter reason counts (pairs may carry multiple reasons):")
+    print(f"    anti_thesis_conflict  : {reason_counts['anti_thesis_conflict']}")
+    print(f"    stage_mismatch        : {reason_counts['stage_mismatch']}")
+    print(f"    check_size_mismatch   : {reason_counts['check_size_mismatch']}")
+    print(f"    pairs with 2+ reasons : {multi_reason_count}")
+    print()
+    print("  Label distribution — eligible pairs:")
+    df_el = df[df["eligible_for_model_ranking"]]
+    n_el = max(1, len(df_el))
+    for i, name in enumerate(LABEL_NAMES):
+        count = int((df_el["label"] == i).sum())
+        pct = count / n_el * 100
+        bar = "█" * max(1, round(pct / 2))
+        print(f"    {i}  {name:<14}  {count:3d}  ({pct:5.1f}%)  {bar}")
+    print()
+    print("  Label distribution — ineligible pairs:")
+    df_in = df[~df["eligible_for_model_ranking"]]
+    n_in = max(1, len(df_in))
+    fp_total = 0
+    for i, name in enumerate(LABEL_NAMES):
+        count = int((df_in["label"] == i).sum())
+        pct = count / n_in * 100
+        bar = "█" * max(1, round(pct / 2))
+        flag = "  ⚠  FALSE-PROMOTION RISK" if i >= 3 and count > 0 else ""
+        if i >= 3:
+            fp_total += count
+        print(f"    {i}  {name:<14}  {count:3d}  ({pct:5.1f}%)  {bar}{flag}")
+    if fp_total == 0:
+        print("\n  ✓  No ineligible pair has label ≥ 3. Gate and label caps are consistent.")
+    else:
+        print(
+            f"\n  ⚠  {fp_total} ineligible pair(s) carry label ≥ 3. "
+            "These would be false promotions without the eligibility gate."
+        )
     print(f"{'─' * 72}\n")
 
 
@@ -280,8 +453,6 @@ def print_dataset_stats(df: "pd.DataFrame") -> None:
 
 def get_models() -> dict[str, Any]:
     return {
-        # StandardScaler avoids lbfgs numerical overflow on unscaled features.
-        # Coefficients are accessed via pipeline.named_steps["clf"] in importance plot.
         "LogReg": Pipeline([
             ("scaler", StandardScaler()),
             ("clf", LogisticRegression(
@@ -305,6 +476,35 @@ def get_models() -> dict[str, Any]:
     }
 
 
+# ── Multi-seed model variants ─────────────────────────────────────────────────
+
+
+def get_multiseed_models(
+    logreg_c_values: list[float] = LOGREG_C_GRID,
+) -> dict[str, Any]:
+    """Return model variants for multi-seed OOF evaluation (Phase 11c).
+
+    Includes one LogReg per C value and reference GBM + DecisionTree.
+    Each call returns fresh untrained instances.
+    """
+    models: dict[str, Any] = {}
+    for c_val in logreg_c_values:
+        models[f"logreg_c{c_val}"] = Pipeline([
+            ("scaler", StandardScaler()),
+            ("clf", LogisticRegression(
+                max_iter=1000, solver="lbfgs", C=c_val, random_state=RANDOM_SEED,
+            )),
+        ])
+    models["gbm"] = GradientBoostingClassifier(
+        n_estimators=200, max_depth=5, learning_rate=0.1,
+        subsample=0.9, random_state=RANDOM_SEED,
+    )
+    models["decisiontree"] = DecisionTreeClassifier(
+        max_depth=6, random_state=RANDOM_SEED,
+    )
+    return models
+
+
 # ── Cross-validation ──────────────────────────────────────────────────────────
 
 
@@ -312,9 +512,30 @@ def run_cross_validation(
     models: dict[str, Any],
     X: "np.ndarray",
     y: "np.ndarray",
-) -> dict[str, dict[str, "np.ndarray"]]:
-    """5-fold stratified CV for each model. Returns per-model score arrays."""
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)
+    max_folds: int = 5,
+) -> tuple[dict[str, dict[str, "np.ndarray"]] | None, int]:
+    """Stratified CV with automatic fold reduction if any class has too few samples.
+
+    Returns (results_dict, n_folds_used).  Results are None if CV is skipped.
+    """
+    label_counts = pd.Series(y).value_counts()
+    min_class_count = int(label_counts.min())
+    n_splits = min(max_folds, min_class_count)
+
+    if n_splits < 2:
+        print(
+            f"  ⚠  Too few samples per class for CV "
+            f"(min class count: {min_class_count}). Skipping CV.\n"
+        )
+        return None, 0
+
+    if n_splits < max_folds:
+        print(
+            f"  ℹ  CV folds reduced from {max_folds} to {n_splits} "
+            f"(min class count in training set: {min_class_count}).\n"
+        )
+
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
     scoring = ["accuracy", "f1_macro", "f1_weighted"]
 
     results: dict[str, dict[str, "np.ndarray"]] = {}
@@ -322,7 +543,6 @@ def run_cross_validation(
         try:
             scores = cross_validate(model, X, y, cv=cv, scoring=scoring, n_jobs=-1)
         except Exception:
-            # Fall back to single-threaded if n_jobs=-1 causes issues
             scores = cross_validate(model, X, y, cv=cv, scoring=scoring, n_jobs=1)
 
         acc = scores["test_accuracy"]
@@ -336,7 +556,428 @@ def run_cross_validation(
             f"macro-F1 {f1m.mean():.4f}±{f1m.std():.4f}"
         )
 
-    return results
+    return results, n_splits
+
+
+# ── Out-of-fold prediction generation ────────────────────────────────────────
+
+
+def generate_oof_predictions(
+    df_eligible: "pd.DataFrame",
+    feature_cols: list[str],
+    n_splits_max: int = 5,
+    random_seed: int = RANDOM_SEED,
+) -> tuple["pd.DataFrame", int]:
+    """Generate out-of-fold (OOF) predictions for all eligible pairs.
+
+    Each pair's prediction comes from a StratifiedKFold fold where it was
+    excluded from training — so every prediction is leakage-free.
+
+    Returns (oof_df, n_folds_used).  oof_df has the same column schema as
+    predictions_eligible_all.csv so eval_ranking.py can load it unchanged.
+    Returns (empty DataFrame, 0) if OOF cannot be generated.
+    """
+    X = df_eligible[feature_cols].values.astype(float)
+    y = df_eligible["label"].values.astype(int)
+
+    min_class_count = int(pd.Series(y).value_counts().min())
+    n_splits = min(n_splits_max, min_class_count)
+
+    if n_splits < 2:
+        print(
+            f"  ⚠  Min class count {min_class_count} too small for OOF. Skipping.\n"
+        )
+        return pd.DataFrame(), 0
+
+    if n_splits < n_splits_max:
+        print(
+            f"  ℹ  OOF folds reduced from {n_splits_max} to {n_splits} "
+            f"(min class count: {min_class_count}).\n"
+        )
+
+    print(f"  Running {n_splits}-fold stratified OOF for {len(df_eligible)} eligible pairs …\n")
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+    n = len(df_eligible)
+
+    model_keys = ["logreg", "gbm", "decisiontree"]
+    oof_pred: dict[str, "np.ndarray"] = {k: np.full(n, -1, dtype=int) for k in model_keys}
+    oof_proba: dict[str, "np.ndarray"] = {
+        k: np.full((n, 5), np.nan, dtype=float) for k in model_keys
+    }
+    oof_fold_idx: "np.ndarray" = np.full(n, -1, dtype=int)
+
+    for fold_i, (tr_idx, te_idx) in enumerate(skf.split(X, y)):
+        X_tr, X_te = X[tr_idx], X[te_idx]
+        y_tr = y[tr_idx]
+
+        # Fresh untrained model instances for every fold.
+        fold_models = get_models()
+        for name, model in fold_models.items():
+            key = name.lower()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # suppress sklearn numerical warnings
+                model.fit(X_tr, y_tr)
+            oof_pred[key][te_idx] = model.predict(X_te)
+            if hasattr(model, "predict_proba"):
+                oof_proba[key][te_idx] = model.predict_proba(X_te)
+
+        oof_fold_idx[te_idx] = fold_i
+        print(f"    fold {fold_i + 1}/{n_splits} complete")
+
+    # Build output with the same schema as predictions_eligible_all.csv.
+    out = df_eligible[
+        ["startup_id", "investor_id", "label", "label_name", "label_reason",
+         "eligible_for_model_ranking", "hard_filter_reasons"]
+    ].copy().reset_index(drop=True)
+    out = out.rename(columns={"label": "true_label", "label_name": "true_label_name"})
+    out["hard_filter_reasons"] = df_eligible["hard_filter_reasons"].apply(json.dumps).values
+    # oof_fold: which fold this pair was predicted in (0 … n_splits-1).
+    out["oof_fold"] = oof_fold_idx
+
+    label_weights = np.arange(5, dtype=float)
+    for key in model_keys:
+        out[f"pred_{key}"] = oof_pred[key]
+        out[f"correct_{key}"] = (oof_pred[key] == out["true_label"].values).astype(int)
+        out[f"error_{key}"] = np.abs(oof_pred[key] - out["true_label"].values.astype(int))
+
+        if not np.any(np.isnan(oof_proba[key])):
+            p = oof_proba[key]
+            for k_cls in range(5):
+                out[f"prob_{k_cls}_{key}"] = p[:, k_cls].round(4)
+            out[f"expected_label_{key}"] = (p @ label_weights).round(4)
+            out[f"prob_top_tier_{key}"] = (p[:, 3] + p[:, 4]).round(4)
+
+    print()
+    return out, n_splits
+
+
+# ── Multi-seed OOF generation ─────────────────────────────────────────────────
+
+
+def generate_multiseed_oof(
+    df_eligible: "pd.DataFrame",
+    df_ineligible: "pd.DataFrame",
+    feature_cols: list[str],
+    seeds: list[int] = MULTISEED_SEEDS,
+    logreg_c_values: list[float] = LOGREG_C_GRID,
+    n_splits_max: int = 5,
+) -> tuple["pd.DataFrame", dict[str, Any]]:
+    """Generate multi-seed OOF predictions for the LogReg C grid + GBM + DecisionTree.
+
+    For each seed: runs stratified K-fold OOF for every model variant.
+    Also computes a safety diagnostic (false-promotion risk on ineligible pairs) once
+    per model variant.
+
+    Returns (long_oof_df, metrics_dict).
+    long_oof_df: one row per (eligible pair × seed × model variant).
+    Columns: startup_id, investor_id, true_label, eligible_for_model_ranking,
+             hard_filter_reasons, seed, model_name, c_value, pred,
+             expected_label, prob_top_tier.
+    """
+    X_el = df_eligible[feature_cols].values.astype(float)
+    y_el = df_eligible["label"].values.astype(int)
+    X_in = (
+        df_ineligible[feature_cols].values.astype(float)
+        if len(df_ineligible) > 0
+        else np.zeros((0, len(feature_cols)), dtype=float)
+    )
+
+    min_class = int(pd.Series(y_el).value_counts().min())
+    n_folds = min(n_splits_max, min_class)
+    if n_folds < 2:
+        print(f"  ⚠  Min class count {min_class} is too small. Skipping multi-seed OOF.\n")
+        return pd.DataFrame(), {}
+
+    print(
+        f"  Seeds: {seeds}  |  LogReg C grid: {logreg_c_values}  |  "
+        f"Folds: {n_folds}  |  Eligible pairs: {len(df_eligible)}\n"
+    )
+
+    # Build (name, c_value, factory) specs.  Lambda default arg captures c by value.
+    model_specs: list[tuple[str, "float | None", Any]] = []
+    for c_val in logreg_c_values:
+        model_specs.append((
+            f"logreg_c{c_val}", c_val,
+            lambda cv=c_val: Pipeline([
+                ("scaler", StandardScaler()),
+                ("clf", LogisticRegression(
+                    max_iter=1000, solver="lbfgs", C=cv, random_state=RANDOM_SEED,
+                )),
+            ]),
+        ))
+    model_specs.append(("gbm", None,
+        lambda: GradientBoostingClassifier(
+            n_estimators=200, max_depth=5, learning_rate=0.1,
+            subsample=0.9, random_state=RANDOM_SEED,
+        )
+    ))
+    model_specs.append(("decisiontree", None,
+        lambda: DecisionTreeClassifier(max_depth=6, random_state=RANDOM_SEED)
+    ))
+
+    label_weights = np.arange(5, dtype=float)
+    n_el = len(df_eligible)
+
+    per_seed_acc: dict[str, list[float]] = {name: [] for name, _, _ in model_specs}
+    per_seed_mae: dict[str, list[float]] = {name: [] for name, _, _ in model_specs}
+
+    base_cols = df_eligible[
+        ["startup_id", "investor_id", "eligible_for_model_ranking", "hard_filter_reasons"]
+    ].copy().reset_index(drop=True)
+    base_cols["hard_filter_reasons"] = (
+        df_eligible["hard_filter_reasons"].apply(json.dumps).values
+    )
+    base_cols["true_label"] = y_el
+
+    all_frames: list["pd.DataFrame"] = []
+
+    for seed_i, seed in enumerate(seeds):
+        print(f"  Seed {seed_i + 1}/{len(seeds)}  (random_state={seed}):")
+        skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
+
+        seed_pred: dict[str, "np.ndarray"] = {
+            name: np.full(n_el, -1, dtype=int) for name, _, _ in model_specs
+        }
+        seed_proba: dict[str, "np.ndarray"] = {
+            name: np.full((n_el, 5), np.nan, dtype=float) for name, _, _ in model_specs
+        }
+
+        for _, (tr_idx, te_idx) in enumerate(skf.split(X_el, y_el)):
+            X_tr, X_te = X_el[tr_idx], X_el[te_idx]
+            y_tr = y_el[tr_idx]
+            for name, _, factory in model_specs:
+                model = factory()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    model.fit(X_tr, y_tr)
+                seed_pred[name][te_idx] = model.predict(X_te)
+                if hasattr(model, "predict_proba"):
+                    seed_proba[name][te_idx] = model.predict_proba(X_te)
+
+        for name, _, _ in model_specs:
+            acc = float((seed_pred[name] == y_el).mean())
+            mae = float(np.abs(seed_pred[name] - y_el).mean())
+            per_seed_acc[name].append(round(acc, 4))
+            per_seed_mae[name].append(round(mae, 4))
+            print(f"    {name:<22}  acc={acc:.4f}  mae={mae:.4f}")
+
+        for name, c_val, _ in model_specs:
+            frame = base_cols.copy()
+            frame["seed"] = seed
+            frame["model_name"] = name
+            frame["c_value"] = c_val
+            frame["pred"] = seed_pred[name]
+            proba = seed_proba[name]
+            has_proba = not np.any(np.isnan(proba))
+            if has_proba:
+                frame["expected_label"] = (proba @ label_weights).round(4)
+                frame["prob_top_tier"] = (proba[:, 3] + proba[:, 4]).round(4)
+            else:
+                frame["expected_label"] = seed_pred[name].astype(float)
+                frame["prob_top_tier"] = (seed_pred[name] >= 3).astype(float)
+            all_frames.append(frame)
+        print()
+
+    long_df = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame()
+
+    # ── Safety diagnostic ──────────────────────────────────────────────────────
+    # Train each model variant on ALL eligible pairs, apply to ineligible pairs.
+    # Baseline from Phase 10b: LogReg C=1.0 → 11/335 false promotions.
+    baseline_fp = 11
+    print("  Safety diagnostic (final model on all eligible → ineligible pairs):")
+    safety_diag: dict[str, dict[str, Any]] = {}
+    for name, _, factory in model_specs:
+        final = factory()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            final.fit(X_el, y_el)
+        if len(X_in) > 0:
+            preds_in = final.predict(X_in)
+            n3 = int((preds_in >= 3).sum())
+            n4 = int((preds_in == 4).sum())
+        else:
+            n3 = n4 = 0
+        passes = n3 <= baseline_fp
+        safety_diag[name] = {
+            "false_promotions_3plus": n3,
+            "pct_3plus": round(n3 / max(1, len(X_in)) * 100, 2),
+            "false_promotions_4": n4,
+            "passes_safety_floor": passes,
+        }
+        flag = "✓" if passes else "⚠  SAFETY REGRESSION"
+        print(f"    {name:<22}  label≥3: {n3}/{len(X_in)} ({safety_diag[name]['pct_3plus']:.1f}%)  {flag}")
+
+    # ── Aggregate classification metrics ───────────────────────────────────────
+    agg_cls: dict[str, dict[str, Any]] = {}
+    for name, _, _ in model_specs:
+        accs = per_seed_acc[name]
+        maes = per_seed_mae[name]
+        n_s = len(accs)
+        ma, sa = float(np.mean(accs)), float(np.std(accs))
+        mm, sm = float(np.mean(maes)), float(np.std(maes))
+        ci_a = 1.96 * sa / max(1.0, float(n_s) ** 0.5)
+        agg_cls[name] = {
+            "per_seed_accuracy": accs,
+            "mean_accuracy": round(ma, 4),
+            "std_accuracy": round(sa, 4),
+            "ci95_accuracy": [round(ma - ci_a, 4), round(ma + ci_a, 4)],
+            "per_seed_mae": maes,
+            "mean_mae": round(mm, 4),
+            "std_mae": round(sm, 4),
+        }
+
+    # ── Select best LogReg C (preliminary, classification-based) ──────────────
+    safe_c = [
+        cv for cv in logreg_c_values
+        if safety_diag.get(f"logreg_c{cv}", {}).get("passes_safety_floor", False)
+    ]
+    if not safe_c:
+        safe_c = [1.0]  # fallback: always-safe default
+
+    def _c_sort_key(cv: float) -> tuple[float, float]:
+        m = agg_cls.get(f"logreg_c{cv}", {})
+        return (-m.get("mean_accuracy", 0.0), m.get("mean_mae", 999.0))
+
+    selected_c = float(min(safe_c, key=_c_sort_key))
+    best_acc = agg_cls.get(f"logreg_c{selected_c}", {}).get("mean_accuracy", 0.0)
+    tied = [cv for cv in safe_c
+            if abs(agg_cls.get(f"logreg_c{cv}", {}).get("mean_accuracy", 0.0) - best_acc) < 0.002
+            and cv != selected_c]
+    if tied:
+        reason = (
+            f"C={selected_c} tied within 0.2 pp accuracy with {tied}; selected as most "
+            "conservative option.  Run eval-ranking-multiseed for ranking-based final confirmation."
+        )
+    else:
+        reason = (
+            f"C={selected_c} has highest mean OOF accuracy ({best_acc:.4f}) among safe C values. "
+            "Run eval-ranking-multiseed for ranking-based final confirmation."
+        )
+
+    metrics_dict: dict[str, Any] = {
+        "seeds": seeds,
+        "n_folds": n_folds,
+        "n_eligible_pairs": n_el,
+        "n_ineligible_pairs": len(X_in),
+        "logreg_c_grid": logreg_c_values,
+        "models": [name for name, _, _ in model_specs],
+        "oof_classification": agg_cls,
+        "safety_diagnostic": safety_diag,
+        "safety_baseline_fp_3plus": baseline_fp,
+        "safe_c_values": safe_c,
+        "selected_logreg_c": selected_c,
+        "selection_reason": reason,
+    }
+
+    print(f"\n  Preliminary selected LogReg C: {selected_c}")
+    print(f"  {reason}\n")
+    return long_df, metrics_dict
+
+
+# ── Multi-seed classification report ──────────────────────────────────────────
+
+
+def write_multiseed_report(metrics: dict[str, Any], out_dir: Path) -> Path:
+    """Write multiseed_report.md covering OOF classification metrics and C selection."""
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    seeds = metrics["seeds"]
+    n_el = metrics["n_eligible_pairs"]
+    n_in = metrics["n_ineligible_pairs"]
+    cls = metrics["oof_classification"]
+    safety = metrics["safety_diagnostic"]
+    baseline_fp = metrics["safety_baseline_fp_3plus"]
+    models = metrics["models"]
+    selected_c = metrics["selected_logreg_c"]
+
+    lines: list[str] = [
+        "# Synthetic Matching Lab — Multi-Seed OOF Report  (Phase 11c-i)",
+        "",
+        "> ## ⚠️ SYNTHETIC EXPERIMENTAL DATA",
+        ">",
+        "> All data is SYNTHETIC.  Not investment advice.",
+        "> `scoreMatch` in `lib/matching/score.ts` remains the production baseline.",
+        "",
+        f"Generated: {now}",
+        "",
+        "## Setup",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+        f"| Seeds evaluated | {seeds} |",
+        f"| Folds per seed | {metrics['n_folds']} |",
+        f"| Total OOF fits per model | {len(seeds) * metrics['n_folds']} |",
+        f"| Eligible pairs | {n_el} |",
+        f"| Ineligible pairs (safety diagnostic) | {n_in} |",
+        f"| LogReg C grid | {metrics['logreg_c_grid']} |",
+        f"| Models evaluated | {len(models)} |",
+        "",
+        "## OOF Classification Metrics — mean ± std across seeds",
+        "",
+        "| Model | Acc mean | Acc std | CI95 | MAE mean |",
+        "|---|---|---|---|---|",
+    ]
+    for name in models:
+        m = cls.get(name, {})
+        ci = m.get("ci95_accuracy", [float("nan"), float("nan")])
+        lines.append(
+            f"| `{name}` | {m.get('mean_accuracy', 0):.4f} | "
+            f"{m.get('std_accuracy', 0):.4f} | "
+            f"[{ci[0]:.4f}, {ci[1]:.4f}] | "
+            f"{m.get('mean_mae', 0):.4f} |"
+        )
+    lines.append("")
+
+    lines += [
+        "## Per-Seed OOF Accuracy",
+        "",
+        "| Model | " + " | ".join(str(s) for s in seeds) + " |",
+        "|" + "---|" * (len(seeds) + 1),
+    ]
+    for name in models:
+        per_seed = cls.get(name, {}).get("per_seed_accuracy", [])
+        lines.append("| `" + name + "` | " + " | ".join(f"{v:.4f}" for v in per_seed) + " |")
+    lines.append("")
+
+    lines += [
+        f"## Safety Diagnostic  ({n_in} ineligible pairs)",
+        "",
+        f"> Baseline (Phase 10b, LogReg C=1.0): {baseline_fp}/335 false promotions.",
+        "> Models exceeding baseline are excluded from C selection.",
+        "",
+        "| Model | Label ≥ 3 | Label = 4 | % | Passes safety floor |",
+        "|---|---|---|---|---|",
+    ]
+    for name in models:
+        s = safety.get(name, {})
+        flag = "✅" if s.get("passes_safety_floor", False) else "❌"
+        lines.append(
+            f"| `{name}` | {s.get('false_promotions_3plus', '—')} | "
+            f"{s.get('false_promotions_4', '—')} | "
+            f"{s.get('pct_3plus', 0):.2f}% | {flag} |"
+        )
+    lines.append("")
+
+    lines += [
+        "## LogReg C Selection  (preliminary — classification-based)",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+        f"| Safe C values | {metrics.get('safe_c_values', [])} |",
+        f"| **Selected C** | **{selected_c}** |",
+        f"| Criterion | Highest mean OOF accuracy; tiebreak: lowest MAE |",
+        f"| Reason | {metrics.get('selection_reason', '—')} |",
+        "",
+        "> **Run `npm run eval-ranking-multiseed:synthetic-matches`** to confirm with NDCG@5.",
+        "",
+        "---",
+        "",
+        "*Synthetic experimental data only.  Not for production use.*",
+    ]
+
+    out_path = out_dir / "multiseed_report.md"
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path
 
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
@@ -348,7 +989,6 @@ def evaluate_model(
     X_test: "np.ndarray",
     y_test: "np.ndarray",
 ) -> dict[str, Any]:
-    """Evaluate a trained model on the held-out test set."""
     y_pred: "np.ndarray" = model.predict(X_test)
     y_proba: "np.ndarray | None" = (
         model.predict_proba(X_test) if hasattr(model, "predict_proba") else None
@@ -359,8 +999,7 @@ def evaluate_model(
     f1_weighted = f1_score(y_test, y_pred, average="weighted", zero_division=0)
     mae = mean_absolute_error(y_test, y_pred)
     report_dict: dict[str, Any] = classification_report(
-        y_test,
-        y_pred,
+        y_test, y_pred,
         labels=list(range(5)),
         target_names=LABEL_NAMES,
         zero_division=0,
@@ -385,6 +1024,86 @@ def evaluate_model(
     }
 
 
+# ── Ineligible safety diagnostic ──────────────────────────────────────────────
+
+
+def run_ineligible_safety_diagnostic(
+    trained_models: dict[str, Any],
+    df_ineligible: "pd.DataFrame",
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Apply eligible-trained models to all ineligible pairs.
+
+    Returns:
+      (diagnostic_summary_dict, preds_by_model_dict)
+
+    The diagnostic summary is suitable for embedding in eval_report.md and
+    eligibility_summary.json.  The preds dict is used by the CSV writer.
+    """
+    n_in = len(df_ineligible)
+    X_in = df_ineligible[FEATURE_COLS].values.astype(float)
+
+    diagnostic: dict[str, Any] = {"n_ineligible": n_in, "models": {}}
+    preds_by_model: dict[str, dict[str, Any]] = {}
+
+    print(f"  Applying eligible-trained models to {n_in} ineligible pairs (safety diagnostic):\n")
+
+    for name, model in trained_models.items():
+        y_pred = model.predict(X_in)
+        y_proba = model.predict_proba(X_in) if hasattr(model, "predict_proba") else None
+
+        pred_dist = {i: int((y_pred == i).sum()) for i in range(5)}
+        n_3plus = int((y_pred >= 3).sum())
+        n_4 = int((y_pred == 4).sum())
+        pct_3plus = n_3plus / n_in * 100 if n_in > 0 else 0.0
+
+        # Breakdown of label-≥-3 predictions by filter reason.
+        reason_3plus: dict[str, int] = {
+            "anti_thesis_conflict": 0,
+            "stage_mismatch": 0,
+            "check_size_mismatch": 0,
+        }
+        for idx in range(n_in):
+            if y_pred[idx] >= 3:
+                for r in df_ineligible.iloc[idx]["hard_filter_reasons"]:
+                    if r in reason_3plus:
+                        reason_3plus[r] += 1
+
+        # Top-10 highest-risk predictions by P(label=3) + P(label=4).
+        top10_info: list[dict[str, Any]] = []
+        if y_proba is not None:
+            risk_scores = y_proba[:, 3] + y_proba[:, 4]
+            top10_idx = np.argsort(risk_scores)[::-1][:10]
+            for idx in top10_idx:
+                row = df_ineligible.iloc[idx]
+                top10_info.append({
+                    "startup_id": row["startup_id"],
+                    "investor_id": row["investor_id"],
+                    "true_label": int(row["label"]),
+                    "predicted_label": int(y_pred[idx]),
+                    "risk_score": round(float(risk_scores[idx]), 4),
+                    "hard_filter_reasons": list(row["hard_filter_reasons"]),
+                })
+
+        diagnostic["models"][name] = {
+            "predicted_label_distribution": pred_dist,
+            "n_predicted_3plus": n_3plus,
+            "pct_predicted_3plus": round(pct_3plus, 2),
+            "n_predicted_4": n_4,
+            "breakdown_3plus_by_reason": reason_3plus,
+            "top10_highest_risk": top10_info,
+        }
+        preds_by_model[name] = {"y_pred": y_pred, "y_proba": y_proba}
+
+        risk_flag = f"  ⚠  {n_3plus} pairs would be false-promoted!" if n_3plus > 0 else "  ✓"
+        print(
+            f"  {name:<14}  predicted label≥3: {n_3plus}/{n_in} "
+            f"({pct_3plus:.1f}%)  label=4: {n_4}{risk_flag}"
+        )
+
+    print()
+    return diagnostic, preds_by_model
+
+
 # ── Artifact helpers ──────────────────────────────────────────────────────────
 
 
@@ -393,11 +1112,9 @@ def save_confusion_matrix_plot(
     y_pred: "np.ndarray",
     model_name: str,
     out_dir: Path,
+    title_suffix: str = "",
 ) -> Path:
-    """Save a labeled 5×5 confusion matrix heatmap (counts + row-%)."""
     cm = confusion_matrix(y_test, y_pred, labels=list(range(5)))
-
-    # Build annotation: count + row-percentage
     cm_pct = np.zeros_like(cm, dtype=float)
     for i in range(5):
         row_sum = cm[i].sum()
@@ -407,29 +1124,22 @@ def save_confusion_matrix_plot(
     annot = np.array(
         [[f"{cm[i][j]}\n({cm_pct[i][j]:.0f}%)" for j in range(5)] for i in range(5)]
     )
-
     short_names = [str(i) + "\n" + n.replace(" ", "\n") for i, n in enumerate(LABEL_NAMES)]
 
     fig, ax = plt.subplots(figsize=(9, 7))
     sns.heatmap(
-        cm,
-        annot=annot,
-        fmt="",
-        xticklabels=short_names,
-        yticklabels=short_names,
-        cmap="Blues",
-        linewidths=0.5,
-        ax=ax,
+        cm, annot=annot, fmt="",
+        xticklabels=short_names, yticklabels=short_names,
+        cmap="Blues", linewidths=0.5, ax=ax,
     )
     ax.set_xlabel("Predicted label", fontsize=11)
     ax.set_ylabel("True label", fontsize=11)
     ax.set_title(
-        f"Confusion Matrix - {model_name}\n"
+        f"Confusion Matrix - {model_name}{title_suffix}\n"
         "[SYNTHETIC experimental labels only - not real user data]",
         fontsize=11,
     )
     fig.tight_layout()
-
     out_path = out_dir / f"confusion_matrix_{model_name.lower()}.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -443,9 +1153,7 @@ def save_confusion_matrix_csv(
     out_dir: Path,
 ) -> Path:
     cm = confusion_matrix(y_test, y_pred, labels=list(range(5)))
-    label_keys = [
-        f"{i}_{LABEL_NAMES[i].replace(' ', '_')}" for i in range(5)
-    ]
+    label_keys = [f"{i}_{LABEL_NAMES[i].replace(' ', '_')}" for i in range(5)]
     df_cm = pd.DataFrame(
         cm,
         index=[f"true_{k}" for k in label_keys],
@@ -462,15 +1170,12 @@ def save_feature_importance_plot(
     feature_names: list[str],
     out_dir: Path,
 ) -> "Path | None":
-    """Save a horizontal bar chart comparing model importance vs labeling weight."""
-    # Unwrap sklearn Pipeline to access the underlying estimator.
     est = model.named_steps.get("clf", model) if hasattr(model, "named_steps") else model
 
     if hasattr(est, "feature_importances_"):
         importances: "np.ndarray" = est.feature_importances_
         method_note = "native feature importances"
     elif hasattr(est, "coef_"):
-        # Multi-class LogReg: mean |coefficient| across 5 classes
         importances = np.abs(est.coef_).mean(axis=0)
         method_note = "mean |coefficient| across classes (scaled)"
     else:
@@ -483,16 +1188,10 @@ def save_feature_importance_plot(
 
     fig, ax = plt.subplots(figsize=(10, 5))
     y_pos = np.arange(len(sorted_names))
-
     ax.barh(y_pos, sorted_model, color="#4A90D9", alpha=0.85, label="Model learned importance")
     ax.plot(
-        sorted_expected,
-        y_pos,
-        "o--",
-        color="#E8782A",
-        linewidth=1.2,
-        markersize=5,
-        alpha=0.8,
+        sorted_expected, y_pos, "o--",
+        color="#E8782A", linewidth=1.2, markersize=5, alpha=0.8,
         label="Labeling formula weight (expected)",
     )
     ax.set_yticks(y_pos)
@@ -505,7 +1204,6 @@ def save_feature_importance_plot(
     )
     ax.legend(fontsize=9)
     fig.tight_layout()
-
     out_path = out_dir / f"feature_importance_{model_name.lower()}.png"
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -516,22 +1214,145 @@ def save_predictions_csv(
     df_test: "pd.DataFrame",
     metrics_all: dict[str, dict[str, Any]],
     out_dir: Path,
+    filename: str = "predictions.csv",
 ) -> Path:
-    """Save per-pair predictions from all models for manual spot-checking."""
+    """Save per-pair predictions. Includes eligibility fields (Phase 10)."""
     out = df_test[["startup_id", "investor_id", "label", "label_name", "label_reason"]].copy()
     out = out.rename(columns={"label": "true_label", "label_name": "true_label_name"})
+
+    # Phase 10: include eligibility fields even when all rows are eligible.
+    out["eligible_for_model_ranking"] = df_test["eligible_for_model_ranking"].values
+    out["hard_filter_reasons"] = df_test["hard_filter_reasons"].apply(json.dumps)
+
+    # Phase 11a: include train/test split annotation when available (predictions_eligible_all.csv).
+    if "split" in df_test.columns:
+        out["split"] = df_test["split"].values
 
     for model_name, m in metrics_all.items():
         key = model_name.lower()
         out[f"pred_{key}"] = m["y_pred"]
         out[f"correct_{key}"] = (m["y_pred"] == out["true_label"].values).astype(int)
-        out[f"error_{key}"] = np.abs(m["y_pred"].astype(int) - out["true_label"].values.astype(int))
+        out[f"error_{key}"] = np.abs(
+            m["y_pred"].astype(int) - out["true_label"].values.astype(int)
+        )
         if m["y_proba"] is not None:
             for k in range(5):
                 out[f"prob_{k}_{key}"] = m["y_proba"][:, k].round(4)
+            # Phase 11a: ranking-ready derived columns.
+            # expected_label = Σ k · P(label=k), a continuous ranking score.
+            # prob_top_tier  = P(label≥3) = P(label=3) + P(label=4).
+            label_weights = np.arange(5, dtype=float)
+            out[f"expected_label_{key}"] = (m["y_proba"] @ label_weights).round(4)
+            out[f"prob_top_tier_{key}"] = (
+                m["y_proba"][:, 3] + m["y_proba"][:, 4]
+            ).round(4)
 
-    out_path = out_dir / "predictions.csv"
+    out_path = out_dir / filename
     out.to_csv(out_path, index=False)
+    return out_path
+
+
+def save_predictions_ineligible_csv(
+    df_ineligible: "pd.DataFrame",
+    preds_by_model: dict[str, dict[str, Any]],
+    out_dir: Path,
+) -> Path:
+    """Save model predictions on ineligible pairs for audit/safety review."""
+    out = df_ineligible[
+        ["startup_id", "investor_id", "label", "label_name", "label_reason"]
+    ].copy()
+    out = out.rename(columns={"label": "true_label", "label_name": "true_label_name"})
+    out["eligible_for_model_ranking"] = False
+    out["hard_filter_reasons"] = df_ineligible["hard_filter_reasons"].apply(json.dumps)
+
+    false_promotion_any = np.zeros(len(df_ineligible), dtype=bool)
+
+    for model_name, preds in preds_by_model.items():
+        key = model_name.lower()
+        y_pred = preds["y_pred"]
+        y_proba = preds["y_proba"]
+        out[f"pred_{key}"] = y_pred
+        out[f"error_{key}"] = np.abs(
+            y_pred.astype(int) - out["true_label"].values.astype(int)
+        )
+        if y_proba is not None:
+            for k in range(5):
+                out[f"prob_{k}_{key}"] = y_proba[:, k].round(4)
+            label_weights = np.arange(5, dtype=float)
+            out[f"expected_label_{key}"] = (y_proba @ label_weights).round(4)
+            out[f"prob_top_tier_{key}"] = (y_proba[:, 3] + y_proba[:, 4]).round(4)
+        false_promotion_any |= (y_pred >= 3)
+
+    out["false_promotion_risk"] = false_promotion_any.astype(int)
+
+    out_path = out_dir / "predictions_ineligible.csv"
+    out.to_csv(out_path, index=False)
+    return out_path
+
+
+def save_eligibility_summary_json(
+    df: "pd.DataFrame",
+    training_mode: str,
+    ineligible_diagnostic: "dict[str, Any] | None",
+    out_dir: Path,
+) -> Path:
+    """Save machine-readable eligibility summary."""
+    n = len(df)
+    n_eligible = int(df["eligible_for_model_ranking"].sum())
+    n_ineligible = n - n_eligible
+
+    reason_counts: dict[str, int] = {
+        "anti_thesis_conflict": 0,
+        "stage_mismatch": 0,
+        "check_size_mismatch": 0,
+    }
+    multi_reason_count = 0
+    for reasons in df[~df["eligible_for_model_ranking"]]["hard_filter_reasons"]:
+        for r in reasons:
+            if r in reason_counts:
+                reason_counts[r] += 1
+        if len(reasons) > 1:
+            multi_reason_count += 1
+
+    df_el = df[df["eligible_for_model_ranking"]]
+    df_in = df[~df["eligible_for_model_ranking"]]
+
+    fp_in_dataset = int(((df_in["label"] >= 3)).sum())
+
+    summary: dict[str, Any] = {
+        "generated": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "training_mode": training_mode,
+        "total_pairs": n,
+        "eligible_pair_count": n_eligible,
+        "eligible_pair_pct": round(n_eligible / n * 100, 2),
+        "ineligible_pair_count": n_ineligible,
+        "ineligible_pair_pct": round(n_ineligible / n * 100, 2),
+        "hard_filter_reason_counts": reason_counts,
+        "pairs_with_multiple_reasons": multi_reason_count,
+        "label_distribution_eligible": {
+            str(i): int((df_el["label"] == i).sum()) for i in range(5)
+        },
+        "label_distribution_ineligible": {
+            str(i): int((df_in["label"] == i).sum()) for i in range(5)
+        },
+        "false_promotion_risk_in_dataset": fp_in_dataset,
+        "false_promotion_risk_model": (
+            {
+                model_name: {
+                    "n_predicted_3plus": info["n_predicted_3plus"],
+                    "pct_predicted_3plus": info["pct_predicted_3plus"],
+                    "n_predicted_4": info["n_predicted_4"],
+                    "breakdown_3plus_by_reason": info["breakdown_3plus_by_reason"],
+                }
+                for model_name, info in ineligible_diagnostic["models"].items()
+            }
+            if ineligible_diagnostic
+            else None
+        ),
+    }
+
+    out_path = out_dir / "eligibility_summary.json"
+    out_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return out_path
 
 
@@ -540,7 +1361,6 @@ def save_decision_tree_txt(
     feature_names: list[str],
     out_dir: Path,
 ) -> Path:
-    """Export a human-readable text rule set from the shallow decision tree."""
     disclaimer = (
         "# ─────────────────────────────────────────────────────────────────────\n"
         "# SYNTHETIC EXPERIMENTAL DATA ONLY\n"
@@ -555,29 +1375,38 @@ def save_decision_tree_txt(
         "# Do NOT use these rules to guide real investment decisions.\n"
         "# ─────────────────────────────────────────────────────────────────────\n\n"
     )
-    tree_text = export_text(
-        model,
-        feature_names=feature_names,
-        max_depth=6,
-        show_weights=True,
-    )
+    tree_text = export_text(model, feature_names=feature_names, max_depth=6, show_weights=True)
     out_path = out_dir / "decision_tree.txt"
     out_path.write_text(disclaimer + tree_text, encoding="utf-8")
     return out_path
 
 
+# ── Evaluation report ─────────────────────────────────────────────────────────
+
+
 def write_eval_report(
     metrics_all: dict[str, dict[str, Any]],
-    cv_results: dict[str, dict[str, "np.ndarray"]],
+    cv_results: "dict[str, dict[str, np.ndarray]] | None",
     label_counts: dict[int, int],
     n_train: int,
     n_test: int,
-    artifact_paths: dict[str, Path | None],
+    artifact_paths: dict[str, "Path | None"],
     out_dir: Path,
+    *,
+    training_mode: str = "full",
+    n_total: int = 0,
+    n_eligible: int = 0,
+    n_ineligible: int = 0,
+    n_cv_folds: int = 5,
+    label_counts_eligible: "dict[int, int] | None" = None,
+    label_counts_ineligible: "dict[int, int] | None" = None,
+    reason_counts: "dict[str, int] | None" = None,
+    multi_reason_count: int = 0,
+    ineligible_diagnostic: "dict[str, Any] | None" = None,
+    oof_metrics: "dict[str, Any] | None" = None,
 ) -> Path:
-    """Write eval_report.md."""
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    total = n_train + n_test
+    total_training = n_train + n_test
 
     lines: list[str] = []
 
@@ -597,8 +1426,97 @@ def write_eval_report(
         "> - Use `scoreMatch` in `lib/matching/score.ts` as the safe production baseline.",
         "",
         f"Generated: {now}",
+        f"Training mode: **{training_mode}** (see Phase 10 for mode descriptions)",
         "",
     ]
+
+    # ── Phase 10: Hard eligibility summary ────────────────────────────────────
+    lines += [
+        "## Hard Eligibility Summary  (Phase 10)",
+        "",
+        "Hard eligibility is a **policy gate**, not a learned feature.  "
+        "Ineligible pairs are blocked from model ranking unconditionally.",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+        f"| Total pairs | {n_total} |",
+        f"| Eligible for model ranking | {n_eligible} ({n_eligible / max(1, n_total) * 100:.1f}%) |",
+        f"| Ineligible | {n_ineligible} ({n_ineligible / max(1, n_total) * 100:.1f}%) |",
+        "",
+    ]
+    if reason_counts:
+        lines += [
+            "| Hard filter reason | Count |",
+            "|---|---|",
+            f"| `anti_thesis_conflict` | {reason_counts.get('anti_thesis_conflict', 0)} |",
+            f"| `stage_mismatch` | {reason_counts.get('stage_mismatch', 0)} |",
+            f"| `check_size_mismatch` | {reason_counts.get('check_size_mismatch', 0)} |",
+            f"| Pairs with 2+ reasons | {multi_reason_count} |",
+            "",
+        ]
+
+    # Eligible label distribution
+    if label_counts_eligible:
+        lines += [
+            "### Label distribution — eligible pairs",
+            "",
+            "| Label | Name | Count | % |",
+            "|---|---|---|---|",
+        ]
+        n_el = sum(label_counts_eligible.values())
+        for i, name in enumerate(LABEL_NAMES):
+            c = label_counts_eligible.get(i, 0)
+            pct = c / max(1, n_el) * 100
+            lines.append(f"| {i} | {name} | {c} | {pct:.1f}% |")
+        lines.append("")
+
+    # Ineligible label distribution
+    if label_counts_ineligible:
+        lines += [
+            "### Label distribution — ineligible pairs",
+            "",
+            "| Label | Name | Count | % | Note |",
+            "|---|---|---|---|---|",
+        ]
+        n_in = sum(label_counts_ineligible.values())
+        for i, name in enumerate(LABEL_NAMES):
+            c = label_counts_ineligible.get(i, 0)
+            pct = c / max(1, n_in) * 100
+            note = "⚠️ false-promotion risk" if i >= 3 and c > 0 else ""
+            lines.append(f"| {i} | {name} | {c} | {pct:.1f}% | {note} |")
+        fp = sum(label_counts_ineligible.get(i, 0) for i in [3, 4])
+        if fp == 0:
+            lines += ["", "> ✅ No ineligible pair has label ≥ 3. Gate and caps are consistent.", ""]
+        else:
+            lines += [
+                "",
+                f"> ⚠️ {fp} ineligible pair(s) carry label ≥ 3. "
+                "Investigate label-cap / eligibility alignment.",
+                "",
+            ]
+
+    # ── Training mode description ─────────────────────────────────────────────
+    lines += [
+        "## Training Mode",
+        "",
+        f"**`{training_mode}`** — ",
+    ]
+    if training_mode == "eligible-only":
+        lines[-1] += (
+            "Models trained and evaluated on eligible pairs only. "
+            "Ineligible pairs are used as a safety diagnostic (View B) but never as training data."
+        )
+    elif training_mode == "full":
+        lines[-1] += (
+            "Legacy mode: models trained and evaluated on all pairs. "
+            "Eligibility fields are reported but not used to filter training data."
+        )
+    else:
+        lines[-1] += (
+            "Models trained on eligible pairs only. Primary evaluation on eligible test split. "
+            "Full-dataset predictions also exported for comparison."
+        )
+    lines.append("")
 
     # ── Dataset summary ───────────────────────────────────────────────────────
     lines += [
@@ -607,37 +1525,26 @@ def write_eval_report(
         "| Property | Value |",
         "|---|---|",
         f"| Source | `data/synthetic-matching/pairs.json` |",
-        f"| Total pairs | {total} (35 synthetic startups × 17 synthetic investors) |",
+        f"| Total pairs | {n_total} |",
+        f"| Training pool ({training_mode}) | {total_training} pairs |",
         f"| Training set | {n_train} pairs (80%, stratified) |",
         f"| Test set | {n_test} pairs (20%, stratified) |",
-        f"| Features | {len(FEATURE_COLS)} numeric (`semantic_similarity_placeholder` excluded) |",
+        f"| Features | {len(FEATURE_COLS)} numeric |",
         f"| Target | Label 0–4 (5-class classification) |",
         f"| Random seed | {RANDOM_SEED} |",
         "",
-        "### Label distribution (full dataset)",
+        "### Label distribution (training pool)",
         "",
         "| Label | Name | Count | % |",
         "|---|---|---|---|",
     ]
     for i, name in enumerate(LABEL_NAMES):
         c = label_counts.get(i, 0)
-        pct = c / total * 100
+        pct = c / max(1, total_training) * 100
         lines.append(f"| {i} | {name} | {c} | {pct:.1f}% |")
-    lines += [
-        "",
-        "### Label definitions",
-        "",
-        "| Label | Meaning |",
-        "|---|---|",
-        "| 0 — poor fit | No meaningful overlap — sector, stage, or check mismatch |",
-        "| 1 — weak fit | One or two weak signals align; most dimensions do not |",
-        "| 2 — possible fit | Moderate overlap; meaningful gaps remain |",
-        "| 3 — strong fit | Solid alignment across sector, stage, check, and customer type |",
-        "| 4 — excellent fit | High alignment across all dimensions; no anti-thesis conflict |",
-        "",
-    ]
+    lines.append("")
 
-    # ── Feature table ─────────────────────────────────────────────────────────
+    # ── Features ──────────────────────────────────────────────────────────────
     lines += [
         "## Features",
         "",
@@ -647,45 +1554,52 @@ def write_eval_report(
         "| `stage_match_score` | +0.18 | 1.0 exact / 0.5 adjacent / 0.2 two-step / 0 none |",
         "| `check_size_score` | +0.15 | 1.0 in range; linear falloff outside |",
         "| `interest_overlap_score` | +0.12 | Synonym-expanded onboarding interest overlap |",
-        "| `customer_type_overlap_score` | +0.10 | Compatibility matrix (smb↔enterprise=0.5, etc.) |",
-        "| `business_model_overlap_score` | +0.08 | Compatibility matrix (subscription≈enterprise_license) |",
+        "| `customer_type_overlap_score` | +0.10 | Compatibility matrix |",
+        "| `business_model_overlap_score` | +0.08 | Compatibility matrix |",
         "| `geography_score` | +0.07 | 1.0 confirmed match; 0.2 tension |",
         "| `lead_follow_score` | +0.05 | Investor role vs startup engagement signals |",
         "| `traction_strength_score` | +0.05 | no_traction=0 … enterprise_contracts=1 |",
         "| `anti_thesis_conflict_score` | **−0.40 penalty** | 1 = worst conflict; 0 = none |",
-        "| `profile_completeness_score` | 0 (not in score) | Structural completeness of both profiles (zero variance in synthetic data) |",
-        "| `semantic_similarity_score` | 0 (not in labeling formula) | Cosine sim from `all-MiniLM-L6-v2`; null → 0.0 if embeddings not computed |",
+        "| `profile_completeness_score` | 0 (not in score) | Zero variance in synthetic data |",
+        "| `semantic_similarity_score` | 0 (not in labeling formula) | Cosine sim from all-MiniLM-L6-v2 |",
         "",
     ]
 
     # ── 5-fold CV ─────────────────────────────────────────────────────────────
-    lines += [
-        "## 5-fold cross-validation",
-        "",
-        "| Model | Accuracy | Macro-F1 | Weighted-F1 |",
-        "|---|---|---|---|",
-    ]
-    for model_name, cv in cv_results.items():
-        acc = cv["accuracy"]
-        f1m = cv["f1_macro"]
-        f1w = cv["f1_weighted"]
-        lines.append(
-            f"| {model_name} | "
-            f"{acc.mean():.4f}±{acc.std():.4f} | "
-            f"{f1m.mean():.4f}±{f1m.std():.4f} | "
-            f"{f1w.mean():.4f}±{f1w.std():.4f} |"
-        )
-    lines += [
-        "",
-        "> **Expected**: high accuracy (~95–99%) because the model is fitting a",
-        "> deterministic labeling function. This is a **pipeline sanity check**,",
-        "> not evidence of real-world matching ability.",
-        "",
-    ]
+    if cv_results:
+        lines += [
+            f"## {n_cv_folds}-Fold Cross-Validation  (training data only)",
+            "",
+            "| Model | Accuracy | Macro-F1 | Weighted-F1 |",
+            "|---|---|---|---|",
+        ]
+        for model_name, cv in cv_results.items():
+            acc = cv["accuracy"]
+            f1m = cv["f1_macro"]
+            f1w = cv["f1_weighted"]
+            lines.append(
+                f"| {model_name} | "
+                f"{acc.mean():.4f}±{acc.std():.4f} | "
+                f"{f1m.mean():.4f}±{f1m.std():.4f} | "
+                f"{f1w.mean():.4f}±{f1w.std():.4f} |"
+            )
+        lines += [
+            "",
+            "> **Expected**: high accuracy because the model is fitting a deterministic labeling",
+            "> function. This is a **pipeline sanity check**, not evidence of real-world ability.",
+            "",
+        ]
+    else:
+        lines += [
+            "## Cross-Validation",
+            "",
+            "> CV skipped — insufficient samples per class for stratified folding.",
+            "",
+        ]
 
     # ── Test-set results ──────────────────────────────────────────────────────
     lines += [
-        "## Test-set evaluation (80/20 stratified split)",
+        "## Test-Set Evaluation  (80/20 stratified split)",
         "",
         "| Model | Accuracy | Macro-F1 | Weighted-F1 | Ordinal MAE |",
         "|---|---|---|---|---|",
@@ -697,7 +1611,6 @@ def write_eval_report(
         )
     lines.append("")
 
-    # Per-class for GBM (primary)
     best_name = "GBM" if "GBM" in metrics_all else list(metrics_all.keys())[0]
     m_best = metrics_all[best_name]
     lines += [
@@ -716,35 +1629,82 @@ def write_eval_report(
             )
     lines.append("")
 
-    # ── Feature importance interpretation ─────────────────────────────────────
+    # ── Feature importance ────────────────────────────────────────────────────
     lines += [
-        "## Feature importance interpretation",
+        "## Feature Importance Interpretation",
         "",
-        "The feature importance chart overlays model-learned importances against the",
-        "labeling formula weights (orange dashed line). Close agreement confirms the",
-        "pipeline is wired correctly. Divergences typically reflect non-linear cap",
-        "effects — the `anti_thesis_conflict`, `stage_match`, and `check_size` caps",
-        "create threshold interactions that linear formula weights cannot capture.",
-        "",
-        "**Expected ranking** (by absolute labeling formula weight):",
-        "",
-        "> `semantic_similarity_score` and `profile_completeness_score` have zero labeling",
-        "> weight but may still appear in model importance if they correlate with labels.",
+        "The feature importance chart overlays model-learned importances against the "
+        "labeling formula weights. Divergences reflect non-linear cap effects.",
         "",
     ]
-    ranked = sorted(
-        [(k, abs(v)) for k, v in LABELING_WEIGHTS.items()],
-        key=lambda x: x[1],
-        reverse=True,
-    )
-    for i, (feat, w) in enumerate(ranked, 1):
-        note = " ← penalty (inverted)" if feat == "anti_thesis_conflict_score" else ""
-        if feat == "profile_completeness_score":
-            note = " ← zero labeling weight; zero variance in synthetic data"
-        elif feat == "semantic_similarity_score":
-            note = " ← zero labeling weight; model may learn correlation with labels"
-        lines.append(f"{i}. `{feat}` — abs labeling weight {w:.2f}{note}")
-    lines.append("")
+
+    # ── Phase 10: Safety diagnostic ───────────────────────────────────────────
+    if ineligible_diagnostic and training_mode in ("eligible-only", "eligible-train-full-eval"):
+        n_in = ineligible_diagnostic["n_ineligible"]
+        lines += [
+            "## Safety Diagnostic — Model Behavior on Ineligible Pairs  (Phase 10, View B)",
+            "",
+            "> **Important:** These pairs were **never seen during training**.  They were excluded "
+            "by the hard eligibility gate.  The table below shows what the model would predict "
+            "if the gate were absent — i.e., the false-promotion risk.",
+            "",
+            f"Ineligible pairs evaluated: **{n_in}**",
+            "",
+            "| Model | Predicted label≥3 | Predicted label=4 | anti_thesis | stage | check_size |",
+            "|---|---|---|---|---|---|",
+        ]
+        for model_name, info in ineligible_diagnostic["models"].items():
+            n3 = info["n_predicted_3plus"]
+            n4 = info["n_predicted_4"]
+            pct3 = info["pct_predicted_3plus"]
+            rb = info["breakdown_3plus_by_reason"]
+            lines.append(
+                f"| {model_name} | {n3} ({pct3:.1f}%) | {n4} | "
+                f"{rb.get('anti_thesis_conflict', 0)} | "
+                f"{rb.get('stage_mismatch', 0)} | "
+                f"{rb.get('check_size_mismatch', 0)} |"
+            )
+        lines.append("")
+
+        # Interpretation
+        all_zero = all(
+            info["n_predicted_3plus"] == 0
+            for info in ineligible_diagnostic["models"].values()
+        )
+        if all_zero:
+            lines += [
+                "> ✅ **No false-promotion risk detected.** All models correctly assign label ≤ 2 "
+                "to every ineligible pair, consistent with the hard label caps. "
+                "The eligibility gate is adding a structural safeguard but no pair "
+                "is being incorrectly promoted in the current synthetic dataset.",
+                "",
+            ]
+        else:
+            lines += [
+                "> ⚠️ **False-promotion risk detected.** Some ineligible pairs are predicted "
+                "at label ≥ 3 by at least one model. Review `predictions_ineligible.csv` "
+                "and the reason breakdown to understand which constraint is being overridden.",
+                "",
+            ]
+
+        # Top-10 for GBM
+        gbm_diag = ineligible_diagnostic["models"].get("GBM", {})
+        top10 = gbm_diag.get("top10_highest_risk", [])
+        if top10:
+            lines += [
+                "### Top-10 Highest-Risk Ineligible Pairs  (GBM — P(label≥3))",
+                "",
+                "| Startup | Investor | True label | Predicted | Risk score | Filter reasons |",
+                "|---|---|---|---|---|---|",
+            ]
+            for row in top10:
+                reasons_str = ", ".join(row["hard_filter_reasons"])
+                lines.append(
+                    f"| `{row['startup_id']}` | `{row['investor_id']}` | "
+                    f"{row['true_label']} | {row['predicted_label']} | "
+                    f"{row['risk_score']:.4f} | {reasons_str} |"
+                )
+            lines.append("")
 
     # ── Artifacts ─────────────────────────────────────────────────────────────
     lines += [
@@ -762,24 +1722,74 @@ def write_eval_report(
                 lines.append(f"| `{path}` | {desc} |")
     lines.append("")
 
+    # ── Phase 11b: OOF section ────────────────────────────────────────────────
+    if oof_metrics:
+        lines += [
+            "## Out-of-Fold Evaluation  (Phase 11b — leakage-free)",
+            "",
+            "In-sample ranking metrics (Phase 11a, `predictions_eligible_all.csv`) are an "
+            "**upper bound**: the 208 training pairs receive predictions from models that "
+            "saw them during training.",
+            "",
+            "Out-of-fold (OOF) predictions provide the **fairest available synthetic estimate** "
+            "of ranking quality:",
+            "- Each pair is predicted by a fold that excluded it from training.",
+            "- All 260 eligible pairs receive exactly one OOF prediction (no leakage).",
+            "- The `oof_fold` column records which K-fold each pair was predicted in.",
+            "",
+            "### OOF vs in-sample classification metrics",
+            "",
+            "| Model | OOF Accuracy | OOF Ordinal MAE | In-sample Accuracy | In-sample MAE |",
+            "|---|---|---|---|---|",
+        ]
+        for model_name, m in metrics_all.items():
+            oof_m = oof_metrics.get(model_name, {})
+            oof_acc = oof_m.get("accuracy")
+            oof_mae_val = oof_m.get("ordinal_mae")
+            lines.append(
+                f"| {model_name} | "
+                f"{f'{oof_acc:.4f}' if oof_acc is not None else '—'} | "
+                f"{f'{oof_mae_val:.4f}' if oof_mae_val is not None else '—'} | "
+                f"{m['accuracy']:.4f} | "
+                f"{m['mae']:.4f} |"
+            )
+        lines += [
+            "",
+            "> OOF accuracy is typically 5–15 pp lower than in-sample accuracy.  "
+            "The gap reflects overfitting on the training set (most pronounced in "
+            "GBM and DecisionTree; LogReg is more regularized).",
+            "",
+            "### Using OOF metrics for model selection",
+            "",
+            "For Phase 11c and beyond, **use OOF metrics** for model selection, "
+            "not in-sample metrics.  Compute OOF ranking metrics with:",
+            "",
+            "```bash",
+            "npm run eval-ranking-oof:synthetic-matches",
+            "```",
+            "",
+            "This evaluates NDCG@K, P@K, and MAP@K using `predictions_eligible_oof.csv`, "
+            "writing results to `ranking_report_oof.md`.  Compare with the in-sample "
+            "`ranking_report.md` to understand how much ranking quality drops when "
+            "leakage is removed — the gap quantifies overfitting in the ranking task.",
+            "",
+        ]
+
     # ── Caveats ───────────────────────────────────────────────────────────────
     lines += [
         "---",
         "",
-        "## Important caveats",
+        "## Important Caveats",
         "",
-        "1. **Not real data.** All 595 pairs were generated from fictional synthetic profiles.",
-        "   The model's high accuracy is expected — it is recovering a deterministic rule.",
-        "2. **Tautological accuracy.** Any model trained on these labels will score ~95–99%",
-        "   because the labels were generated by a fixed formula, not by human judgment.",
-        "3. **No semantic understanding.** `semantic_similarity_placeholder` is `null` in",
-        "   all pairs. Thesis text, one-liner, and founder background are not yet embedded.",
-        "   A real model would need `text-embedding-3-small` or similar.",
-        "4. **Class imbalance in small test buckets.** With ~10 strong-fit and ~7",
-        "   excellent-fit test samples, per-class F1 in those buckets is noisy.",
-        "5. **No production deployment.** `scoreMatch` in `lib/matching/score.ts` is the",
-        "   safe production baseline. Do not replace it with this model without validation",
-        "   on real post-launch interaction data.",
+        "1. **Not real data.** All pairs were generated from fictional synthetic profiles.",
+        "2. **Tautological accuracy.** High accuracy (~95–99%) is expected — "
+        "it reflects deterministic rule recovery, not real-world matching ability.",
+        "3. **Eligibility gate is policy.** Hard filter reasons are mandate constraints, "
+        "not learned preferences. Never use them as model features.",
+        "4. **No production deployment.** `scoreMatch` in `lib/matching/score.ts` is the "
+        "safe production baseline. Do not replace it without real post-launch validation.",
+        "5. **Class imbalance in small test buckets.** Per-class F1 for label 3/4 is "
+        "noisy due to small test set counts.",
         "",
     ]
 
@@ -793,55 +1803,82 @@ def write_eval_report(
 
 def main() -> None:
     args = parse_args()
+    training_mode: str = args.training_mode
     out_dir: Path = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Style seaborn/matplotlib
     try:
         sns.set_theme(style="whitegrid", font_scale=0.95)
     except Exception:
         pass
 
-    # Banner
     print("\n" + "═" * 72)
     print("  SYNTHETIC MATCHING MODEL — EXPERIMENTAL PIPELINE")
     print("═" * 72)
     print("  ⚠  Training on synthetic labels. NOT investment advice.")
     print("  ⚠  Labels are rule-generated, not real investor behaviour.")
+    print(f"  ℹ  Training mode: {training_mode}")
+    if training_mode != "full":
+        print("     (default since Phase 10 — use --training-mode full for legacy behavior)")
     print("═" * 72)
+
+    if not _ELIGIBILITY_AVAILABLE:
+        print(
+            "\n  ⚠  eligibility.py not found in scripts/ml/. "
+            "Eligibility will be loaded from pairs.json only.\n"
+        )
 
     # ── Load ──────────────────────────────────────────────────────────────────
     print(f"\nLoading {PAIRS_PATH} …")
     df = load_and_validate(PAIRS_PATH)
     print_dataset_stats(df)
+    print_eligibility_summary(df)
 
     if args.validate_only:
         print("--validate-only set. Stopping before training.\n")
         return
 
-    # ── Prepare matrices ──────────────────────────────────────────────────────
-    X: "np.ndarray" = df[FEATURE_COLS].values.astype(float)
-    y: "np.ndarray" = df["label"].values.astype(int)
+    # ── Split into eligible / ineligible ──────────────────────────────────────
+    df_eligible = df[df["eligible_for_model_ranking"]].reset_index(drop=True)
+    df_ineligible = df[~df["eligible_for_model_ranking"]].reset_index(drop=True)
+    n_total = len(df)
+    n_eligible = len(df_eligible)
+    n_ineligible = len(df_ineligible)
 
-    # Stratified 80/20 split (reproducible via RANDOM_SEED)
-    all_indices = np.arange(len(df))
+    # ── Select training pool ───────────────────────────────────────────────────
+    if training_mode in ("eligible-only", "eligible-train-full-eval"):
+        df_train_pool = df_eligible
+        pool_label = "eligible pairs"
+    else:
+        df_train_pool = df
+        pool_label = "all pairs (legacy full mode)"
+
+    X: "np.ndarray" = df_train_pool[FEATURE_COLS].values.astype(float)
+    y: "np.ndarray" = df_train_pool["label"].values.astype(int)
+
+    # Stratified 80/20 split on the training pool.
+    all_indices = np.arange(len(df_train_pool))
     idx_train, idx_test = train_test_split(
         all_indices, test_size=0.20, stratify=y, random_state=RANDOM_SEED
     )
     X_train, X_test = X[idx_train], X[idx_test]
     y_train, y_test = y[idx_train], y[idx_test]
-    df_test = df.iloc[idx_test].reset_index(drop=True)
+    df_test = df_train_pool.iloc[idx_test].reset_index(drop=True)
 
-    print(f"Train: {len(X_train)} pairs  |  Test: {len(X_test)} pairs\n")
+    print(
+        f"Training pool: {pool_label}  "
+        f"({len(df_train_pool)} pairs)  →  "
+        f"Train: {len(X_train)}  |  Test: {len(X_test)}\n"
+    )
 
     # ── 5-fold CV ─────────────────────────────────────────────────────────────
     print(f"{'─' * 72}")
-    print("5-FOLD STRATIFIED CROSS-VALIDATION  (training data only)")
+    print(f"{len(X_train)//len(X_train)*5}-FOLD STRATIFIED CROSS-VALIDATION  (training pool)")
     print(f"{'─' * 72}")
     models = get_models()
-    cv_results = run_cross_validation(models, X_train, y_train)
+    cv_results, n_cv_folds = run_cross_validation(models, X_train, y_train)
 
-    # ── Train on full train split ─────────────────────────────────────────────
+    # ── Train on full training split ───────────────────────────────────────────
     print(f"\n{'─' * 72}")
     print("TEST SET EVALUATION  (80/20 stratified split)")
     print(f"{'─' * 72}")
@@ -854,17 +1891,110 @@ def main() -> None:
     for name, model in trained_models.items():
         metrics_all[name] = evaluate_model(name, model, X_test, y_test)
 
+    # ── Phase 10: Ineligible safety diagnostic ────────────────────────────────
+    ineligible_diagnostic: "dict[str, Any] | None" = None
+    preds_ineligible: dict[str, dict[str, Any]] = {}
+
+    if training_mode in ("eligible-only", "eligible-train-full-eval") and n_ineligible > 0:
+        print(f"\n{'─' * 72}")
+        print("SAFETY DIAGNOSTIC  — model behavior on ineligible pairs  (View B)")
+        print(f"{'─' * 72}")
+        ineligible_diagnostic, preds_ineligible = run_ineligible_safety_diagnostic(
+            trained_models, df_ineligible
+        )
+
+    # Phase 11c: multi-seed OOF variables (always in scope; populated by --multiseed).
+    ms_df_: "pd.DataFrame" = pd.DataFrame()
+    ms_metrics_: "dict[str, Any]" = {}
+
+    if args.multiseed:
+        if training_mode != "eligible-only":
+            print(
+                "  ⚠  --multiseed requires --training-mode eligible-only. Skipping.\n"
+            )
+        else:
+            print(f"\n{'─' * 72}")
+            print("MULTI-SEED OOF GENERATION  (Phase 11c — model selection)")
+            print(f"{'─' * 72}")
+            ms_df_, ms_metrics_ = generate_multiseed_oof(
+                df_eligible, df_ineligible, FEATURE_COLS,
+            )
+
+    # ── Phase 10: Full-dataset predictions (eligible-train-full-eval) ─────────
+    preds_full: dict[str, dict[str, Any]] = {}
+    if training_mode == "eligible-train-full-eval":
+        X_full = df[FEATURE_COLS].values.astype(float)
+        for name, model in trained_models.items():
+            preds_full[name] = {
+                "y_pred": model.predict(X_full),
+                "y_proba": model.predict_proba(X_full) if hasattr(model, "predict_proba") else None,
+            }
+
+    # ── Phase 11a: All-eligible predictions for per-founder ranking eval ──────
+    # In eligible-only mode, produce predictions for ALL 260 eligible pairs
+    # (not just the 52-pair test split) so eval_ranking.py can build per-founder
+    # and per-investor ranked lists.
+    #
+    # WARNING: the 208 training pairs have in-sample predictions; scores for
+    # those pairs may be inflated (especially for GBM and DecisionTree).  The
+    # "split" column marks "train" vs "test" so analysts can track this.
+    # Run eval_ranking.py --source oof for leakage-free OOF ranking (Phase 11b).
+    metrics_el_all_: dict[str, dict[str, Any]] = {}
+    df_el_split_: "pd.DataFrame | None" = None
+    # Phase 11b variables (initialised here so they are always in scope).
+    oof_df_: "pd.DataFrame" = pd.DataFrame()
+    oof_metrics_: "dict[str, Any] | None" = None
+    if training_mode == "eligible-only":
+        X_all_el = df_eligible[FEATURE_COLS].values.astype(float)
+        for name, model in trained_models.items():
+            metrics_el_all_[name] = {
+                "y_pred": model.predict(X_all_el),
+                "y_proba": (
+                    model.predict_proba(X_all_el)
+                    if hasattr(model, "predict_proba") else None
+                ),
+            }
+        df_el_split_ = df_eligible.copy().reset_index(drop=True)
+        is_test_arr = np.zeros(len(df_el_split_), dtype=bool)
+        is_test_arr[idx_test] = True
+        df_el_split_["split"] = np.where(is_test_arr, "test", "train")
+
+        # ── Phase 11b: Leakage-free OOF predictions ──────────────────────────
+        print(f"\n{'─' * 72}")
+        print("OUT-OF-FOLD PREDICTION GENERATION  (Phase 11b — leakage-free)")
+        print(f"{'─' * 72}")
+        oof_df_, _ = generate_oof_predictions(df_eligible, FEATURE_COLS)
+        if not oof_df_.empty:
+            # Compute and display OOF classification metrics.
+            oof_metrics_: dict[str, Any] = {}
+            name_display = {"logreg": "LogReg", "gbm": "GBM", "decisiontree": "DecisionTree"}
+            print(f"  OOF classification metrics (n={len(oof_df_)} eligible pairs):")
+            for key, display in name_display.items():
+                if f"correct_{key}" in oof_df_.columns:
+                    acc = float(oof_df_[f"correct_{key}"].mean())
+                    mae = float(oof_df_[f"error_{key}"].mean())
+                    oof_metrics_[display] = {
+                        "accuracy": round(acc, 4),
+                        "ordinal_mae": round(mae, 4),
+                    }
+                    print(f"  {display:<14}  OOF acc={acc:.4f}  OOF ordinal-MAE={mae:.4f}")
+
     # ── Save artifacts ────────────────────────────────────────────────────────
     print(f"\n{'─' * 72}")
     print(f"SAVING ARTIFACTS  →  {out_dir}")
     print(f"{'─' * 72}")
 
-    artifact_paths: dict[str, Path | None] = {}
+    artifact_paths: dict[str, "Path | None"] = {}
+
+    # Suffix for plot titles indicates the training scope.
+    title_suffix = "" if training_mode == "full" else " (eligible-only)"
 
     for name, model in trained_models.items():
         m = metrics_all[name]
 
-        cm_plot = save_confusion_matrix_plot(y_test, m["y_pred"], name, out_dir)
+        cm_plot = save_confusion_matrix_plot(
+            y_test, m["y_pred"], name, out_dir, title_suffix=title_suffix
+        )
         artifact_paths[f"Confusion matrix — {name} (PNG)"] = cm_plot
         print(f"  ✓ {cm_plot.name}")
 
@@ -877,25 +2007,114 @@ def main() -> None:
             artifact_paths[f"Feature importance — {name}"] = imp
             print(f"  ✓ {imp.name}")
 
+    # predictions.csv (training scope, with eligibility fields)
     pred_csv = save_predictions_csv(df_test, metrics_all, out_dir)
-    artifact_paths["Predictions CSV (all models)"] = pred_csv
+    artifact_paths["Predictions CSV — test set (all models, with eligibility fields)"] = pred_csv
     print(f"  ✓ {pred_csv.name}")
 
+    # predictions_eligible_all.csv (Phase 11a — eligible-only mode only)
+    if df_el_split_ is not None and metrics_el_all_:
+        pred_el_all_csv = save_predictions_csv(
+            df_el_split_, metrics_el_all_, out_dir, "predictions_eligible_all.csv"
+        )
+        artifact_paths[
+            "Predictions CSV — all eligible pairs incl. train split (Phase 11a ranking eval)"
+        ] = pred_el_all_csv
+        print(f"  ✓ {pred_el_all_csv.name}")
+
+    # predictions_eligible_oof.csv (Phase 11b — leakage-free OOF)
+    if not oof_df_.empty:
+        oof_csv_path = out_dir / "predictions_eligible_oof.csv"
+        oof_df_.to_csv(oof_csv_path, index=False)
+        artifact_paths[
+            "Predictions CSV — eligible OOF (leakage-free, Phase 11b)"
+        ] = oof_csv_path
+        print(f"  ✓ {oof_csv_path.name}")
+
+    # multiseed artifacts (Phase 11c — only generated with --multiseed flag)
+    if not ms_df_.empty:
+        ms_csv_path = out_dir / "predictions_eligible_oof_multiseed.csv"
+        ms_df_.to_csv(ms_csv_path, index=False)
+        artifact_paths["Multi-seed OOF predictions (Phase 11c)"] = ms_csv_path
+        print(f"  ✓ {ms_csv_path.name}")
+
+        ms_json_path = out_dir / "multiseed_metrics.json"
+        ms_json_path.write_text(json.dumps(ms_metrics_, indent=2), encoding="utf-8")
+        artifact_paths["Multi-seed metrics (Phase 11c)"] = ms_json_path
+        print(f"  ✓ {ms_json_path.name}")
+
+        ms_report = write_multiseed_report(ms_metrics_, out_dir)
+        artifact_paths["Multi-seed classification report (Phase 11c)"] = ms_report
+        print(f"  ✓ {ms_report.name}")
+
+    # Full-dataset predictions (eligible-train-full-eval only)
+    if training_mode == "eligible-train-full-eval" and preds_full:
+        # Build a synthetic "metrics_all" dict for the full df (y_pred only, no y_test).
+        metrics_full_for_csv: dict[str, dict[str, Any]] = {
+            name: {"y_pred": preds["y_pred"], "y_proba": preds["y_proba"]}
+            for name, preds in preds_full.items()
+        }
+        pred_all_csv = save_predictions_csv(df, metrics_full_for_csv, out_dir, "predictions_all.csv")
+        artifact_paths["Predictions CSV — all pairs (eligible-train-full-eval)"] = pred_all_csv
+        print(f"  ✓ {pred_all_csv.name}")
+
+    # predictions_ineligible.csv
+    if preds_ineligible:
+        pred_in_csv = save_predictions_ineligible_csv(df_ineligible, preds_ineligible, out_dir)
+        artifact_paths["Predictions CSV — ineligible pairs (safety diagnostic)"] = pred_in_csv
+        print(f"  ✓ {pred_in_csv.name}")
+
+    # eligibility_summary.json (always written)
+    elig_json = save_eligibility_summary_json(df, training_mode, ineligible_diagnostic, out_dir)
+    artifact_paths["Eligibility summary (Phase 10)"] = elig_json
+    print(f"  ✓ {elig_json.name}")
+
+    # decision_tree.txt
     dt_model = trained_models.get("DecisionTree")
     if dt_model is not None:
         dt_txt = save_decision_tree_txt(dt_model, FEATURE_COLS, out_dir)
         artifact_paths["Decision tree rules"] = dt_txt
         print(f"  ✓ {dt_txt.name}")
 
-    label_counts = {i: int((df["label"] == i).sum()) for i in range(5)}
+    # Compute eligibility breakdowns for the report.
+    df_el_full = df[df["eligible_for_model_ranking"]]
+    df_in_full = df[~df["eligible_for_model_ranking"]]
+    label_counts_eligible = {i: int((df_el_full["label"] == i).sum()) for i in range(5)}
+    label_counts_ineligible = {i: int((df_in_full["label"] == i).sum()) for i in range(5)}
+    reason_counts_for_report: dict[str, int] = {
+        "anti_thesis_conflict": 0,
+        "stage_mismatch": 0,
+        "check_size_mismatch": 0,
+    }
+    multi_reason_report = 0
+    for reasons in df_in_full["hard_filter_reasons"]:
+        for r in reasons:
+            if r in reason_counts_for_report:
+                reason_counts_for_report[r] += 1
+        if len(reasons) > 1:
+            multi_reason_report += 1
+
+    label_counts_pool = {i: int((df_train_pool["label"] == i).sum()) for i in range(5)}
+
     report = write_eval_report(
         metrics_all=metrics_all,
         cv_results=cv_results,
-        label_counts=label_counts,
+        label_counts=label_counts_pool,
         n_train=len(X_train),
         n_test=len(X_test),
         artifact_paths=artifact_paths,
         out_dir=out_dir,
+        training_mode=training_mode,
+        n_total=n_total,
+        n_eligible=n_eligible,
+        n_ineligible=n_ineligible,
+        n_cv_folds=n_cv_folds,
+        label_counts_eligible=label_counts_eligible,
+        label_counts_ineligible=label_counts_ineligible,
+        reason_counts=reason_counts_for_report,
+        multi_reason_count=multi_reason_report,
+        ineligible_diagnostic=ineligible_diagnostic,
+        oof_metrics=oof_metrics_,
     )
     artifact_paths["Evaluation report"] = report
     print(f"  ✓ {report.name}")
@@ -903,6 +2122,7 @@ def main() -> None:
     print(f"\n{'═' * 72}")
     print(f"  Done. {len(artifact_paths)} artifacts saved to:")
     print(f"  {out_dir}")
+    print(f"  Training mode: {training_mode}")
     print("  ⚠  Synthetic experimental only. Not for production use.")
     print("═" * 72 + "\n")
 

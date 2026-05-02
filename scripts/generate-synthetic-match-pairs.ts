@@ -33,6 +33,11 @@ import {
   type EmbeddingVector,
 } from "../lib/matching/features";
 
+import {
+  evaluateEligibility,
+  type HardFilterReason,
+} from "../lib/matching/eligibility";
+
 // ─── Label metadata ───────────────────────────────────────────────────────────
 
 const LABEL_NAMES = [
@@ -128,6 +133,13 @@ interface PairRecord {
   label: Label;
   label_name: (typeof LABEL_NAMES)[Label];
   label_reason: string;
+  // ── Phase 10: hard eligibility ─────────────────────────────────────────
+  // These fields encode policy constraints for the future global ranking model.
+  // They are NOT labels and NOT learned features. See lib/matching/eligibility.ts.
+  /** True when no hard eligibility constraint is violated. */
+  eligible_for_model_ranking: boolean;
+  /** Zero or more reasons this pair is ineligible. Empty array when eligible. */
+  hard_filter_reasons: HardFilterReason[];
 }
 
 // ─── Score computation ────────────────────────────────────────────────────────
@@ -418,6 +430,8 @@ function main(): void {
         excellentConditionsMissed,
       );
 
+      const { eligible_for_model_ranking, hard_filter_reasons } = evaluateEligibility(features);
+
       const record: PairRecord = {
         startup_id: startup.id,
         investor_id: investor.id,
@@ -425,6 +439,8 @@ function main(): void {
         label: finalLabel,
         label_name: LABEL_NAMES[finalLabel],
         label_reason: labelReason,
+        eligible_for_model_ranking,
+        hard_filter_reasons,
       };
 
       pairs.push(record);
@@ -551,6 +567,65 @@ function main(): void {
     if (missStart >= 0) {
       console.log(`    ${truncate(record.label_reason.slice(missStart), 105)}`);
     }
+  }
+  console.log();
+
+  // ─── Hard eligibility summary (Phase 10) ─────────────────────────────────
+
+  const eligibleCount = pairs.filter((p) => p.eligible_for_model_ranking).length;
+  const ineligiblePairs = pairs.filter((p) => !p.eligible_for_model_ranking);
+  const n = pairs.length;
+
+  const reasonCounts: Record<HardFilterReason, number> = {
+    anti_thesis_conflict: 0,
+    stage_mismatch: 0,
+    check_size_mismatch: 0,
+  };
+  let multipleReasonCount = 0;
+  for (const p of ineligiblePairs) {
+    for (const r of p.hard_filter_reasons) reasonCounts[r]++;
+    if (p.hard_filter_reasons.length > 1) multipleReasonCount++;
+  }
+
+  // Cross-tab: ineligible pairs broken down by label
+  const ineligibleByLabel = [0, 0, 0, 0, 0] as [number, number, number, number, number];
+  for (const p of ineligiblePairs) ineligibleByLabel[p.label]++;
+
+  console.log("─── Hard eligibility (Phase 10) ──────────────────────────────────────────────");
+  console.log(
+    `  Eligible for model ranking : ${eligibleCount} / ${n} ` +
+    `(${((eligibleCount / n) * 100).toFixed(1)}%)`,
+  );
+  console.log(
+    `  Ineligible                 : ${ineligiblePairs.length} / ${n} ` +
+    `(${((ineligiblePairs.length / n) * 100).toFixed(1)}%)`,
+  );
+  console.log();
+  console.log("  Hard filter reason counts (pairs may carry multiple reasons):");
+  console.log(`    anti_thesis_conflict  : ${reasonCounts.anti_thesis_conflict}`);
+  console.log(`    stage_mismatch        : ${reasonCounts.stage_mismatch}`);
+  console.log(`    check_size_mismatch   : ${reasonCounts.check_size_mismatch}`);
+  console.log(`    pairs with 2+ reasons : ${multipleReasonCount}`);
+  console.log();
+  console.log("  Ineligible pairs by label (cross-tab):");
+  for (let i = 0 as Label; i < 5; i++) {
+    const count = ineligibleByLabel[i];
+    const flag = i >= 3 && count > 0 ? "  ⚠  FALSE-PROMOTION RISK" : "";
+    console.log(
+      `    ${i}  ${LABEL_NAMES[i as Label].padEnd(14)}  ${String(count).padStart(3)} pairs${flag}`,
+    );
+  }
+  const falsePromotionRisk = ineligibleByLabel[3] + ineligibleByLabel[4];
+  if (falsePromotionRisk > 0) {
+    console.log(
+      `\n  ⚠  ${falsePromotionRisk} ineligible pair(s) carry label ≥ 3. ` +
+      `These would be false promotions if the eligibility gate were absent. ` +
+      `Investigate label-cap logic.`,
+    );
+  } else {
+    console.log(
+      `\n  ✓  No ineligible pair has label ≥ 3. Eligibility gate and label caps are consistent.`,
+    );
   }
   console.log();
 
