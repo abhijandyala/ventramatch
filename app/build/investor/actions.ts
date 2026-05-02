@@ -17,6 +17,9 @@ import type {
   Database,
   ProfileState,
 } from "@/types/database";
+import { flag } from "@/lib/flags";
+import { toInvestorQualityInput } from "@/lib/quality/runtime/profile-adapters";
+import { runBotReviewAndPersist } from "@/lib/quality/runtime/run-bot-review";
 
 type InvestorRow = Database["public"]["Tables"]["investors"]["Row"];
 
@@ -99,7 +102,8 @@ export async function submitInvestorApplicationAction(
   const roleError = ensureInvestorRole(current.user_role);
   if (roleError) return { ok: false, error: roleError };
 
-  const completion = investorCompletion(inputAsRow(userId, data));
+  const investorRow = inputAsRow(userId, data);
+  const completion = investorCompletion(investorRow);
   if (!completion.canPublish) {
     const missingLabels = completion.missing.slice(0, 3).map((m) => m.label).join(", ");
     console.log(
@@ -123,6 +127,14 @@ export async function submitInvestorApplicationAction(
   // postgres-js which serialises it correctly when typed against the column.
   const stages: StartupStage[] = data.stages;
   const isActive = data.isActive ?? true;
+
+  // ── Phase 14a: check bot-review flag before opening the transaction ─────────
+  const botReviewEnabled = await flag("quality_review_bot_writes", userId).catch(
+    (err) => {
+      console.error("[submitInvestor] flag lookup failed — skipping bot review", err);
+      return false;
+    },
+  );
 
   try {
     await withUserRls(userId, async (sql) => {
@@ -187,6 +199,19 @@ export async function submitInvestorApplicationAction(
            and sent_at is null
            and cancelled_at is null
       `;
+
+      // ── Phase 14a: bot quality review (advisory only) ──────────────────────
+      if (botReviewEnabled) {
+        await runBotReviewAndPersist({
+          sql,
+          applicationId:  current.id,
+          userId,
+          passNo:         transition.nextResubmitCount + 1,
+          email:          session.user?.email ?? null,
+          profileKind:    "investor",
+          investorRow,
+        });
+      }
     });
   } catch (error) {
     console.error("[submitInvestor] DB write failed", error);

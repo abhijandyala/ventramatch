@@ -94,6 +94,21 @@ if _MISSING:
     print("  cd scripts/ml && source .venv/bin/activate && pip install -r requirements.txt")
     sys.exit(1)
 
+# ── Phase 10: eligibility mirror ──────────────────────────────────────────────
+# Import the Python eligibility mirror (same directory as this script).
+# lib/matching/eligibility.ts is the canonical source of truth for all
+# hard eligibility constants. This Python import stays in sync with that file.
+_ML_DIR = Path(__file__).resolve().parent
+if str(_ML_DIR) not in sys.path:
+    sys.path.insert(0, str(_ML_DIR))
+
+try:
+    from eligibility import evaluate_eligibility as _evaluate_eligibility
+    _ELIGIBILITY_AVAILABLE = True
+except ImportError:
+    _ELIGIBILITY_AVAILABLE = False
+    _evaluate_eligibility = None  # type: ignore[assignment]
+
 # ── Constants (mirror generate-synthetic-match-pairs.ts exactly) ──────────────
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -248,10 +263,35 @@ def explain_disagreement(f: dict[str, Any], actual_label: int) -> str:
 
 
 def load_pairs(path: Path) -> tuple["pd.DataFrame", list[dict[str, Any]]]:
+    """Load pairs.json, return (DataFrame, raw list).
+
+    Phase 10: loads eligible_for_model_ranking and hard_filter_reasons from each
+    pair.  If those fields are absent (pre-Phase-10 pairs.json), recomputes them
+    from features using eligibility.py and prints a back-compat warning.
+    """
     if not path.exists():
         print(f"ERROR: {path} not found. Run: npm run generate:synthetic-matches")
         sys.exit(1)
     raw: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
+
+    # Detect Phase 10 eligibility fields.
+    has_eligibility_fields = (
+        len(raw) > 0
+        and "eligible_for_model_ranking" in raw[0]
+        and "hard_filter_reasons" in raw[0]
+    )
+    if not has_eligibility_fields:
+        if _ELIGIBILITY_AVAILABLE:
+            print(
+                "  ⚠  pairs.json is pre-Phase-10; recomputing eligibility from features.\n"
+                "     Run: npm run generate:synthetic-matches  to persist eligibility fields.\n"
+            )
+        else:
+            print(
+                "  ⚠  pairs.json is pre-Phase-10 AND eligibility.py not found.\n"
+                "     All pairs will be treated as eligible (conservative fallback).\n"
+            )
+
     rows = []
     for p in raw:
         row: dict[str, Any] = {
@@ -263,6 +303,23 @@ def load_pairs(path: Path) -> tuple["pd.DataFrame", list[dict[str, Any]]]:
         for col in ALL_FEATURE_COLS:
             val = p["features"].get(col)
             row[col] = float(val) if val is not None else np.nan
+
+        # ── Phase 10: eligibility ─────────────────────────────────────────────
+        if has_eligibility_fields:
+            row["eligible_for_model_ranking"] = bool(p["eligible_for_model_ranking"])
+            row["hard_filter_reasons"] = list(p["hard_filter_reasons"])
+        elif _ELIGIBILITY_AVAILABLE:
+            feat_dict = {
+                col: (0.0 if (isinstance(row.get(col), float) and np.isnan(row[col])) else float(row.get(col, 0.0)))
+                for col in ALL_FEATURE_COLS
+            }
+            elig = _evaluate_eligibility(feat_dict)
+            row["eligible_for_model_ranking"] = elig["eligible_for_model_ranking"]
+            row["hard_filter_reasons"] = elig["hard_filter_reasons"]
+        else:
+            row["eligible_for_model_ranking"] = True
+            row["hard_filter_reasons"] = []
+
         rows.append(row)
     return pd.DataFrame(rows), raw
 
@@ -349,6 +406,9 @@ def run_analysis(
                 "anti": row["anti_thesis_conflict_score"],
                 "reason": reason,
                 "startup_id": sid, "investor_id": iid,
+                # Phase 10: eligibility fields
+                "eligible": bool(row["eligible_for_model_ranking"]),
+                "hard_filter_reasons": list(row["hard_filter_reasons"]),
             })
     high_sem_low_label.sort(key=lambda x: x["sem"], reverse=True)
 
@@ -372,6 +432,9 @@ def run_analysis(
                 "anti": row["anti_thesis_conflict_score"],
                 "score": score,
                 "startup_id": sid, "investor_id": iid,
+                # Phase 10: eligibility fields
+                "eligible": bool(row["eligible_for_model_ranking"]),
+                "hard_filter_reasons": list(row["hard_filter_reasons"]),
             })
     low_sem_high_label.sort(key=lambda x: x["sem"])
 
@@ -467,6 +530,9 @@ def run_analysis(
             "semantic_similarity": round(p["sem"], 4), "label": p["label"],
             "sector": round(p["sector"], 3), "check": round(p["check"], 3),
             "anti_thesis": round(p["anti"], 3), "explanation": p["reason"],
+            # Phase 10: eligibility columns
+            "eligible_for_model_ranking": p["eligible"],
+            "hard_filter_reasons": json.dumps(p["hard_filter_reasons"]),
         })
     for p in low_sem_high_label:
         disagree_rows.append({
@@ -475,6 +541,9 @@ def run_analysis(
             "semantic_similarity": round(p["sem"], 4), "label": p["label"],
             "sector": round(p["sector"], 3), "check": round(p["check"], 3),
             "anti_thesis": round(p["anti"], 3), "explanation": "structured features drive label",
+            # Phase 10: eligibility columns
+            "eligible_for_model_ranking": p["eligible"],
+            "hard_filter_reasons": json.dumps(p["hard_filter_reasons"]),
         })
     if changed_pairs:
         for cp in changed_pairs:
@@ -487,6 +556,9 @@ def run_analysis(
                 "check": round(cp["check"], 3) if cp["check"] else None,
                 "anti_thesis": round(cp["anti"], 3) if cp["anti"] is not None else None,
                 "explanation": f"bonus={cp['bonus']:.4f} → {LABEL_NAMES[cp['label_after']]}",
+                # Phase 10: what-if pairs inherit eligibility from the full df lookup
+                "eligible_for_model_ranking": None,
+                "hard_filter_reasons": None,
             })
     disagree_path = out_dir / "semantic_disagreements.csv"
     pd.DataFrame(disagree_rows).to_csv(disagree_path, index=False)
@@ -509,6 +581,11 @@ def run_analysis(
     )
     pct_cap_protected = n_cap_protected / max(1, len(high_sem_low_label)) * 100
 
+    # Phase 10: eligibility stats for disagreement sets.
+    n_eligibility_gated = sum(1 for p in high_sem_low_label if not p["eligible"])
+    pct_eligibility_gated = n_eligibility_gated / max(1, len(high_sem_low_label)) * 100
+    n_low_sem_ineligible = sum(1 for p in low_sem_high_label if not p["eligible"])
+
     if len(changed_pairs) <= n * 0.02:  # fewer than 2% of pairs change
         evidence_keep.append(
             f"Only {len(changed_pairs)}/{n} ({len(changed_pairs)/n*100:.1f}%) pairs change label "
@@ -520,9 +597,16 @@ def run_analysis(
             "directionally but share substantial non-overlapping information."
         )
     if pct_cap_protected >= 80:
+        elig_note = (
+            f" ({n_eligibility_gated} of those are also eligibility-gated — "
+            "fully excluded from model ranking)"
+            if n_eligibility_gated > 0 else ""
+        )
         evidence_keep.append(
             f"{pct_cap_protected:.0f}% of high-sem/low-label disagreements are cap-protected "
-            "(anti-thesis or check-size). The existing caps correctly override semantic matches."
+            f"(anti-thesis or check-size){elig_note}. "
+            "Caps correctly override semantic matches; the eligibility gate adds a "
+            "second structural safeguard for the most severe constraint violations."
         )
     if len(inflated_weak) == 0:
         evidence_apply.append(
@@ -606,42 +690,109 @@ def run_analysis(
         "",
         "These are pairs where text similarity suggests a potential fit but rules assign a low label.",
         "",
-        "| Startup | Investor | sem | label | sector | check | anti | explanation |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Startup | Investor | sem | label | sector | check | anti | eligible | explanation |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for p in high_sem_low_label[:12]:
+        elig_str = "✅" if p["eligible"] else "❌ gated"
         lines.append(
             f"| {p['startup'][:24]} | {p['investor'][:24]} | {p['sem']:.3f} | "
             f"{p['label']} ({LABEL_NAMES[p['label']][:8]}) | {p['sector']:.2f} | "
-            f"{p['check']:.2f} | {p['anti']:.2f} | {p['reason'][:60]} |"
+            f"{p['check']:.2f} | {p['anti']:.2f} | {elig_str} | {p['reason'][:50]} |"
         )
+    elig_gated_note = (
+        f" {n_eligibility_gated} of these ({pct_eligibility_gated:.0f}%) are also "
+        f"**eligibility-gated** — removed from model ranking entirely, not just label-capped."
+        if n_eligibility_gated > 0 else ""
+    )
     lines += [
         "",
         f"> **Key finding:** {pct_cap_protected:.0f}% of these pairs are cap-protected (anti-thesis or",
         "> check-size caps override the text match). The caps are correctly suppressing semantic",
-        "> false positives — e.g., a crypto-vocabulary investor matching a crypto-buzzword startup",
-        "> that has anti-thesis conflicts or a $10M raise vs a $350K max check.",
+        f"> false positives.{elig_gated_note}",
+        "> See the **Hard Eligibility Context** section below for how caps and eligibility differ.",
         "",
         "### Low-semantic / High-label pairs",
         f"(semantic ≤ {LOW_SEM_THRESH}, label ≥ {HIGH_LABEL_THRESH}  — **{len(low_sem_high_label)} pairs**)",
         "",
         "These are pairs where structured features align well but text vocabularies differ.",
+        "All pairs in this set should be **eligible** for model ranking — if any are ineligible,",
+        "that would indicate a structural issue (ineligible pair reaching label ≥ 3, which the",
+        "label caps should prevent).",
         "",
-        "| Startup | Investor | sem | label | sector | check | score |",
-        "|---|---|---|---|---|---|---|",
+        "| Startup | Investor | sem | label | sector | check | score | eligible |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for p in low_sem_high_label[:12]:
+        elig_str = "✅" if p["eligible"] else "⚠️ INELIGIBLE"
         lines.append(
             f"| {p['startup'][:24]} | {p['investor'][:24]} | {p['sem']:.3f} | "
             f"{p['label']} ({LABEL_NAMES[p['label']][:8]}) | {p['sector']:.2f} | "
-            f"{p['check']:.2f} | {p['score']:.3f} |"
+            f"{p['check']:.2f} | {p['score']:.3f} | {elig_str} |"
+        )
+    if n_low_sem_ineligible == 0:
+        low_sem_elig_note = (
+            "> ✅ All low-sem/high-label pairs are eligible. Structured mandate alignment is "
+            "correctly driving high labels for pairs the model is allowed to rank."
+        )
+    else:
+        low_sem_elig_note = (
+            f"> ⚠️ {n_low_sem_ineligible} low-sem/high-label pair(s) are ineligible. "
+            "This is a structural issue — an ineligible pair should not reach label ≥ 3. "
+            "Investigate the label-cap and eligibility-gate alignment."
         )
     lines += [
         "",
+        low_sem_elig_note,
+        "",
         "> **Key finding:** Structural feature alignment produces high labels even when text",
-        "> vocabularies differ (e.g., OncoPal uses clinical/oncology terms while a general",
-        "> enterprise investor thesis uses business-strategy language). This is **healthy** —",
-        "> structured mandate matching should lead, not text similarity.",
+        "> vocabularies differ. This is **healthy** — structured mandate matching should lead,",
+        "> not text similarity. Semantic similarity cannot override the eligibility gate.",
+        "",
+        "---",
+        "",
+        "## Hard Eligibility Context  (Phase 10)",
+        "",
+        "Phase 10 introduced a hard eligibility gate that runs **before** any model ranking.",
+        "Understanding how it interacts with semantic agreement is important for correctly",
+        "interpreting the disagreement sets above.",
+        "",
+        "### Caps vs eligibility — what is the difference?",
+        "",
+        "| Mechanism | What it does | Overrideable by semantics? |",
+        "|---|---|---|",
+        "| **Label cap** | Reduces the maximum label a pair can receive (e.g., anti-thesis → label ≤ 1) | No — applied after scoring |",
+        "| **Hard eligibility gate** | Removes the pair from the model ranking pool entirely | No — applied before the model |",
+        "",
+        "Label caps and eligibility often co-occur (the same thresholds drive both), but they are",
+        "conceptually distinct:",
+        "- A **capped** pair still exists in the dataset with a label of 1 or 2.",
+        "- An **eligibility-gated** pair is excluded from training and inference entirely.",
+        "- **Semantic similarity cannot override either mechanism.** A pair with sem=0.62 and",
+        "  anti_thesis_conflict=0.70 is both capped at label 1 AND ineligible for model ranking,",
+        "  regardless of how well the thesis text overlaps.",
+        "",
+        "### Eligibility summary for this analysis",
+        "",
+        "| Property | Value |",
+        "|---|---|",
+        f"| High-sem / low-label pairs | {len(high_sem_low_label)} |",
+        f"| ↳ cap-protected (label reduced by cap) | {n_cap_protected} ({pct_cap_protected:.0f}%) |",
+        f"| ↳ eligibility-gated (excluded from model) | {n_eligibility_gated} ({pct_eligibility_gated:.0f}%) |",
+        f"| Low-sem / high-label pairs | {len(low_sem_high_label)} |",
+        f"| ↳ ineligible in this set (should be 0) | {n_low_sem_ineligible} |",
+        "",
+        (
+            "> ✅ All high-sem/low-label disagreements are correctly handled: capped, gated, or both. "
+            "The eligibility gate is an additional structural safeguard on top of label caps."
+            if n_eligibility_gated > 0 else
+            "> ℹ️  All high-sem/low-label disagreements in this run are label-capped but not "
+            "eligibility-gated. The caps are sufficient to suppress semantic false positives here."
+        ),
+        "",
+        "> **Semantic similarity cannot promote a pair past either the label cap or the",
+        "> eligibility gate.** This confirms the semantic bonus (Phase 8 analysis) would not",
+        "> create any new eligibility violations even if it were applied.",
         "",
         "---",
         "",

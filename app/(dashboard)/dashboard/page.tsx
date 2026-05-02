@@ -18,6 +18,10 @@ import { CombinedActivityCard } from "@/components/dashboard/CombinedActivityCar
 import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { AccountStatusBanner } from "@/components/account/account-status-banner";
+import { flag } from "@/lib/flags";
+import { logFeedImpressions } from "@/lib/feed/impression-log";
+import { computeShadowScores } from "@/lib/feed/shadow-score";
+import { rankFeedForViewer } from "@/lib/feed/ml-ranker";
 import { ProfileCompletionPrompt } from "@/components/account/profile-completion-prompt";
 import { RealRecommendedRail } from "@/components/dashboard/RealRecommendedRail";
 import { RecentViewersRail } from "@/components/dashboard/RecentViewersRail";
@@ -71,7 +75,7 @@ export default async function DashboardPage() {
       ? investorCompletionWithDepth(userId)
       : founderCompletionWithDepth(userId);
 
-  const [completion, stats, feedItems, introCounts, recentViewers, celebrated] = await Promise.all([
+  const [completion, stats, rawFeedItems, introCounts, recentViewers, celebrated] = await Promise.all([
     completionPromise,
     fetchProfileStats(userId),
     role === "investor"
@@ -89,6 +93,60 @@ export default async function DashboardPage() {
 
   const celebration = <CompletionCelebration pct={completion.pct} celebrated={celebrated} />;
 
+  // ── Phase 16: ML ranking for recommended rail (flag-gated) ────────────────
+  // Same wrapper as /feed. Awaited before render so the rail reflects ML order.
+  const dashActorRole = (role ?? "investor") as "investor" | "founder";
+  const [dashMlFlagEnabled, dashPersonalizationEnabled] = await Promise.all([
+    flag("feed_ml_ranking", userId).catch(() => false),
+    flag("feed_personalization", userId).catch(() => false),
+  ]);
+  // Cast to the union explicitly so TypeScript can infer T from the generic.
+  type DashFeedCard = FeedStartupCard | FeedInvestorCard;
+  const {
+    items: feedItems,
+    ranker: dashActiveRanker,
+    shadowScores: dashRankShadowScores,
+  } = await rankFeedForViewer({
+    actorUserId:            userId,
+    actorRole:              dashActorRole,
+    items:                  rawFeedItems as DashFeedCard[],
+    flagEnabled:            dashMlFlagEnabled,
+    personalizationEnabled: dashPersonalizationEnabled,
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Phase 14d / 15 / 16: recommended-rail impression logging ─────────────────
+  // Logs up to 3 real items. Failures swallowed — never affects rendering.
+  if (feedItems.length > 0) {
+    const sessionId = crypto.randomUUID();
+
+    void flag("feed_impression_logging", userId)
+      .catch(() => false)
+      .then(async (loggingEnabled) => {
+        if (!loggingEnabled) return;
+
+        let shadowScores = dashRankShadowScores;
+        if (!shadowScores) {
+          const shadowEnabled = await flag("feed_model_shadow_scoring", userId).catch(() => false);
+          if (shadowEnabled) {
+            const targetUserIds = feedItems.map((it) => it.card.userId);
+            shadowScores = await computeShadowScores({ actorUserId: userId, actorRole: dashActorRole, targetUserIds });
+          }
+        }
+
+        return logFeedImpressions({
+          actorUserId:     userId,
+          items:           feedItems,
+          surface:         "dashboard_recommended",
+          ranker:          dashActiveRanker,
+          renderSessionId: sessionId,
+          filterContext:   null,
+          shadowScores,
+        });
+      });
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   if (role === "investor") {
     return (
       <>
@@ -98,7 +156,7 @@ export default async function DashboardPage() {
           accountLabel={accountLabel}
           completion={completion}
           stats={stats}
-          feedItems={feedItems as FeedStartupCard[]}
+          feedItems={feedItems as unknown as FeedStartupCard[]}
           introCounts={introCounts}
           recentViewers={recentViewers}
         />
@@ -114,7 +172,7 @@ export default async function DashboardPage() {
         accountLabel={accountLabel}
         completion={completion}
         stats={stats}
-        feedItems={feedItems as FeedInvestorCard[]}
+        feedItems={feedItems as unknown as FeedInvestorCard[]}
         introCounts={introCounts}
         recentViewers={recentViewers}
       />
@@ -171,7 +229,7 @@ function FounderDashboard({
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <IntroInboxBanner counts={introCounts} />
         <PublishedBanner />
-        <AccountStatusBanner label={accountLabel} />
+        <AccountStatusBanner label={accountLabel} detailHref="/application-status" />
         <ProfileCompletionPrompt
           completion={completion}
           accountLabel={accountLabel}
@@ -292,7 +350,7 @@ function InvestorDashboard({
       <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
         <IntroInboxBanner counts={introCounts} />
         <PublishedBanner />
-        <AccountStatusBanner label={accountLabel} />
+        <AccountStatusBanner label={accountLabel} detailHref="/application-status" />
         <ProfileCompletionPrompt
           completion={completion}
           accountLabel={accountLabel}
