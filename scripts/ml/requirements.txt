@@ -1,0 +1,25 @@
+# Python 3.9+ required (3.10+ recommended)
+#
+# SYNTHETIC MATCHING PIPELINE DEPENDENCIES
+# Offline algorithm-development tools only.
+# These are NOT production dependencies — never import from Next.js or
+# any app code. Install into a local venv (see README.md).
+#
+# kluster_dependency_check must be run on this file before running
+# pip install if the kluster MCP is available in your agent session.
+# If not, flag this file for manual kluster review before merging to main.
+
+scikit-learn>=1.4,<2
+pandas>=2.1,<3
+numpy>=1.26,<3
+matplotlib>=3.8,<4
+seaborn>=0.13,<1
+scipy>=1.11,<2
+
+# Phase 7: local text embeddings for semantic similarity
+# sentence-transformers downloads ~80 MB to ~/.cache/huggingface/ on first run.
+# torch is a large dep (~700 MB) but lives entirely inside .venv/ (gitignored).
+# kluster_dependency_check must be run on this file before pip install if the
+# kluster MCP is available. If not, flag for manual review before merging to main.
+sentence-transformers>=2.7,<5
+torch>=2.2,<3

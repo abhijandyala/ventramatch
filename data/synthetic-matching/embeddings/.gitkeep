@@ -1,0 +1,16 @@
+# This directory holds pre-computed text embeddings from compute_embeddings.py.
+# All generated JSON files are gitignored — only this .gitkeep is committed.
+#
+# Files produced by compute_embeddings.py:
+#   startups.json   — { startup_id: [384 floats], ... }
+#   investors.json  — { investor_id: [384 floats], ... }
+#   _metadata.json  — model name, dim, versions, fields_used, generated_at
+#
+# Regenerate with:
+#   npm run embeddings:synthetic-matches
+#   (or)
+#   npm run prepare:synthetic-matches   (embeddings + pairs + training)
+#
+# NOTICE: Embeddings are SYNTHETIC and EXPERIMENTAL.
+# They represent text similarity for profile-fit matching only.
+# They are NOT investment advice and do NOT predict startup success.
