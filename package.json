@@ -11,7 +11,12 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "echo 'Apply db/migrations/*.sql to DATABASE_URL (e.g. psql)'",
     "db:apply": "node scripts/apply-migration.mjs",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "analyze:synthetic-matches": "python3 scripts/ml/analyze_semantic_agreement.py",
+    "embeddings:synthetic-matches": "python3 scripts/ml/compute_embeddings.py",
+    "generate:synthetic-matches": "tsx scripts/generate-synthetic-match-pairs.ts",
+    "train:synthetic-matches": "python3 scripts/ml/train_synthetic_matching.py",
+    "prepare:synthetic-matches": "npm run embeddings:synthetic-matches && npm run generate:synthetic-matches && npm run train:synthetic-matches"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1039.0",
@@ -48,6 +53,7 @@
     "postcss": "8.5.6",
     "prettier": "3.6.2",
     "tailwindcss": "4.1.16",
+    "tsx": "^4.21.0",
     "typescript": "5.9.3"
   },
   "engines": {
