@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, X, ArrowLeft, Linkedin } from "lucide-react";
 import { InvestorDepthEditor } from "@/components/profile/investor-depth-editor";
+import { VideoUploader } from "@/components/profile/video-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
 import type { StartupStage, AccountLabel, ProfileState, Database } from "@/types/database";
 import { investorCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
@@ -74,6 +75,7 @@ export type InvestorUiDraft = {
     checksLast12mo: number | null;
     recent: { company: string; round: string; year: number | null; checkSize: string }[];
   };
+  video: { fileName: string | null; uploadedAt: string | null };
 };
 
 export const EMPTY_INVESTOR_DRAFT: InvestorUiDraft = {
@@ -84,6 +86,7 @@ export const EMPTY_INVESTOR_DRAFT: InvestorUiDraft = {
   check: { minCheck: null, sweetSpot: null, maxCheck: null, position: null, annualCapacity: null, maxValuation: null },
   geo: { regions: [], remoteOk: null, officeHours: "" },
   track: { totalChecks: null, yearsInvesting: null, checksLast12mo: null, recent: [] },
+  video: { fileName: null, uploadedAt: null },
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -524,9 +527,21 @@ export function InvestorBuilder({
             </div>
           )}
 
-          {page === "depth" && depthView && (
-            <div className="mx-auto w-full max-w-[720px] px-6 py-12 md:py-16">
-              <InvestorDepthEditor depth={depthView} />
+          {page === "depth" && (
+            <div className="mx-auto w-full max-w-[720px] px-6 py-12 md:py-16 space-y-10">
+              {depthView && <InvestorDepthEditor depth={depthView} />}
+              <div>
+                <h2 className="text-[16px] font-semibold text-[color:var(--color-text)]">Media</h2>
+                <p className="mt-1 text-[13px] text-[color:var(--color-text-muted)]">
+                  Add a short intro video. Founders are more likely to engage with profiles that have one.
+                </p>
+                <div className="mt-5">
+                  <VideoUploader
+                    currentVideo={{ filename: draft.video.fileName, uploadedAt: draft.video.uploadedAt }}
+                    onUploaded={(next) => setDraft((d) => ({ ...d, video: { fileName: next.filename, uploadedAt: next.uploadedAt } }))}
+                  />
+                </div>
+              </div>
             </div>
           )}
 

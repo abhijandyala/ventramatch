@@ -29,12 +29,12 @@ export function RealRecommendedRail(props: Props) {
   const empty = items.length === 0;
 
   return (
-    <section className="mb-5" aria-labelledby="real-rec-title">
-      <header className="mb-3 flex items-baseline justify-between gap-4">
+    <section className="mb-6" aria-labelledby="real-rec-title">
+      <header className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2
             id="real-rec-title"
-            className="text-[15px] font-semibold tracking-tight text-[var(--color-text)]"
+            className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--color-text-strong)]"
           >
             {kind === "investor" ? "New startups in your thesis" : "Investors who fit your raise"}
           </h2>
@@ -44,7 +44,7 @@ export function RealRecommendedRail(props: Props) {
         </div>
         <Link
           href={"/feed" as Route}
-          className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+          className="inline-flex shrink-0 items-center gap-1 text-[12px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
         >
           View all
           <ArrowRight aria-hidden size={12} strokeWidth={1.75} />
@@ -88,20 +88,34 @@ function StatsStrip({ stats }: { stats: ProfileStats }) {
     { label: "Saves received", value: stats.saves },
     { label: "Mutual matches", value: stats.matches },
   ];
+  const allZero = cells.every((c) => c.value === 0);
   return (
-    <ul className="grid grid-cols-3 border bg-[var(--color-surface)]" style={{ borderColor: "var(--color-border)" }}>
+    <ul
+      className="grid grid-cols-3 border bg-[var(--color-surface)]"
+      style={{ borderColor: "var(--color-border)" }}
+    >
       {cells.map((c, i) => (
         <li
           key={c.label}
-          className="px-4 py-3"
+          className="px-4 py-4"
           style={{
             borderRight: i < cells.length - 1 ? "1px solid var(--color-border)" : undefined,
           }}
         >
-          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-faint)]">
+          <p
+            className="font-mono text-[10px] uppercase tracking-[0.10em]"
+            style={{ color: "var(--color-text-faint)" }}
+          >
             {c.label}
           </p>
-          <p className="mt-1 font-mono text-[20px] font-semibold tabular-nums text-[var(--color-text-strong)]">
+          <p
+            className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums"
+            style={{
+              color: allZero
+                ? "var(--color-text-faint)"
+                : "var(--color-text-strong)",
+            }}
+          >
             {c.value.toLocaleString()}
           </p>
         </li>

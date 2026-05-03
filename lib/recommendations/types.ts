@@ -55,36 +55,116 @@ export type RecommendationProfile =
   | StartupRecommendation
   | InvestorRecommendation;
 
+export type TeamMember = {
+  name: string;
+  role: string;
+  background: string;
+  linkedinUrl?: string;
+  photoUrl?: string | null;
+};
+
+
 export type StartupRecommendation = {
   kind: "startup";
-  /** Stable id used as React key and for the future event log. */
   id: string;
   name: string;
-  /** One-sentence hook shown on the card hover and modal header. */
   tagline: string;
-  /** Longer paragraph describing the company. */
   description: string;
   sector: string;
   stage: StartupStage;
   location: string;
   foundingYear: number;
-  /** Who built it — short founder summary. */
-  founderSummary: string;
-  /** What they shipped or are shipping. */
-  product: string;
-  /** Traction story (revenue, users, partnerships, etc.). */
-  traction: string;
-  /** Human-readable funding ask, e.g. "$1.5M seed". */
-  fundingAsk: string;
-  /** What the round will pay for. */
-  useOfFunds: string;
-  /** Description of the kind of investor they want on the cap table. */
-  idealInvestor: string;
-  /** Domain hint shown in the modal footer ("acmelabs.example"). */
   websitePlaceholder: string;
-  /** Free-form keywords used by the placeholder ranking. */
   tags: string[];
   customerType: CustomerType;
+
+  /** Basics — founder identity (optional; can derive from teamMembers[0]) */
+  founder?: {
+    fullName: string;
+    role: string;
+    workEmail?: string;
+    linkedinUrl?: string;
+    photoUrl?: string | null;
+  };
+  website?: string;
+  productStatus?: string;
+
+  /** Traction */
+  traction: string;
+  mrr?: string;
+  customers?: string;
+  growthPct?: string;
+  notableSignals?: string;
+
+  /** Round */
+  fundingAsk: string;
+  useOfFunds: string;
+  instrument?: string;
+  valuationCap?: string;
+  minCheckSize?: string;
+
+  /** Pitch deck + video */
+  pitchDeckUrl?: string | null;
+  videoUrl?: string | null;
+  photos?: string[];
+
+  /** Team depth */
+  teamMembers?: TeamMember[];
+  advisors?: string[];
+  keyHiresNeeded?: string;
+  founderSummary: string;
+
+  /** Problem */
+  problemStatement?: string;
+  targetCustomer?: string;
+  currentAlternatives?: string;
+  whyAlternativesFail?: string;
+
+  /** Solution */
+  product: string;
+  keyFeatures?: string;
+  technicalMoat?: string;
+  roadmap?: string;
+
+  /** Market */
+  targetMarket?: string;
+  marketSize?: string;
+  marketTrend?: string;
+  beachheadMarket?: string;
+  whyNow?: string;
+
+  /** Competition */
+  competitors?: string[];
+  differentiation?: string;
+  whyWeWin?: string;
+  defensibility?: string;
+
+  /** Business model */
+  businessModel?: string;
+  revenueModel?: string;
+  pricing?: string;
+  grossMargin?: string;
+  salesCycle?: string;
+
+  /** Go-to-market */
+  gtmStrategy?: string;
+  plannedGtm?: string;
+  acquisitionChannels?: string[];
+
+  /** Risks */
+  risks?: string[];
+  biggestUnknown?: string;
+  failureScenario?: string;
+
+  /** Fundraise extras */
+  idealInvestor: string;
+  milestonesAfterRaise?: string[];
+  capTable?: { totalRaised?: string; founderEquity?: string; optionPool?: string };
+
+  /** Customer proof */
+  notableCustomers?: string;
+  customerProof?: string;
+  retentionEngagement?: string;
 };
 
 export type InvestorRecommendation = {

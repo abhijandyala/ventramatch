@@ -27,36 +27,39 @@ export function ProfileCompletionCard({
   return (
     <section
       aria-labelledby="profile-completion-title"
-      className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] p-5 flex flex-col h-full"
+      className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col"
     >
-      <header className="flex items-baseline justify-between">
+      {/* Header */}
+      <header className="flex items-baseline justify-between px-6 pt-6 pb-5 border-b border-[var(--color-border)]">
         <h3
           id="profile-completion-title"
-          className="text-[14px] leading-5 font-semibold tracking-tight text-[var(--color-text)]"
+          className="text-[13px] font-semibold tracking-tight text-[var(--color-text)]"
         >
           Profile completion
         </h3>
-        <span className="text-[12px] leading-4 font-medium text-[var(--color-text-faint)]">
+        <span className="text-[11px] font-medium text-[var(--color-text-faint)]">
           {band}
         </span>
       </header>
 
-      <div className="mt-5 flex items-center gap-5">
+      {/* Gauge + summary — stacked so it breathes in narrow sidebars */}
+      <div className="flex flex-col items-center gap-4 px-6 py-7 border-b border-[var(--color-border)]">
         <CircularGauge percent={clamped} offset={offset} />
-        <div className="flex-1 min-w-0">
+        <div className="w-full text-center">
           <p className="text-[14px] leading-5 font-semibold text-[var(--color-text)]">
             Almost there.
           </p>
-          <p className="mt-1 text-[12px] leading-4 text-[var(--color-text-muted)]">
+          <p className="mt-1.5 text-[12px] leading-[1.5] text-[var(--color-text-muted)]">
             Complete your profile to unlock more matches.
           </p>
-          <p className="mt-2 inline-flex items-center gap-1 font-mono text-[12px] leading-4 tabular-nums text-[var(--color-success)]">
+          <p className="mt-2 font-mono text-[11px] tabular-nums text-[var(--color-success)]">
             +{upliftPct}% more matches if completed
           </p>
         </div>
       </div>
 
-      <ul className="mt-5 flex flex-col gap-2 flex-1">
+      {/* Checklist */}
+      <ul className="divide-y divide-[var(--color-border)] flex-1">
         {checklist.map((item) => {
           const Icon = item.done ? Check : Circle;
           return (
@@ -64,8 +67,8 @@ export function ProfileCompletionCard({
               <Link
                 href={item.href as Route}
                 className={cn(
-                  "group flex items-center gap-2.5",
-                  "text-[13px] leading-5",
+                  "group flex items-center gap-2.5 px-5 py-3",
+                  "text-[12px] leading-[1.45]",
                   item.done
                     ? "text-[var(--color-text-muted)]"
                     : "text-[var(--color-text)]",
@@ -73,36 +76,40 @@ export function ProfileCompletionCard({
               >
                 <Icon
                   aria-hidden
-                  size={14}
-                  strokeWidth={1.75}
-                  className={
+                  size={12}
+                  strokeWidth={2}
+                  className={cn(
+                    "shrink-0",
                     item.done
                       ? "text-[var(--color-success)]"
-                      : "text-[var(--color-text-faint)]"
-                  }
+                      : "text-[var(--color-text-faint)]",
+                  )}
                 />
-                <span className="flex-1">{item.label}</span>
+                <span className="flex-1 truncate">{item.label}</span>
               </Link>
             </li>
           );
         })}
       </ul>
 
-      <Link
-        href={"/build" as Route}
-        className={cn(
-          "mt-6 inline-flex w-full items-center justify-center gap-1.5",
-          "h-10 px-4",
-          "rounded-none",
-          "text-[13px] font-semibold text-white",
-          "bg-[var(--color-brand-ink)]",
-          "transition-colors duration-[120ms] ease-out",
-          "hover:bg-[var(--color-brand-ink-hov)]",
-        )}
-      >
-        Finish profile
-        <ArrowRight aria-hidden size={14} strokeWidth={1.75} />
-      </Link>
+      {/* CTA */}
+      <div className="px-6 py-5 border-t border-[var(--color-border)]">
+        <Link
+          href={"/build" as Route}
+          className={cn(
+            "inline-flex w-full items-center justify-center gap-1.5",
+            "h-10 px-4",
+            "rounded-none",
+            "text-[13px] font-semibold text-white",
+            "bg-[var(--color-brand-ink)]",
+            "transition-colors duration-[120ms] ease-out",
+            "hover:bg-[var(--color-brand-ink-hov)]",
+          )}
+        >
+          Finish profile
+          <ArrowRight aria-hidden size={14} strokeWidth={1.75} />
+        </Link>
+      </div>
     </section>
   );
 }

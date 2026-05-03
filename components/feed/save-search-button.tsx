@@ -70,13 +70,7 @@ export function SaveSearchButton() {
     );
   }
 
-  if (!active) {
-    return (
-      <p className="text-[11.5px] text-[var(--color-text-faint)]">
-        Adjust filters to save this search.
-      </p>
-    );
-  }
+  if (!active) return null;
 
   if (stage === "idle") {
     return (

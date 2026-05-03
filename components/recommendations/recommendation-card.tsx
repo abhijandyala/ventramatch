@@ -1,13 +1,33 @@
 "use client";
 
+import { useState } from "react";
 import { Bookmark } from "lucide-react";
-import { Avatar } from "@/components/profile/avatar";
 import { cn } from "@/lib/utils";
 import type {
   InvestorRecommendation,
   RecommendationProfile,
   StartupRecommendation,
 } from "@/lib/recommendations/types";
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function CardLogo({ name }: { name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const localLogo = `/mock-assets/${slugify(name)}/logo.png`;
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden rounded-[var(--radius-sm)]">
+      {!failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={localLogo} alt={name} className="h-full w-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        <span className="text-[12px] font-semibold text-[var(--color-text-faint)]">{initials}</span>
+      )}
+    </div>
+  );
+}
 
 type Props = {
   profile: RecommendationProfile;
@@ -69,7 +89,7 @@ export function RecommendationCard({ profile, onSelect, saved = false, onToggleS
         className="flex flex-1 flex-col gap-3 text-left focus:outline-none"
       >
         <div className="flex items-center gap-3">
-          <Avatar id={profile.id} name={profile.name} size="md" />
+          <CardLogo name={profile.name} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[14px] font-semibold text-[color:var(--color-text)]">
               {profile.name}
