@@ -7,6 +7,11 @@ import type { AccountLabel } from "@/types/database";
  * on states that require user attention.
  *
  * Server component — pass in the label from the session.
+ *
+ * Phase 14c: accepts an optional `detailHref` that replaces the banner CTA
+ * with a link to the detailed application-status page, which shows
+ * decision_summary and user-friendly reason-code guidance without exposing
+ * any internal bot metadata.
  */
 
 type Tone = "info" | "success" | "warning" | "danger";
@@ -45,20 +50,23 @@ const STYLES: Record<Tone, { bg: string; border: string; text: string; titleText
   },
 };
 
-function bannerFor(label: AccountLabel): Banner | null {
+function bannerFor(label: AccountLabel, detailHref?: string): Banner | null {
   switch (label) {
     case "in_review":
       return {
         tone: "info",
         title: "Profile in review",
-        body: "We're checking your profile — usually under a minute. You'll get an email when it's approved.",
+        body: "We're checking your profile. You'll get an email when it's approved or if we need changes.",
+        // Phase 14c: link to detailed status page when available
+        cta: detailHref ? { label: "View status →", href: detailHref } : undefined,
       };
     case "rejected":
       return {
         tone: "warning",
-        title: "Resubmission needed",
-        body: "We couldn't approve your profile. Edit the flagged sections and submit again — you have one free resubmit.",
-        cta: { label: "Edit profile", href: "/build" },
+        title: "Updates needed",
+        body: "Your profile needs changes before it can be approved.",
+        // Phase 14c: link to detailed status page for decision_summary + reason codes
+        cta: { label: "View details →", href: detailHref ?? "/build" },
       };
     case "banned":
       return {
@@ -74,8 +82,15 @@ function bannerFor(label: AccountLabel): Banner | null {
   }
 }
 
-export function AccountStatusBanner({ label }: { label: AccountLabel }) {
-  const banner = bannerFor(label);
+export function AccountStatusBanner({
+  label,
+  detailHref,
+}: {
+  label: AccountLabel;
+  /** Optional URL to the detailed application-status page (Phase 14c). */
+  detailHref?: string;
+}) {
+  const banner = bannerFor(label, detailHref);
   if (!banner) return null;
 
   const s = STYLES[banner.tone];

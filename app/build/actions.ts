@@ -12,6 +12,9 @@ import {
 } from "@/lib/validation/applications";
 import { founderCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
 import type { ApplicationStatus, Database, ProfileState } from "@/types/database";
+import { flag } from "@/lib/flags";
+import { toStartupQualityInput } from "@/lib/quality/runtime/profile-adapters";
+import { runBotReviewAndPersist } from "@/lib/quality/runtime/run-bot-review";
 
 type StartupRow = Database["public"]["Tables"]["startups"]["Row"];
 
@@ -109,7 +112,8 @@ export async function submitFounderApplicationAction(
   // Server-side completion gate. Strict schema already requires the basics;
   // this catches richer "good enough" thresholds (deck length, traction,
   // location) before we accept the submission and burn a review pass.
-  const completion = founderCompletion(inputAsRow(userId, data));
+  const startupRow = inputAsRow(userId, data);
+  const completion = founderCompletion(startupRow);
   if (!completion.canPublish) {
     const missingLabels = completion.missing.slice(0, 3).map((m) => m.label).join(", ");
     console.log(
@@ -128,6 +132,19 @@ export async function submitFounderApplicationAction(
     );
     return { ok: false, error: transition.reason };
   }
+
+  // ── Phase 14a: check bot-review flag before opening the transaction ─────────
+  // The flag lookup uses Redis/DB cache (cacheable, 30 s); it must run outside
+  // the withUserRls transaction to avoid nested connection issues.
+  // The quality review computation is pure (< 10 ms, no I/O) so it also runs
+  // before the transaction and the result is persisted inside it.
+  // Default: false — feature is off until explicitly enabled via SQL insert.
+  const botReviewEnabled = await flag("quality_review_bot_writes", userId).catch(
+    (err) => {
+      console.error("[submitFounder] flag lookup failed — skipping bot review", err);
+      return false;
+    },
+  );
 
   try {
     await withUserRls(userId, async (sql) => {
@@ -215,6 +232,24 @@ export async function submitFounderApplicationAction(
            and sent_at is null
            and cancelled_at is null
       `;
+
+      // ── Phase 14a: bot quality review (advisory only) ──────────────────────
+      // Runs inside the same transaction so the persist is atomic with the
+      // submission writes above.  If it throws, the entire transaction rolls
+      // back — no partial state.  No user-facing emails are sent here.
+      if (botReviewEnabled) {
+        await runBotReviewAndPersist({
+          sql,
+          applicationId:  current.id,
+          userId,
+          // passNo = nextResubmitCount + 1 (1 for first submission,
+          // 2 after one resubmit, etc.)
+          passNo:         transition.nextResubmitCount + 1,
+          email:          session.user?.email ?? null,
+          profileKind:    "startup",
+          startupRow,
+        });
+      }
     });
   } catch (error) {
     console.error("[submitFounder] DB write failed", error);

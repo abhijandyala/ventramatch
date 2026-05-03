@@ -1,0 +1,6 @@
+# This directory holds generated ML artifacts from scripts/ml/train_synthetic_matching.py.
+# All generated files (*.png, *.csv, *.txt, *.md) are gitignored.
+# Only this .gitkeep is committed so the directory is tracked in git.
+#
+# Generate artifacts:
+#   npm run train:synthetic-matches

@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { Wordmark } from "@/components/landing/wordmark";
 
 const NAV = [
+  { label: "Reviews", href: "/admin/reviews" },
   { label: "Users", href: "/admin/users" },
   { label: "Reports", href: "/admin/reports" },
   { label: "Duplicates", href: "/admin/duplicates" },
