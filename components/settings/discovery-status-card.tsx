@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Route } from "next";
 import { cn } from "@/lib/utils";
 
+const DANGER_HREF = "/settings/danger";
+
 /**
  * Discovery & matching section content.
  * Server component — reads props computed by the page, no client state.
@@ -94,21 +96,21 @@ export function DiscoveryStatusCard({
             : "Your profile may appear in the discovery feed when it fits another user's filters and match score."}
         </p>
         {!isDeletionScheduled ? (
-          <a
-            href="#danger"
+          <Link
+            href={DANGER_HREF as Route}
             className="mt-2.5 inline-block pl-[18px] text-[12px] font-medium text-[var(--color-text-muted)] underline-offset-4 transition-colors hover:text-[var(--color-text-strong)] hover:underline"
           >
             {isHidden
-              ? "Resume discovery in Danger zone ↓"
-              : "Pause discovery in Danger zone ↓"}
-          </a>
+              ? "Resume discovery in Danger zone →"
+              : "Pause discovery in Danger zone →"}
+          </Link>
         ) : (
-          <a
-            href="#danger"
+          <Link
+            href={DANGER_HREF as Route}
             className="mt-2.5 inline-block pl-[18px] text-[12px] font-medium text-[var(--color-danger)] underline-offset-4 hover:underline"
           >
-            Cancel deletion in Danger zone ↓
-          </a>
+            Cancel deletion in Danger zone →
+          </Link>
         )}
       </div>
 
