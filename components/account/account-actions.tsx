@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { signOut } from "next-auth/react";
 import { LogOut, Trash2 } from "lucide-react";
 
@@ -33,12 +35,12 @@ export function AccountActions() {
             <span className="text-[13px] text-[color:var(--color-danger)]">
               This will schedule your account for deletion.
             </span>
-            <a
-              href="/settings#danger"
+            <Link
+              href={"/settings/danger" as Route}
               className="inline-flex h-10 items-center gap-2 rounded-[var(--radius)] border border-[color:var(--color-danger)] bg-white px-4 text-[13px] font-medium text-[color:var(--color-danger)] transition-colors hover:bg-red-50"
             >
-              Go to Settings
-            </a>
+              Go to Danger zone
+            </Link>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
