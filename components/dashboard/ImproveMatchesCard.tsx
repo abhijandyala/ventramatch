@@ -1,6 +1,5 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ImproveMatchItem } from "@/lib/dashboards/mock-data";
 
@@ -29,23 +28,17 @@ export function ImproveMatchesCard({
             <Link
               href={item.href as Route}
               className={cn(
-                "group flex items-center gap-3 py-3 first:pt-0 last:pb-0",
+                "flex items-center gap-3 py-3 first:pt-0 last:pb-0",
                 "text-[13px] leading-5",
                 "transition-colors duration-[120ms] ease-out",
               )}
             >
-              <span className="flex-1 min-w-0 text-[var(--color-text)]">
+              <span className="flex-1 min-w-0 truncate text-[var(--color-text)]">
                 {item.label}
               </span>
-              <span className="shrink-0 inline-flex items-center gap-1 font-mono text-[12px] leading-4 tabular-nums" style={{ color: "var(--color-brand)" }}>
+              <span className="shrink-0 font-mono text-[12px] leading-4 tabular-nums" style={{ color: "var(--color-brand)" }}>
                 +{item.estimatedDeltaPts} pts
               </span>
-              <ArrowRight
-                aria-hidden
-                size={12}
-                strokeWidth={1.75}
-                className="shrink-0 text-[var(--color-text-faint)] transition-transform duration-[120ms] ease-out group-hover:translate-x-0.5 group-hover:text-[var(--color-text-muted)]"
-              />
             </Link>
           </li>
         ))}
@@ -63,7 +56,6 @@ export function ImproveMatchesCard({
         style={{ backgroundColor: "var(--color-brand)" }}
       >
         Complete your profile ({Math.round(completionPct)}%)
-        <ArrowRight aria-hidden size={14} strokeWidth={1.75} />
       </Link>
     </>
   );

@@ -99,7 +99,7 @@ export default async function DashboardGroupLayout({
       <DeletionPendingBanner deletionRequestedAt={deletionRequestedAt} />
       <ProfileNudgeBanner profileState={profileState} role={role} />
       <VersionBumpModal tosOutdated={tosOutdated} privacyOutdated={privacyOutdated} />
-      {children}
+      <div className="min-h-screen bg-[var(--color-surface)]">{children}</div>
     </>
   );
 }

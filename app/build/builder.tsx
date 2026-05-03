@@ -14,6 +14,7 @@ import { Loader2, ArrowLeft, Linkedin } from "lucide-react";
 import { founderCompletion, MIN_PUBLISH_PCT } from "@/lib/profile/completion";
 import { FounderDepthEditor } from "@/components/profile/founder-depth-editor";
 import { DeckUploader } from "@/components/profile/deck-uploader";
+import { VideoUploader } from "@/components/profile/video-uploader";
 import { VerificationPanel, type OwnVerification, type OwnReference } from "@/components/profile/verification-panel";
 import type { StartupStage, AccountLabel, ProfileState } from "@/types/database";
 import type { StartupDepthView } from "@/lib/profile/visibility";
@@ -70,6 +71,7 @@ export type FounderUiDraft = {
     other: string;
   };
   deck: { url: string; fileName: string; uploadedAt: string | null };
+  video: { fileName: string | null; uploadedAt: string | null };
   founder: {
     fullName: string;
     role: string;
@@ -85,6 +87,7 @@ export const EMPTY_FOUNDER_DRAFT: FounderUiDraft = {
   round: { targetRaise: null },
   traction: { mrr: null, customers: null, growthPct: null, notableSignals: "", other: "" },
   deck: { url: "", fileName: "", uploadedAt: null },
+  video: { fileName: null, uploadedAt: null },
   founder: { fullName: "", role: "", workEmail: "", linkedinUrl: "" },
 };
 
@@ -166,7 +169,7 @@ const STEP_HEADERS = [
   { title: "What stage are you raising at?", sub: "We only show you investors who explicitly back your stage." },
   { title: "Tell us about the round.", sub: "Visible only to investors after both sides opt in." },
   { title: "What's your traction?", sub: "Be specific. Self-reported numbers are clearly labeled until verified." },
-  { title: "Add your deck.", sub: "Paste a link for now. Stays private until mutual interest unlocks." },
+  { title: "Add your deck & video.", sub: "Paste a deck link and optionally upload a product video. Both stay private until mutual interest." },
   { title: "Verify it's really you.", sub: "We verify identity before any startup profile activates." },
   { title: "Looking good. Review and publish.", sub: "Final pass before your profile goes live." },
 ];
@@ -267,6 +270,9 @@ export function FounderBuilder({
   }
   function patchDeck(p: Partial<FounderUiDraft["deck"]>) {
     setDraft((d) => ({ ...d, deck: { ...d.deck, ...p } }));
+  }
+  function patchVideo(p: Partial<FounderUiDraft["video"]>) {
+    setDraft((d) => ({ ...d, video: { ...d.video, ...p } }));
   }
   function patchFounder(p: Partial<FounderUiDraft["founder"]>) {
     setDraft((d) => ({ ...d, founder: { ...d.founder, ...p } }));
@@ -470,7 +476,7 @@ export function FounderBuilder({
                     {step === 2 && <StageStep draft={draft} setStage={(s) => setDraft((d) => ({ ...d, stage: s }))} />}
                     {step === 3 && <RoundStep draft={draft} patch={patchRound} errors={errors} />}
                     {step === 4 && <TractionStep draft={draft} patch={patchTraction} />}
-                    {step === 5 && <DeckStep draft={draft} patch={patchDeck} errors={errors} />}
+                    {step === 5 && <DeckStep draft={draft} patch={patchDeck} patchVideo={patchVideo} errors={errors} />}
                     {step === 6 && <FounderStep draft={draft} patch={patchFounder} errors={errors} />}
                     {step === 7 && <ReviewStep draft={draft} fieldErrors={errors} />}
                   </div>
@@ -786,19 +792,28 @@ function TractionStep({ draft, patch }: { draft: FounderUiDraft; patch: (p: Part
   );
 }
 
-function DeckStep({ draft, patch, errors }: { draft: FounderUiDraft; patch: (p: Partial<FounderUiDraft["deck"]>) => void; errors: Record<string, string> }) {
+function DeckStep({ draft, patch, patchVideo, errors }: { draft: FounderUiDraft; patch: (p: Partial<FounderUiDraft["deck"]>) => void; patchVideo: (p: Partial<FounderUiDraft["video"]>) => void; errors: Record<string, string> }) {
   return (
-    <div className="space-y-5">
-      <DeckUploader
-        currentDeck={{ filename: draft.deck.fileName || null, uploadedAt: draft.deck.uploadedAt }}
-        urlValue={draft.deck.url}
-        onUrlChange={(v) => patch({ url: v })}
-        onUploaded={(next) => patch({ fileName: next.filename, uploadedAt: next.filename ? next.uploadedAt : null })}
+    <div className="space-y-8">
+      <div className="space-y-5">
+        <DeckUploader
+          currentDeck={{ filename: draft.deck.fileName || null, uploadedAt: draft.deck.uploadedAt }}
+          urlValue={draft.deck.url}
+          onUrlChange={(v) => patch({ url: v })}
+          onUploaded={(next) => patch({ fileName: next.filename, uploadedAt: next.filename ? next.uploadedAt : null })}
+        />
+        {errors.deckUrl && <p className="text-[12px] text-[color:var(--color-danger)]">{errors.deckUrl}</p>}
+        <p className="text-[13px] text-[color:var(--color-text-faint)]">
+          Your deck stays private until mutual interest is established.
+        </p>
+      </div>
+
+      <hr className="border-[color:var(--color-border)]" />
+
+      <VideoUploader
+        currentVideo={{ filename: draft.video.fileName, uploadedAt: draft.video.uploadedAt }}
+        onUploaded={(next) => patchVideo({ fileName: next.filename, uploadedAt: next.uploadedAt })}
       />
-      {errors.deckUrl && <p className="text-[12px] text-[color:var(--color-danger)]">{errors.deckUrl}</p>}
-      <p className="text-[13px] text-[color:var(--color-text-faint)]">
-        Your deck stays private until mutual interest is established.
-      </p>
     </div>
   );
 }

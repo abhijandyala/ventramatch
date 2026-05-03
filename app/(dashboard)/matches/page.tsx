@@ -49,6 +49,7 @@ export default async function MatchesPage() {
       oneLiner: m.targetOneLiner,
       chips: buildMockChips(m.targetIndustry, m.targetStage, m.targetSectors),
       score: m.matchScore,
+      breakdown: m.matchBreakdown,
       avatarSrc: m.avatarSrc,
       otherRole: viewerRole === "founder" ? "investor" as const : "founder" as const,
     }));
@@ -57,39 +58,13 @@ export default async function MatchesPage() {
   console.log(`[matches] userId=${userId} real=${realMatches.length} cards=${cards.length}`);
 
   return (
-    <>
-      <section className="relative overflow-hidden border-b border-[var(--color-border)]">
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 -z-10 h-[180px]",
-            "bg-[radial-gradient(60%_60%_at_15%_0%,var(--color-brand-tint)_0%,transparent_70%)]",
-            "opacity-70",
-          )}
-        />
-        <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 py-5 sm:py-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-text-faint)]">
-            Matches
-          </p>
-          <h1 className="mt-1 text-[20px] font-semibold tracking-[-0.015em] text-[var(--color-text)]">
-            Review profiles
-          </h1>
-          <p className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">
-            Swipe through matches. Click MATCH to save or PASS to skip.
-          </p>
-        </div>
-      </section>
-
-      <main className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 py-8">
-        <AccountStatusBanner label={accountLabel} />
-
-        <MatchCardDeck cards={cards} />
-
-        <p className="mt-12 text-center text-[12px] leading-[1.6] text-[var(--color-text-faint)]">
-          VentraMatch surfaces mutual interest. It does not recommend investments or promise funding.
-        </p>
-      </main>
-    </>
+    <main className="flex flex-col">
+      <AccountStatusBanner label={accountLabel} />
+      <MatchCardDeck cards={cards} />
+      <p className="py-3 text-center text-[11px] text-[var(--color-text-faint)] border-t border-[var(--color-border)]">
+        VentraMatch surfaces mutual interest. It does not recommend investments or promise funding.
+      </p>
+    </main>
   );
 }
 

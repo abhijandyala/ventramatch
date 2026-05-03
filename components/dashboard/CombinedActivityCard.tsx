@@ -54,7 +54,7 @@ export function CombinedActivityCard({ actions, activity }: CombinedActivityCard
                 aria-hidden
                 className={cn(
                   "shrink-0 inline-flex items-center justify-center",
-                  "w-9 h-9 rounded-full",
+                  "w-8 h-8 rounded-none",
                   "bg-[var(--color-brand-tint)] text-[var(--color-brand-ink)]",
                 )}
               >

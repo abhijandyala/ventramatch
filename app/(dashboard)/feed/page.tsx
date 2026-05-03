@@ -1,9 +1,7 @@
-import type { Route } from "next";
 import { Suspense } from "react";
-import Link from "next/link";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { MobileFilterToggle } from "@/components/feed/mobile-filter-toggle";
+import { FeedToolbar } from "@/components/feed/feed-toolbar";
 import {
   fetchFeedForFounder,
   fetchFeedForInvestor,
@@ -15,12 +13,9 @@ import { parseFeedFilters, type FeedFilters } from "@/lib/feed/filters";
 import { AccountStatusBanner } from "@/components/account/account-status-banner";
 import { IntroInboxBanner } from "@/components/intros/intro-inbox-banner";
 import { FeedCard } from "@/components/feed/feed-card";
-import { FilterPanel } from "@/components/feed/filter-panel";
 import { ActiveFiltersStrip } from "@/components/feed/active-filters-strip";
-import { SaveSearchButton } from "@/components/feed/save-search-button";
-import { Disclaimer } from "@/components/common/Disclaimer";
 import type { AccountLabel } from "@/types/database";
-import { cn } from "@/lib/utils";
+
 import {
   mockFeedForFounder,
   mockFeedForInvestor,
@@ -130,13 +125,13 @@ export default async function FeedPage({
     role === "founder"
       ? (realItems as unknown as FeedInvestorCard[]).length > 0
         ? (realItems as unknown as FeedInvestorCard[])
-        : mockFeedForFounder()
+        : mockFeedForFounder(filters)
       : [];
   const investorItems =
     role !== "founder"
       ? (realItems as unknown as FeedStartupCard[]).length > 0
         ? (realItems as unknown as FeedStartupCard[])
-        : mockFeedForInvestor()
+        : mockFeedForInvestor(filters)
       : [];
 
   return (
@@ -174,71 +169,51 @@ function FeedShell({
 }) {
   return (
     <>
-      <FeedHeader
-        eyebrow="Discovery"
-        title={role === "founder" ? "Investors who back your stage" : "Startups in your thesis"}
-        subtitle={
-          filters.q
-            ? `Searching: "${filters.q}"`
-            : "Verified profiles only. Filters and search live in the URL — share or save them."
-        }
-      />
-
-      <main className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-6">
-        <IntroInboxBanner counts={introCounts} />
-        <AccountStatusBanner label={accountLabel} />
-        <Disclaimer />
-
-        {/* Mobile: show a toggle button that opens filters in a drawer */}
-        <div className="mt-4 lg:hidden">
-          <Suspense fallback={null}>
-            <MobileFilterToggle role={role} />
-          </Suspense>
+      {/* Minimal header */}
+      <section className="border-b border-[var(--color-border)]">
+        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-4 sm:py-5">
+          <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-[var(--color-text)]">Feed</h1>
         </div>
+      </section>
 
-        <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
-          {/* Desktop sidebar — hidden on mobile (handled by drawer above) */}
-          <div className="hidden lg:sticky lg:top-6 lg:block lg:self-start">
-            <Suspense fallback={<FilterPanelFallback />}>
-              <FilterPanel role={role} />
+      <main className="w-full py-5">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6">
+          <IntroInboxBanner counts={introCounts} />
+          <AccountStatusBanner label={accountLabel} />
+
+          {/* Toolbar: filter toggle + saved + active chips */}
+          <div className="flex items-center gap-3 border-b border-[var(--color-border)] pb-3">
+            <Suspense fallback={null}>
+              <FeedToolbar role={role} />
             </Suspense>
-            <div className="mt-3">
-              <Suspense fallback={null}>
-                <SaveSearchButton />
-              </Suspense>
-            </div>
           </div>
 
-          <section className="min-w-0">
+          {/* Active filter chips */}
+          <div className="mt-3">
             <Suspense fallback={null}>
               <ActiveFiltersStrip />
             </Suspense>
-            {children}
-          </section>
+          </div>
         </div>
 
-        <FeedFooter />
+        {/* Feed grid */}
+        <section className="mx-auto mt-4 max-w-[1440px] px-4 sm:px-6">
+          {children}
+        </section>
+
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6">
+          <FeedFooter />
+        </div>
       </main>
     </>
   );
 }
 
-function FilterPanelFallback() {
-  return (
-    <div
-      className="border bg-[var(--color-surface)] p-4"
-      style={{ borderColor: "var(--color-border)" }}
-    >
-      <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--color-text-faint)]">
-        Loading filters…
-      </p>
-    </div>
-  );
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 //  Bodies
 // ──────────────────────────────────────────────────────────────────────────
+
 
 function InvestorFeedBody({
   items,
@@ -259,15 +234,17 @@ function InvestorFeedBody({
           }
         />
       ) : (
-        <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {items.map((it) => (
-            <li key={it.card.userId}>
-              <FeedCard
-                kind="startup"
-                data={it.card}
-                match={it.match}
-                viewerAction={it.viewerAction}
-              />
+        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ borderTop: "1.5px solid oklch(80% 0.015 235)", borderLeft: "1.5px solid oklch(80% 0.015 235)" }}>
+          {items.map((it, i) => (
+            <li
+              key={it.card.userId}
+              className="relative min-h-[220px] min-w-0 bg-white"
+              style={{
+                borderRight: "1.5px solid oklch(80% 0.015 235)",
+                borderBottom: "3px solid oklch(78% 0.018 235)",
+              }}
+            >
+              <FeedCard kind="startup" data={it.card} match={it.match} viewerAction={it.viewerAction} col={i % 3} />
             </li>
           ))}
         </ul>
@@ -295,15 +272,17 @@ function FounderFeedBody({
           }
         />
       ) : (
-        <ul className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {items.map((it) => (
-            <li key={it.card.userId}>
-              <FeedCard
-                kind="investor"
-                data={it.card}
-                match={it.match}
-                viewerAction={it.viewerAction}
-              />
+        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ borderTop: "1.5px solid oklch(80% 0.015 235)", borderLeft: "1.5px solid oklch(80% 0.015 235)" }}>
+          {items.map((it, i) => (
+            <li
+              key={it.card.userId}
+              className="relative min-h-[220px] min-w-0 bg-white"
+              style={{
+                borderRight: "1.5px solid oklch(80% 0.015 235)",
+                borderBottom: "3px solid oklch(78% 0.018 235)",
+              }}
+            >
+              <FeedCard kind="investor" data={it.card} match={it.match} viewerAction={it.viewerAction} col={i % 3} />
             </li>
           ))}
         </ul>
@@ -316,50 +295,13 @@ function FounderFeedBody({
 //  Misc presentation
 // ──────────────────────────────────────────────────────────────────────────
 
-function FeedHeader({
-  eyebrow,
-  title,
-  subtitle,
-}: {
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <section className="relative overflow-hidden border-b border-[var(--color-border)]">
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 -z-10 h-[180px]",
-          "bg-[radial-gradient(60%_60%_at_15%_0%,var(--color-brand-tint)_0%,transparent_70%)]",
-          "opacity-70",
-        )}
-      />
-      <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 sm:py-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-text-faint)]">
-          {eyebrow}
-        </p>
-        <h1 className="mt-1 text-[20px] font-semibold tracking-[-0.015em] text-[var(--color-text)]">
-          {title}
-        </h1>
-        <p className="mt-0.5 text-[13px] text-[var(--color-text-muted)]">{subtitle}</p>
-      </div>
-    </section>
-  );
-}
 
 function ResultsHeader({ count, filters }: { count: number; filters: FeedFilters }) {
   return (
-    <header className="mb-3 flex items-baseline justify-between gap-3">
+    <header className="mb-3">
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--color-text-faint)]">
         {count} result{count === 1 ? "" : "s"} · sorted by {filters.sort === "score" ? "best match" : "most recent"}
       </p>
-      <Link
-        href={"/searches" as Route}
-        className="text-[12px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-strong)]"
-      >
-        Saved searches →
-      </Link>
     </header>
   );
 }

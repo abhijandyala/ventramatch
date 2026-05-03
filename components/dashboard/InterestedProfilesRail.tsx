@@ -1,12 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Avatar } from "@/components/profile/avatar";
 import { RecommendationProfileModal } from "@/components/recommendations/recommendation-profile-modal";
 import { MOCK_STARTUPS, MOCK_INVESTORS } from "@/lib/recommendations/mock-profiles";
 import type { RecommendationProfile } from "@/lib/recommendations/types";
 import { cn } from "@/lib/utils";
-import { Bookmark, X } from "lucide-react";
+import { X } from "lucide-react";
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function ProfileLogo({ name }: { name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const localLogo = `/mock-assets/${slugify(name)}/logo.png`;
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden">
+      {!failed ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={localLogo} alt={name} className="h-full w-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        <span className="text-[12px] font-semibold text-[var(--color-text-faint)]">{initials}</span>
+      )}
+    </div>
+  );
+}
 
 const SAVED_KEY = "vm:interested-profiles";
 const ALL_PROFILES: RecommendationProfile[] = [...MOCK_STARTUPS, ...MOCK_INVESTORS];
@@ -70,10 +89,9 @@ export function InterestedProfilesRail() {
   if (profiles.length === 0) return null;
 
   return (
-    <section className="mb-5">
-      <div className="mb-3 flex items-center gap-2">
-        <Bookmark className="h-4 w-4 text-[color:var(--color-brand)]" strokeWidth={1.75} fill="currentColor" />
-        <h2 className="text-[14px] font-semibold text-[color:var(--color-text)]">
+    <section className="border-b border-[color:var(--color-border)] py-7">
+      <div className="mb-4 flex items-baseline gap-2.5">
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-[color:var(--color-text-strong)]">
           You&apos;re interested in
         </h2>
         <span className="text-[12px] text-[color:var(--color-text-faint)]">
@@ -86,7 +104,7 @@ export function InterestedProfilesRail() {
           <div
             key={profile.id}
             className={cn(
-              "group relative flex items-center gap-3 rounded-[var(--radius-md)]",
+              "group relative flex min-w-0 items-center gap-3 overflow-hidden rounded-[var(--radius-md)]",
               "border border-[color:var(--color-border)] bg-white p-4",
               "transition-colors duration-150 hover:border-[color:var(--color-text-faint)]",
             )}
@@ -107,9 +125,9 @@ export function InterestedProfilesRail() {
             <button
               type="button"
               onClick={() => setSelected(profile)}
-              className="flex flex-1 items-center gap-3 text-left focus:outline-none"
+              className="flex flex-1 min-w-0 items-center gap-3 text-left focus:outline-none"
             >
-              <Avatar id={profile.id} name={profile.name} size="md" />
+              <ProfileLogo name={profile.name} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-semibold text-[color:var(--color-text)]">
                   {profile.name}

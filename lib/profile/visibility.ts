@@ -65,6 +65,8 @@ export type StartupPublic = {
   /** Tier 2 only: empty for tier-1. */
   raiseAmount: null;
   traction: null;
+  /** S3 video URL, null if not uploaded. Plays on hover in the feed. */
+  videoUrl?: string | null;
 };
 
 export type StartupFull = Omit<StartupRow, "created_at" | "updated_at">;
@@ -159,6 +161,8 @@ export type InvestorPublic = {
   checkMin: 0;
   checkMax: 0;
   thesis: null;
+  /** S3 video URL, null if not uploaded. Plays on hover in the feed. */
+  videoUrl?: string | null;
 };
 
 export type InvestorFull = Omit<InvestorRow, "created_at" | "updated_at">;

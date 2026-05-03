@@ -11,18 +11,19 @@ import {
 } from "@/lib/dashboards/mock-data";
 import { StatBlock } from "@/components/dashboard/StatBlock";
 import { ActionRequiredCard } from "@/components/dashboard/ActionRequiredCard";
-import { ProfilePerformanceCard } from "@/components/dashboard/ProfilePerformanceCard";
 import { ImproveMatchesCard } from "@/components/dashboard/ImproveMatchesCard";
-import { ProfileCompletionCard } from "@/components/dashboard/ProfileCompletionCard";
 import { CombinedActivityCard } from "@/components/dashboard/CombinedActivityCard";
 import { WhyYouAreAGreatFitCard } from "@/components/dashboard/WhyYouAreAGreatFitCard";
+import { ProfileCompletionCard } from "@/components/dashboard/ProfileCompletionCard";
+import { ActivityStatsCard } from "@/components/dashboard/ActivityStatsCard";
+import { EngagementChart } from "@/components/dashboard/EngagementChart";
+import { PerformanceStatsRow } from "@/components/dashboard/PerformanceStatsRow";
 import { Disclaimer } from "@/components/common/Disclaimer";
 import { AccountStatusBanner } from "@/components/account/account-status-banner";
 import { flag } from "@/lib/flags";
 import { logFeedImpressions } from "@/lib/feed/impression-log";
 import { computeShadowScores } from "@/lib/feed/shadow-score";
 import { rankFeedForViewer } from "@/lib/feed/ml-ranker";
-import { ProfileCompletionPrompt } from "@/components/account/profile-completion-prompt";
 import { RealRecommendedRail } from "@/components/dashboard/RealRecommendedRail";
 import { RecentViewersRail } from "@/components/dashboard/RecentViewersRail";
 import type { CompletionResult } from "@/lib/profile/completion";
@@ -52,6 +53,11 @@ import type { AccountLabel } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { AccountActions } from "@/components/account/account-actions";
 import { InterestedProfilesRail } from "@/components/dashboard/InterestedProfilesRail";
+import { WatchlistRail } from "@/components/dashboard/WatchlistRail";
+import { RecommendedForYouRail } from "@/components/dashboard/RecommendedForYouRail";
+import { MatchRadarChart } from "@/components/dashboard/MatchRadarChart";
+import { ProfilePerformanceGraph } from "@/components/dashboard/ProfilePerformanceGraph";
+import { founderMatchAxes, investorMatchAxes, founderPerformanceData, investorPerformanceData } from "@/lib/dashboards/chart-data";
 
 export const dynamic = "force-dynamic";
 
@@ -198,106 +204,134 @@ function FounderDashboard({
   recentViewers: RecentViewer[];
 }) {
   const data = founderDashboardMock;
-  const profileComplete = completion.pct >= 100;
   const checklist = completionToChecklist(completion);
 
   return (
-    <>
-      <section className="relative overflow-hidden border-b border-[var(--color-border)]">
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 -z-10 h-[180px]",
-            "bg-[radial-gradient(60%_60%_at_15%_0%,var(--color-brand-tint)_0%,transparent_70%)]",
-            "opacity-70",
-          )}
-        />
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 sm:py-6">
-          <p className="text-[11px] leading-4 font-medium tracking-[0.08em] uppercase text-[var(--color-text-faint)]">
-            Founder dashboard
-          </p>
-          <h1 className="mt-1 text-[20px] leading-7 font-semibold tracking-[-0.015em] text-[var(--color-text)]">
-            Welcome back, {firstName}.
-          </h1>
-          <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            {stats.likes} likes · {stats.saves} saves received · {recentViewers.length} unique profile viewers
-            (30 days).
-          </p>
-        </div>
-      </section>
+    <main className="dashboard mx-auto w-full max-w-[1440px] px-5 sm:px-8 py-8 lg:py-10">
+      {/* Banners */}
+      <IntroInboxBanner counts={introCounts} />
+      <PublishedBanner />
+      <AccountStatusBanner label={accountLabel} />
 
-      <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
-        <IntroInboxBanner counts={introCounts} />
-        <PublishedBanner />
-        <AccountStatusBanner label={accountLabel} detailHref="/application-status" />
-        <ProfileCompletionPrompt
-          completion={completion}
-          accountLabel={accountLabel}
-          ctaHref="/build"
-        />
-        <InterestedProfilesRail />
-        <RealRecommendedRail kind="founder" items={feedItems} stats={stats} />
-        <RecentViewersRail viewers={recentViewers} />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
-          <section className="lg:col-span-8 flex flex-col gap-5">
-            <Disclaimer />
-            <FeedCtaStrip
-              href="/feed"
-              message="Open the full investor discovery feed"
-              sub="Filters, saved searches, and URL-shareable results"
-            />
-          </section>
+      {/* Three-panel grid: left(xl) | main | right */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] xl:grid-cols-[256px_1fr_320px] lg:items-start">
 
-          <aside className="lg:col-span-4 flex flex-col">
-            <div className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
-              <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
-                <ActionRequiredCard items={data.actionRequired} borderless />
-              </RailSection>
-              <SectionDivider />
-              <RailSection title="Profile performance" aside="(this month)">
-                <ProfilePerformanceCard
-                  stats={data.profilePerformance.stats}
-                  series={data.profilePerformance.series}
-                  borderless
-                />
-              </RailSection>
-              <SectionDivider />
-              <RailSection title="How to improve your matches">
-                <ImproveMatchesCard
-                  items={data.improveMatches}
-                  completionPct={completion.pct}
-                  completeHref="/build"
-                  borderless
-                />
-              </RailSection>
+        {/* ── Left sidebar (xl only) ── */}
+        <aside className="hidden xl:flex flex-col gap-4">
+          <ProfileCompletionCard
+            percent={completion.pct}
+            band={bandFromPct(completion.pct)}
+            upliftPct={completionUpliftEstimate(completion)}
+            checklist={checklist}
+          />
+        </aside>
+
+        {/* ── Main content ── */}
+        <div className="min-w-0">
+          {/* Welcome header */}
+          <div className="border-b border-[var(--color-border)] pb-7">
+            <p className="text-[10.5px] font-semibold tracking-[0.12em] uppercase text-[var(--color-text-faint)]">
+              Founder dashboard
+            </p>
+            <h1 className="mt-1.5 text-[22px] sm:text-[26px] leading-[1.25] font-semibold tracking-[-0.018em] text-[var(--color-text-strong)]">
+              Welcome back, {firstName}.
+            </h1>
+            <p className="mt-1 text-[13px] text-[var(--color-text-muted)]">
+              Here&apos;s what&apos;s happening with your venture today.
+            </p>
+          </div>
+
+          {/* Interested profiles — client component, renders null when empty */}
+          <InterestedProfilesRail />
+
+          {/* Watchlist — client component, renders null when empty */}
+          <WatchlistRail />
+
+          {/* Remaining sections separated by thin ruled lines */}
+          <div className="divide-y divide-[var(--color-border)]">
+            <div className="py-7">
+              <RealRecommendedRail kind="founder" items={feedItems} stats={stats} />
             </div>
-          </aside>
+            <div className="py-7">
+              <RecommendedForYouRail role="founder" />
+            </div>
+            <div className="py-7">
+              <RecentViewersRail viewers={recentViewers} />
+            </div>
+            <div className="py-7">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <CombinedActivityCard
+                  actions={data.actionRequired}
+                  activity={data.investorActivity}
+                />
+                <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
+              </div>
+            </div>
+          </div>
         </div>
 
-        <section
-          aria-label="Profile and activity overview"
-          className={cn(
-            "mt-5 grid grid-cols-1 gap-3",
-            profileComplete ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
-          )}
-        >
-          {!profileComplete && (
+        {/* ── Right sidebar ── */}
+        <aside className="flex flex-col gap-5">
+          {/* Profile completion card shown here at lg (left sidebar is hidden) */}
+          <div className="xl:hidden">
             <ProfileCompletionCard
               percent={completion.pct}
               band={bandFromPct(completion.pct)}
               upliftPct={completionUpliftEstimate(completion)}
               checklist={checklist}
             />
-          )}
-          <CombinedActivityCard
-            actions={data.actionRequired}
-            activity={data.investorActivity}
+          </div>
+          <ActivityStatsCard stats={stats} viewerCount={recentViewers.length} />
+          <div className="border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+            <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
+              <ActionRequiredCard items={data.actionRequired} borderless />
+            </RailSection>
+            <SectionDivider />
+            <RailSection title="Improve your matches">
+              <ImproveMatchesCard
+                items={data.improveMatches}
+                completionPct={completion.pct}
+                completeHref="/build"
+                borderless
+              />
+            </RailSection>
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Full-width analytics — break out of parent padding ── */}
+      <div className="-mx-5 sm:-mx-8 mt-2 divide-y divide-[var(--color-border)]">
+        <div className="px-5 sm:px-8 py-7">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <MatchRadarChart
+              axes={founderMatchAxes(completion.pct)}
+              title="Match analysis"
+            />
+            <EngagementChart
+              series={data.profilePerformance.series}
+              label="Profile engagement"
+              periodLabel="Last 8 weeks"
+            />
+          </div>
+        </div>
+        <div className="px-5 sm:px-8 py-7">
+          <ProfilePerformanceGraph {...founderPerformanceData} />
+        </div>
+        <div className="px-5 sm:px-8 py-7">
+          <PerformanceStatsRow stats={data.profilePerformance.stats} />
+        </div>
+        <div className="px-5 sm:px-8 py-7">
+          <Disclaimer />
+          <FeedCtaStrip
+            href="/feed"
+            message="Open the full investor discovery feed"
+            sub="Filters, saved searches, and URL-shareable results"
           />
-          <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
-        </section>
-        <AccountActions />
-      </main>
-    </>
+        </div>
+      </div>
+
+      <AccountActions />
+    </main>
   );
 }
 
@@ -319,107 +353,128 @@ function InvestorDashboard({
   recentViewers: RecentViewer[];
 }) {
   const data = investorFeedMock;
-  const profileComplete = completion.pct >= 100;
   const checklist = completionToChecklist(completion);
 
   return (
-    <>
-      <section className="relative overflow-hidden border-b border-[var(--color-border)]">
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 -z-10 h-[180px]",
-            "bg-[radial-gradient(60%_60%_at_15%_0%,var(--color-brand-tint)_0%,transparent_70%)]",
-            "opacity-70",
-          )}
-        />
-        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 sm:py-6">
-          <p className="text-[11px] leading-4 font-medium tracking-[0.08em] uppercase text-[var(--color-text-faint)]">
-            Investor dashboard
-          </p>
-          <h1 className="mt-1 text-[20px] leading-7 font-semibold tracking-[-0.015em] text-[var(--color-text)]">
-            Welcome back, {firstName}.
-          </h1>
-          <p className="mt-0.5 text-[13px] leading-5 text-[var(--color-text-muted)]">
-            {feedItems.length} startups in your live top picks · {stats.matches} mutual matches ·{" "}
-            {recentViewers.length} thesis profile views (30 days).
-          </p>
-        </div>
-      </section>
+    <main className="dashboard mx-auto w-full max-w-[1440px] px-5 sm:px-8 py-8 lg:py-10">
+      {/* Banners */}
+      <IntroInboxBanner counts={introCounts} />
+      <PublishedBanner />
+      <AccountStatusBanner label={accountLabel} />
 
-      <main className="dashboard mx-auto w-full max-w-[1440px] px-4 sm:px-6 py-5 lg:py-6">
-        <IntroInboxBanner counts={introCounts} />
-        <PublishedBanner />
-        <AccountStatusBanner label={accountLabel} detailHref="/application-status" />
-        <ProfileCompletionPrompt
-          completion={completion}
-          accountLabel={accountLabel}
-          ctaHref="/build/investor"
-        />
-        <InterestedProfilesRail />
-        <RealRecommendedRail kind="investor" items={feedItems} stats={stats} />
-        <RecentViewersRail viewers={recentViewers} />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-5">
-          <section className="lg:col-span-8 flex flex-col gap-5">
-            <PipelineFunnelSection activity={data.activity} />
-            <Disclaimer />
-            <FeedCtaStrip
-              href="/feed"
-              message="Open the full startup discovery feed"
-              sub="Filters, saved searches, and URL-shareable results"
-            />
-          </section>
+      {/* Three-panel grid: left(xl) | main | right */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] xl:grid-cols-[256px_1fr_320px] lg:items-start">
 
-          <aside className="lg:col-span-4 flex flex-col">
-            <div className="rounded-none border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
-              <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
-                <ActionRequiredCard items={data.actionRequired} borderless />
-              </RailSection>
-              <SectionDivider />
-              <RailSection title="Profile performance" aside="(this month)">
-                <ProfilePerformanceCard
-                  stats={data.profilePerformance.stats}
-                  series={data.profilePerformance.series}
-                  borderless
-                />
-              </RailSection>
-              <SectionDivider />
-              <RailSection title="How to improve your matches">
-                <ImproveMatchesCard
-                  items={data.improveMatches}
-                  completionPct={completion.pct}
-                  completeHref="/build/investor"
-                  borderless
-                />
-              </RailSection>
+        {/* ── Left sidebar (xl only) ── */}
+        <aside className="hidden xl:flex flex-col gap-4">
+          <ProfileCompletionCard
+            percent={completion.pct}
+            band={bandFromPct(completion.pct)}
+            upliftPct={completionUpliftEstimate(completion)}
+            checklist={checklist}
+          />
+        </aside>
+
+        {/* ── Main content ── */}
+        <div className="min-w-0">
+          {/* Welcome header */}
+          <div className="border-b border-[var(--color-border)] pb-7">
+            <p className="text-[10.5px] font-semibold tracking-[0.12em] uppercase text-[var(--color-text-faint)]">
+              Investor dashboard
+            </p>
+            <h1 className="mt-1.5 text-[22px] sm:text-[26px] leading-[1.25] font-semibold tracking-[-0.018em] text-[var(--color-text-strong)]">
+              Welcome back, {firstName}.
+            </h1>
+            <p className="mt-1 text-[13px] text-[var(--color-text-muted)]">
+              Here&apos;s what&apos;s happening with your deal flow today.
+            </p>
+          </div>
+
+          {/* Interested profiles — client component, renders null when empty */}
+          <InterestedProfilesRail />
+
+          {/* Watchlist — client component, renders null when empty */}
+          <WatchlistRail />
+
+          {/* Remaining sections separated by thin ruled lines */}
+          <div className="divide-y divide-[var(--color-border)]">
+            <div className="py-7">
+              <RealRecommendedRail kind="investor" items={feedItems} stats={stats} />
             </div>
-          </aside>
+            <div className="py-7">
+              <RecommendedForYouRail role="investor" />
+            </div>
+            <div className="py-7">
+              <RecentViewersRail viewers={recentViewers} />
+            </div>
+          </div>
         </div>
 
-        <section
-          aria-label="Pipeline and activity overview"
-          className={cn(
-            "mt-5 grid grid-cols-1 gap-3",
-            profileComplete ? "md:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
-          )}
-        >
-          {!profileComplete && (
+        {/* ── Right sidebar ── */}
+        <aside className="flex flex-col gap-5">
+          {/* Profile completion card shown here at lg (left sidebar is hidden) */}
+          <div className="xl:hidden">
             <ProfileCompletionCard
               percent={completion.pct}
               band={bandFromPct(completion.pct)}
               upliftPct={completionUpliftEstimate(completion)}
               checklist={checklist}
             />
-          )}
-          <CombinedActivityCard
-            actions={data.actionRequired}
-            activity={data.startupActivity}
+          </div>
+          <ActivityStatsCard stats={stats} viewerCount={recentViewers.length} />
+          <div className="border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+            <RailSection title="Action required" aside={`${data.actionRequired.length} items`}>
+              <ActionRequiredCard items={data.actionRequired} borderless />
+            </RailSection>
+            <SectionDivider />
+            <RailSection title="Improve your matches">
+              <ImproveMatchesCard
+                items={data.improveMatches}
+                completionPct={completion.pct}
+                completeHref="/build/investor"
+                borderless
+              />
+            </RailSection>
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Full-width analytics — break out of parent padding ── */}
+      <div className="-mx-5 sm:-mx-8 mt-2 divide-y divide-[var(--color-border)]">
+        <div className="px-5 sm:px-8 py-7">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <MatchRadarChart
+              axes={investorMatchAxes(completion.pct)}
+              title="Match analysis"
+            />
+            <EngagementChart
+              series={data.profilePerformance.series}
+              label="Deal flow trend"
+              periodLabel="Last 8 weeks"
+            />
+          </div>
+        </div>
+        <div className="px-5 sm:px-8 py-7">
+          <ProfilePerformanceGraph {...investorPerformanceData} />
+        </div>
+        <div className="px-5 sm:px-8 py-7">
+          <PerformanceStatsRow
+            stats={data.profilePerformance.stats}
+            title="Deal flow this month"
           />
-          <WhyYouAreAGreatFitCard bullets={data.greatFitBullets} />
-        </section>
-        <AccountActions />
-      </main>
-    </>
+        </div>
+        <div className="px-5 sm:px-8 py-7">
+          <Disclaimer />
+          <FeedCtaStrip
+            href="/feed"
+            message="Open the full startup discovery feed"
+            sub="Filters, saved searches, and URL-shareable results"
+          />
+        </div>
+      </div>
+
+      <AccountActions />
+    </main>
   );
 }
 
@@ -570,11 +625,11 @@ function RailSection({
   return (
     <div className="p-5">
       <header className="mb-4 flex items-baseline justify-between gap-2">
-        <h3 className="text-[14px] font-semibold leading-5 tracking-tight text-[var(--color-text)]">
+        <h3 className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-5 tracking-tight text-[var(--color-text)]">
           {title}
         </h3>
         {aside && (
-          <span className="text-[12px] leading-4 text-[var(--color-text-faint)]">{aside}</span>
+          <span className="shrink-0 text-[11px] leading-4 text-[var(--color-text-faint)]">{aside}</span>
         )}
       </header>
       {children}
@@ -585,3 +640,4 @@ function RailSection({
 function SectionDivider() {
   return <div className="h-[1px] w-full bg-[var(--color-text)]" style={{ opacity: 0.12 }} />;
 }
+

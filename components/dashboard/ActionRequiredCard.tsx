@@ -1,18 +1,11 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { Bookmark, Eye, Users, type LucideIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { ActionRequiredItem } from "@/lib/dashboards/mock-data";
+import { cn } from "@/lib/utils";
 
 type ActionRequiredCardProps = {
   items: ActionRequiredItem[];
   borderless?: boolean;
-};
-
-const ICON_BY_TONE: Record<ActionRequiredItem["tone"], LucideIcon> = {
-  view: Eye,
-  save: Bookmark,
-  match: Users,
 };
 
 export function ActionRequiredCard({ items, borderless = false }: ActionRequiredCardProps) {
@@ -52,20 +45,9 @@ export function ActionRequiredCard({ items, borderless = false }: ActionRequired
 }
 
 function ActionRow({ item }: { item: ActionRequiredItem }) {
-  const Icon = ICON_BY_TONE[item.tone];
   return (
     <div className="flex items-center gap-3">
-      <span
-        aria-hidden
-        className={cn(
-          "shrink-0 inline-flex items-center justify-center",
-          "w-8 h-8 rounded-none",
-          "bg-[var(--color-brand-tint)] text-[var(--color-brand)]",
-        )}
-      >
-        <Icon size={14} strokeWidth={1.75} />
-      </span>
-      <p className="flex-1 min-w-0 text-[13px] leading-5 text-[var(--color-text)]">
+      <p className="flex-1 min-w-0 truncate text-[13px] leading-5 text-[var(--color-text)]">
         <span className="font-mono tabular-nums font-semibold">{item.count}</span>{" "}
         <span className="text-[var(--color-text-muted)]">{item.label}</span>
       </p>

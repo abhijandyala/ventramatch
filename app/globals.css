@@ -37,6 +37,7 @@
   --color-info: #3b82f6;
   --color-warn: #f59e0b;
   --color-danger: #ef4444;
+  --color-success: #16a34a;
 
   /* Radius */
   --radius-sm: 6px;
@@ -108,6 +109,7 @@
     --color-info: #3b82f6;
     --color-warn: #f59e0b;
     --color-danger: #ef4444;
+    --color-success: #16a34a;
   }
 
   html {
@@ -308,4 +310,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

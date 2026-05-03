@@ -70,12 +70,21 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function PublicProfilePage({
   params,
 }: {
   params: Promise<{ userId: string }>;
 }) {
   const { userId: targetUserId } = await params;
+
+  if (!UUID_RE.test(targetUserId)) {
+    if (targetUserId.startsWith("mock-")) {
+      redirect(`/profile/${targetUserId}`);
+    }
+    notFound();
+  }
 
   const session = await auth();
   if (!session?.user) redirect("/sign-in");
